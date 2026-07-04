@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>رادار الصفقات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b1220; --card:#111a2c; --card2:#0e1626; --line:#1e2a44;
+  --txt:#e8eefc; --mut:#8fa3c8; --acc:#22d3a5; --acc2:#38bdf8;
+  --warn:#fbbf24; --bad:#f87171; --chip:#182541;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Tajawal',system-ui,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+body::before{content:"";position:fixed;inset:0;background:
+  radial-gradient(60% 40% at 85% -10%,rgba(56,189,248,.14),transparent 60%),
+  radial-gradient(50% 35% at 10% -10%,rgba(34,211,165,.12),transparent 60%);pointer-events:none}
+a{color:inherit;text-decoration:none}
+button,input,select{font-family:inherit;font-size:1rem}
+.wrap{max-width:1280px;margin:0 auto;padding:0 14px 90px}
+
+/* ---------- lock screen ---------- */
+#lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:50}
+.lockcard{width:min(92vw,380px);background:linear-gradient(180deg,var(--card),var(--card2));
+  border:1px solid var(--line);border-radius:22px;padding:38px 28px;text-align:center;
+  box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.lockicon{width:74px;height:74px;margin:0 auto 18px;border-radius:20px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,rgba(34,211,165,.18),rgba(56,189,248,.18));border:1px solid var(--line);font-size:2rem}
+.lockcard h1{font-size:1.35rem;font-weight:800;margin-bottom:6px}
+.lockcard p{color:var(--mut);font-size:.9rem;margin-bottom:22px}
+#pin{width:100%;padding:14px;border-radius:14px;border:1px solid var(--line);background:#0a1120;color:var(--txt);
+  text-align:center;font-size:1.5rem;letter-spacing:.45em;direction:ltr}
+#pin:focus{outline:2px solid var(--acc2);border-color:transparent}
+#enter{width:100%;margin-top:14px;padding:14px;border:none;border-radius:14px;font-weight:800;font-size:1.05rem;cursor:pointer;
+  background:linear-gradient(135deg,var(--acc),var(--acc2));color:#05263b}
+#enter:disabled{opacity:.55}
+.remember{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:14px;color:var(--mut);font-size:.85rem}
+#lockmsg{min-height:22px;margin-top:12px;font-size:.85rem;color:var(--bad)}
+.shake{animation:sh .4s}
+@keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(8px)}75%{transform:translateX(-8px)}}
+
+/* ---------- header ---------- */
+header{padding:22px 0 12px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;
+  background:linear-gradient(135deg,rgba(34,211,165,.2),rgba(56,189,248,.2));border:1px solid var(--line)}
+.brand h1{font-size:1.3rem;font-weight:800}
+.brand small{display:block;color:var(--mut);font-weight:400;font-size:.78rem}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.stat{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:.82rem;color:var(--mut)}
+.stat b{color:var(--txt);font-size:.95rem;margin-inline-start:6px}
+
+/* ---------- filters ---------- */
+#filters{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.88);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);padding:12px 0;margin:10px -14px 16px;padding-inline:14px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(min-width:760px){.frow{grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr auto}}
+#q{grid-column:1/-1}
+@media(min-width:760px){#q{grid-column:auto}}
+.f{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--txt);width:100%}
+.f:focus{outline:2px solid var(--acc2)}
+#reset{background:var(--chip);border:1px solid var(--line);border-radius:12px;color:var(--mut);padding:11px 16px;cursor:pointer;white-space:nowrap}
+.count{color:var(--mut);font-size:.85rem;margin-top:10px}
+.count b{color:var(--acc)}
+
+/* ---------- cards ---------- */
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:18px;
+  padding:16px;display:flex;flex-direction:column;gap:10px;transition:transform .15s,border-color .15s}
+.card:active{transform:scale(.985)}
+@media(hover:hover){.card:hover{border-color:#2c3e66;transform:translateY(-2px)}}
+.top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.flag{font-size:1.15rem}
+.chip{font-size:.72rem;padding:3px 9px;border-radius:99px;background:var(--chip);border:1px solid var(--line);color:var(--mut)}
+.badge{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:99px}
+.b-real{background:rgba(34,211,165,.14);color:var(--acc);border:1px solid rgba(34,211,165,.35)}
+.b-est{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.3)}
+.title{font-size:.95rem;font-weight:500;line-height:1.5;color:var(--txt);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.8em}
+.profit{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.profit .dz{font-size:1.45rem;font-weight:800;color:var(--acc)}
+.profit .eu{color:var(--mut);font-size:.85rem}
+.roi{margin-inline-start:auto;font-weight:800;font-size:.85rem;padding:4px 10px;border-radius:10px}
+.roi.hi{background:rgba(34,211,165,.14);color:var(--acc)}
+.roi.md{background:rgba(56,189,248,.13);color:var(--acc2)}
+.roi.lo{background:rgba(251,191,36,.12);color:var(--warn)}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:.82rem;color:var(--mut);
+  background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.meta div b{color:var(--txt);font-weight:500}
+.foot{display:flex;align-items:center;gap:8px;margin-top:auto}
+.src{font-size:.75rem;color:var(--mut)}
+.open{margin-inline-start:auto;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#05263b;
+  font-weight:800;font-size:.85rem;padding:9px 18px;border-radius:11px}
+
+/* ---------- pagination ---------- */
+#pager{display:flex;gap:10px;justify-content:center;align-items:center;margin:26px 0}
+#pager button{background:var(--chip);color:var(--txt);border:1px solid var(--line);border-radius:12px;padding:10px 20px;cursor:pointer;font-weight:700}
+#pager button:disabled{opacity:.35;cursor:default}
+#pageinfo{color:var(--mut);font-size:.9rem}
+footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
+.hidden{display:none!important}
+#loading{text-align:center;color:var(--mut);padding:60px 0}
+.spin{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;
+  margin:0 auto 14px;animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div id="lock">
+  <div class="lockcard" id="lockcard">
+    <div class="lockicon">🚘</div>
+    <h1>رادار الصفقات</h1>
+    <p>أدخل الرقم السري لفتح اللوحة</p>
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••••">
+    <button id="enter">دخول</button>
+    <label class="remember"><input type="checkbox" id="remember"> تذكرني على هذا الجهاز</label>
+    <div id="lockmsg"></div>
+  </div>
+</div>
+
+<div class="wrap hidden" id="app">
+  <header>
+    <div class="brand">
+      <div class="logo">🚘</div>
+      <div>
+        <h1>رادار الصفقات <small>أفضل عروض السيارات في أوروبا — محسوبة بالجمارك والسوق الجزائري</small></h1>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div id="filters">
+    <div class="frow">
+      <input class="f" id="q" placeholder="🔍 ابحث: موديل، عنوان…">
+      <select class="f" id="fc"><option value="">كل الدول</option></select>
+      <select class="f" id="ff"><option value="">كل الوقود</option></select>
+      <select class="f" id="fy"><option value="">كل السنوات</option></select>
+      <select class="f" id="fp">
+        <option value="">كل الأسعار</option>
+        <option value="0-10000">حتى 10,000 €</option>
+        <option value="10000-15000">10—15 ألف €</option>
+        <option value="15000-20000">15—20 ألف €</option>
+        <option value="20000-30000">20—30 ألف €</option>
+        <option value="30000-999999">فوق 30 ألف €</option>
+      </select>
+      <select class="f" id="fs">
+        <option value="profit">🏆 أعلى ربح</option>
+        <option value="roi">📈 أعلى عائد ROI</option>
+        <option value="price">💶 الأرخص سعراً</option>
+        <option value="year">🗓️ الأحدث سنة</option>
+        <option value="km">🛣️ الأقل كيلومتراً</option>
+      </select>
+      <button id="reset">↺ مسح</button>
+    </div>
+    <div class="frow" style="margin-top:8px">
+      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="ft"> موثّق فقط (سعر جزائري حقيقي)
+      </label>
+    </div>
+    <div class="count" id="count"></div>
+  </div>
+
+  <div id="loading"><div class="spin"></div>جاري فك التشفير وتحميل الصفقات…</div>
+  <div id="grid"></div>
+  <div id="pager" class="hidden">
+    <button id="prev">‹ السابق</button>
+    <span id="pageinfo"></span>
+    <button id="next">التالي ›</button>
+  </div>
+  <footer>يتجدد تلقائياً كل 6 ساعات · الأسعار الجزائرية من سوق Ouedkniss · الجمارك محسوبة بالنظام الفعلي (أقل من 3 سنوات، بنزين/هايبرد)</footer>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const FLAGS={DE:"🇩🇪",FR:"🇫🇷",ES:"🇪🇸",IT:"🇮🇹",AT:"🇦🇹",PL:"🇵🇱",CZ:"🇨🇿",BG:"🇧🇬",PT:"🇵🇹",BE:"🇧🇪",NL:"🇳🇱",RO:"🇷🇴",FI:"🇫🇮",SE:"🇸🇪",DK:"🇩🇰",SK:"🇸🇰",NO:"🇳🇴",LV:"🇱🇻",LU:"🇱🇺",SI:"🇸🇮",HR:"🇭🇷",CH:"🇨🇭",HU:"🇭🇺",GR:"🇬🇷",IE:"🇮🇪",EE:"🇪🇪",LT:"🇱🇹"};
+const CN={DE:"ألمانيا",FR:"فرنسا",ES:"إسبانيا",IT:"إيطاليا",AT:"النمسا",PL:"بولندا",CZ:"التشيك",BG:"بلغاريا",PT:"البرتغال",BE:"بلجيكا",NL:"هولندا",RO:"رومانيا",FI:"فنلندا",SE:"السويد",DK:"الدانمارك",SK:"سلوفاكيا",NO:"النرويج",LV:"لاتفيا",LU:"لوكسمبورغ",SI:"سلوفينيا",HR:"كرواتيا",CH:"سويسرا"};
+const FUEL_AR=f=>{f=(f||"").toLowerCase();
+  if(/hyb|هجين/.test(f))return"هايبرد";
+  if(/petrol|gasoline|benzin|essence|بنزين/.test(f)||f==="")return"بنزين";
+  return f||"—"};
+const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
+const fmtDz=v=>nf.format(Math.round(v))+" دج";
+const fmtEu=v=>nf.format(Math.round(v))+" €";
+
+let DATA=[],VIEW=[],page=1;const PER=60;
+
+/* ---------- crypto ---------- */
+async function deriveKey(pin,salt){
+  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pin),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:310000,hash:"SHA-256"},km,
+    {name:"AES-GCM",length:256},false,["decrypt"]);
+}
+async function gunzip(buf){
+  const ds=new DecompressionStream("gzip");
+  const stream=new Response(buf).body.pipeThrough(ds);
+  return new Response(stream).arrayBuffer();
+}
+async function unlock(pin){
+  const res=await fetch("data.enc?v="+Date.now(),{cache:"no-store"});
+  if(!res.ok)throw new Error("net");
+  const raw=new Uint8Array(await res.arrayBuffer());
+  if(new TextDecoder().decode(raw.slice(0,5))!=="DZAR1")throw new Error("fmt");
+  const salt=raw.slice(5,21),iv=raw.slice(21,33),ct=raw.slice(33);
+  const key=await deriveKey(pin,salt);
+  let plain;
+  try{plain=await crypto.subtle.decrypt({name:"AES-GCM",iv},key,ct);}
+  catch(e){throw new Error("pin");}
+  const json=new TextDecoder().decode(await gunzip(plain));
+  return JSON.parse(json);
+}
+
+/* ---------- lock flow ---------- */
+async function tryUnlock(pin,silent){
+  $("enter").disabled=true;$("lockmsg").textContent=silent?"":"جاري الفتح…";$("lockmsg").style.color="var(--mut)";
+  try{
+    const payload=await unlock(pin);
+    if($("remember").checked)localStorage.setItem("dzk",pin);
+    sessionStorage.setItem("dzk",pin);
+    boot(payload);
+  }catch(e){
+    $("enter").disabled=false;
+    if(silent){localStorage.removeItem("dzk");sessionStorage.removeItem("dzk");return;}
+    $("lockmsg").style.color="var(--bad)";
+    $("lockmsg").textContent = e.message==="pin"?"الرقم السري غير صحيح":
+      e.message==="net"?"تعذر تحميل البيانات — تحقق من الاتصال":"خطأ غير متوقع";
+    $("lockcard").classList.add("shake");setTimeout(()=>$("lockcard").classList.remove("shake"),450);
+  }
+}
+$("enter").onclick=()=>{const p=$("pin").value.trim();if(p)tryUnlock(p,false);};
+$("pin").addEventListener("keydown",e=>{if(e.key==="Enter"){const p=$("pin").value.trim();if(p)tryUnlock(p,false);}});
+if(typeof DecompressionStream==="undefined"){
+  $("lockmsg").textContent="متصفحك قديم — حدّث كروم/سفاري";
+}else{
+  const saved=localStorage.getItem("dzk")||sessionStorage.getItem("dzk");
+  if(saved){$("remember").checked=!!localStorage.getItem("dzk");tryUnlock(saved,true);}
+}
+
+/* ---------- app ---------- */
+function boot(payload){
+  DATA=payload.offers;
+  $("lock").classList.add("hidden");$("app").classList.remove("hidden");
+  const upd=new Date(payload.updated_utc);
+  const avg=DATA.length?DATA.reduce((a,o)=>a+o.pr,0)/DATA.length:0;
+  $("stats").innerHTML=
+    `<div class="stat">العروض<b>${nf.format(DATA.length)}</b></div>`+
+    `<div class="stat">متوسط الربح<b>${fmtEu(avg)}</b></div>`+
+    `<div class="stat">آخر تحديث<b>${upd.toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"})}</b></div>`;
+  const cs=[...new Set(DATA.map(o=>o.c).filter(Boolean))].sort();
+  $("fc").innerHTML='<option value="">كل الدول</option>'+cs.map(c=>`<option value="${c}">${FLAGS[c]||""} ${CN[c]||c}</option>`).join("");
+  const fs=[...new Set(DATA.map(o=>FUEL_AR(o.f)))].sort();
+  $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option>${f}</option>`).join("");
+  const ys=[...new Set(DATA.map(o=>o.y).filter(y=>y>2000))].sort((a,b)=>b-a);
+  $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
+  ["q","fc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();}));
+  $("ft").addEventListener("change",()=>{page=1;apply();});
+  $("reset").onclick=()=>{["q","fc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="profit";$("ft").checked=false;page=1;apply();};
+  $("prev").onclick=()=>{page--;render();scrollTo({top:0,behavior:"smooth"});};
+  $("next").onclick=()=>{page++;render();scrollTo({top:0,behavior:"smooth"});};
+  $("loading").classList.add("hidden");
+  apply();
+}
+function apply(){
+  const q=$("q").value.trim().toLowerCase(),c=$("fc").value,f=$("ff").value,y=$("fy").value,
+        p=$("fp").value,t=$("ft").checked,s=$("fs").value;
+  let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
+  VIEW=DATA.filter(o=>
+    (!q||(o.t+" "+o.m).toLowerCase().includes(q))&&
+    (!c||o.c===c)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
+    o.p>=pmin&&o.p<=pmax&&(!t||!o.e));
+  const K={profit:(a,b)=>b.pr-a.pr,roi:(a,b)=>b.roi-a.roi,price:(a,b)=>a.p-b.p,
+           year:(a,b)=>b.y-a.y||b.pr-a.pr,km:(a,b)=>a.km-b.km||b.pr-a.pr};
+  VIEW.sort(K[s]||K.profit);
+  $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> من ${nf.format(DATA.length)} صفقة`;
+  render();
+}
+function card(o){
+  const roiCls=o.roi>=60?"hi":o.roi>=30?"md":"lo";
+  const badge=o.e?'<span class="badge b-est">تقديري</span>':'<span class="badge b-real">موثّق ✓</span>';
+  return `<div class="card">
+    <div class="top">
+      <span class="flag">${FLAGS[o.c]||"🌍"}</span>
+      <span class="chip">${o.m||"—"}</span>${badge}
+      <span class="chip">${o.s||""}</span>
+    </div>
+    <div class="title">${o.t||"—"}</div>
+    <div class="profit">
+      <span class="dz">+${fmtDz(o.prd)}</span><span class="eu">≈ ${fmtEu(o.pr)}</span>
+      <span class="roi ${roiCls}">ROI ${Math.round(o.roi)}%</span>
+    </div>
+    <div class="meta">
+      <div>💶 الشراء <b>${fmtEu(o.p)}</b></div>
+      <div>🗓️ السنة <b>${o.y||"—"}</b></div>
+      <div>🛣️ العداد <b>${o.km?nf.format(o.km)+" كم":"—"}</b></div>
+      <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
+      <div>🏛️ تكلفة الوصول <b>${fmtDz(o.ld)}</b></div>
+      <div>🇩🇿 البيع المتوقع <b>${fmtDz(o.rd)}</b></div>
+    </div>
+    <div class="foot">
+      <span class="src">الثقة ${o.cr||0}%</span>
+      <a class="open" href="${o.u}" target="_blank" rel="noopener">فتح الإعلان ↗</a>
+    </div>
+  </div>`;
+}
+function render(){
+  const pages=Math.max(1,Math.ceil(VIEW.length/PER));
+  page=Math.min(Math.max(1,page),pages);
+  $("grid").innerHTML=VIEW.slice((page-1)*PER,page*PER).map(card).join("");
+  $("pager").classList.toggle("hidden",VIEW.length<=PER);
+  $("pageinfo").textContent=`صفحة ${page} / ${pages}`;
+  $("prev").disabled=page<=1;$("next").disabled=page>=pages;
+}
+</script>
+</body>
+</html>
