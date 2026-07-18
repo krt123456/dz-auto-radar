@@ -68,16 +68,20 @@ fi
 
 PHASE="universe"
 notify running "$PHASE" "يدمج العروض الجديدة في الكون التراكمي من دون حذف القديم"
-if [[ "$MODE" == "full" || ! -s "$STATE/schengen_observation_lake.csv" ]]; then
-  python3 /opt/sonardeals-radar/build_schengen_lake.py \
-    --output "$STATE/schengen_observation_lake.csv" \
-    --report "$STATE/schengen_observation_lake.json"
+if [[ "${RADAR_SKIP_UNIVERSE_IMPORT:-0}" == "1" ]]; then
+  echo "RADAR_SKIP_UNIVERSE_IMPORT=1; using the validated current universe store"
+else
+  if [[ "$MODE" == "full" || ! -s "$STATE/schengen_observation_lake.csv" ]]; then
+    python3 /opt/sonardeals-radar/build_schengen_lake.py \
+      --output "$STATE/schengen_observation_lake.csv" \
+      --report "$STATE/schengen_observation_lake.json"
+    python3 "$ROOT/import_live_offers_to_universe.py" \
+      --input-csv "$STATE/schengen_observation_lake.csv" \
+      --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+  fi
   python3 "$ROOT/import_live_offers_to_universe.py" \
-    --input-csv "$STATE/schengen_observation_lake.csv" \
-    --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+    --input-csv "$ROOT/live_offers.csv" --db "$ROOT/universe_offers.sqlite"
 fi
-python3 "$ROOT/import_live_offers_to_universe.py" \
-  --input-csv "$ROOT/live_offers.csv" --db "$ROOT/universe_offers.sqlite"
 
 PHASE="ranking"
 notify running "$PHASE" "يعيد حساب الربح والمصداقية وترتيب كامل الكون المؤهل"

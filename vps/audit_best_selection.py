@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 MAGIC = b"DZAR1"
 ITERATIONS = 310_000
-ALGORITHM = "schengen-effective-profit-v2"
+ALGORITHM = "schengen-verified-economics-v3"
 LEASE_MARKERS = (
     "leasingsübernahme", "leasingübernahme", "leasingübertragung",
     "leasing", "übernahme", "monthly payment", "finance payment",
@@ -60,6 +60,7 @@ def eligible(offer: dict[str, Any]) -> bool:
         and 0 < num(offer.get("pr")) <= 25_000
         and 0 < num(offer.get("roi")) <= 120
         and 30 <= integer(offer.get("cr")) <= 100
+        and integer(offer.get("e")) == 0
         and integer(offer.get("v")) != -1
     )
 
@@ -232,6 +233,7 @@ def main() -> int:
         "unique_ids": True,
         "unique_urls": True,
         "confirmed_dead_or_lease_like_published": 0,
+        "estimated_economics_published": 0,
         "connected_country_count": payload.get("connected_country_count", 0),
         "connected_source_count": payload.get("connected_source_count", 0),
     }

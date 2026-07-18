@@ -26,7 +26,7 @@ from urllib.parse import urlparse
 
 MAGIC = b"DZAR1"
 PBKDF2_ITERATIONS = 310_000
-ALGORITHM_VERSION = "schengen-effective-profit-v2"
+ALGORITHM_VERSION = "schengen-verified-economics-v3"
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
@@ -90,6 +90,7 @@ def eligible_offer(offer: dict[str, Any]) -> bool:
         and 0 < profit <= 25_000
         and 0 < roi <= 120
         and 30 <= credibility <= 100
+        and integer(offer.get("e")) == 0
         and integer(offer.get("v")) != -1
     )
 
@@ -262,7 +263,7 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
                 "top_n": args.top_n,
                 "per_country_min": args.per_country_min,
                 "per_source_min": args.per_source_min,
-                "ranking": "non-auction, effective-profit, credibility, profit, effective-roi",
+                "ranking": "analyzed-only, non-auction, effective-profit, credibility, profit, effective-roi",
             },
             "offers": selected,
         }

@@ -31,6 +31,7 @@ class PipelineTest(unittest.TestCase):
                 writer.writerows(
                     [
                         {"listing_id": "de-1", "source": "A", "source_url": "https://a.test/1", "country": "DE", "price_eur": "10000", "first_registration_date": "2025", "title": "ok"},
+                        {"listing_id": "de-2", "source": "A", "source_url": "https://a.test/2\" class=\"card\">ignored", "country": "DE", "price_eur": "11000", "first_registration_date": "2025", "title": "repair"},
                         {"listing_id": "fr-1", "source": "B", "source_url": "http://b.test/1", "country": "FR", "price_eur": "9000", "first_registration_date": "2024", "title": "bad url"},
                         {"listing_id": "gb-1", "source": "C", "source_url": "https://c.test/1", "country": "GB", "price_eur": "8000", "first_registration_date": "2023", "title": "outside"},
                     ]
@@ -41,10 +42,12 @@ class PipelineTest(unittest.TestCase):
             )
             with output.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
-            self.assertEqual([row["listing_id"] for row in rows], ["de-1"])
+            self.assertEqual([row["listing_id"] for row in rows], ["de-1", "de-2"])
+            self.assertEqual(rows[1]["source_url"], "https://a.test/2")
             details = json.loads(report.read_text(encoding="utf-8"))
-            self.assertEqual(details["world_rows"], 3)
-            self.assertEqual(details["accepted_rows"], 1)
+            self.assertEqual(details["world_rows"], 4)
+            self.assertEqual(details["accepted_rows"], 2)
+            self.assertEqual(details["repaired_source_urls"], 1)
 
     def test_full_universe_selection_and_encrypted_audit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -78,6 +81,7 @@ class PipelineTest(unittest.TestCase):
                     {**offers[0], "id": "lease", "u": "https://example.test/lease", "t": "cesja najmu"},
                     {**offers[1], "id": "dead", "u": "https://example.test/dead", "v": -1},
                     {**offers[2], "id": "duplicate-url"},
+                    {**offers[3], "id": "estimated", "u": "https://example.test/estimated", "e": 1, "ep": 99_999},
                 ]
             )
             (board_dir / "board.json").write_text(

@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import csv
+import html
 import json
 import os
+import re
 import tempfile
 from collections import Counter
 from datetime import UTC, datetime
@@ -20,6 +22,7 @@ SCHENGEN = frozenset(
 REQUIRED = frozenset(
     {"listing_id", "source", "source_url", "country", "price_eur", "first_registration_date"}
 )
+MAX_SOURCE_URL_BYTES = 8 * 1024
 
 
 def positive_price(value: object) -> bool:
@@ -27,6 +30,14 @@ def positive_price(value: object) -> bool:
         return float(value or 0) > 0
     except (TypeError, ValueError):
         return False
+
+
+def normalize_source_url(value: object) -> str:
+    text = html.unescape(str(value or "").strip())
+    clean = re.split(r'''[\s"'<>]''', text, maxsplit=1)[0]
+    if len(clean.encode("utf-8", "replace")) > MAX_SOURCE_URL_BYTES:
+        return ""
+    return clean
 
 
 def main() -> int:
@@ -73,7 +84,8 @@ def main() -> int:
                     stats["schengen_rows"] += 1
                     source_name = str(row.get("source") or "").strip()
                     listing_id = str(row.get("listing_id") or "").strip()
-                    url = str(row.get("source_url") or "").strip()
+                    raw_url = str(row.get("source_url") or "").strip()
+                    url = normalize_source_url(raw_url)
                     parsed = urlparse(url)
                     if (
                         not source_name or not listing_id or parsed.scheme != "https"
@@ -82,6 +94,9 @@ def main() -> int:
                         stats["rejected_identity_price_url"] += 1
                         continue
                     row["country"] = country
+                    row["source_url"] = url
+                    if url != raw_url:
+                        stats["repaired_source_urls"] += 1
                     writer.writerow(row)
                     stats["accepted_rows"] += 1
                     sources.add(source_name)
