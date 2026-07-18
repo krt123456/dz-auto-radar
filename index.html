@@ -513,7 +513,7 @@ async function signedRefreshHeaders(mode){
   return {"Content-Type":"application/json","X-Radar-Time":stamp,"X-Radar-Nonce":nonce,"X-Radar-Signature":signature};
 }
 function paintRefresh(state){
-  const running=!!state.running||state.status==="pending"||state.status==="queued";
+  const running=!!state.running||state.status==="pending"||state.status==="queued"||state.status==="running";
   if(running)awaitingRefresh=true;
   $("refreshBtn").disabled=running;$("fullRefreshBtn").disabled=running;
   $("refreshBtn").textContent=running&&state.mode==="smart"?"⏳ تحديث ذكي…":"⚡ جلب وتحديث ذكي";
