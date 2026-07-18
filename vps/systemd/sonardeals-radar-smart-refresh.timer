@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh SonarDeals radar every six hours
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=6h
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,9 @@
+{
+  "name": "sonardeals-radar-control",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/control.test.mjs",
+    "deploy": "npx --yes wrangler@4.110.0 deploy"
+  }
+}

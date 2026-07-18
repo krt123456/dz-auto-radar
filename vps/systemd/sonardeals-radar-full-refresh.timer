@@ -1,0 +1,10 @@
+[Unit]
+Description=Run one full Schengen radar refresh daily
+
+[Timer]
+OnCalendar=*-*-* 02:20:00
+Persistent=true
+RandomizedDelaySec=20min
+
+[Install]
+WantedBy=timers.target

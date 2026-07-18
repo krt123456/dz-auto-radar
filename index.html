@@ -45,11 +45,18 @@ button,input,select{font-family:inherit;font-size:1rem}
 
 /* ---------- header ---------- */
 header{padding:22px 0 12px}
+.brandrow{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
 .brand{display:flex;align-items:center;gap:12px}
 .logo{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;
   background:linear-gradient(135deg,rgba(34,211,165,.2),rgba(56,189,248,.2));border:1px solid var(--line)}
 .brand h1{font-size:1.3rem;font-weight:800}
 .brand small{display:block;color:var(--mut);font-weight:400;font-size:.78rem}
+.refreshctl{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.refresh-button{border:1px solid rgba(34,211,165,.45);border-radius:12px;padding:10px 15px;cursor:pointer;
+  background:linear-gradient(135deg,rgba(34,211,165,.22),rgba(56,189,248,.2));color:var(--txt);font-weight:800}
+.refresh-button.full{border-color:rgba(251,191,36,.5);background:linear-gradient(135deg,rgba(251,191,36,.18),rgba(248,113,113,.12))}
+.refresh-button:disabled{opacity:.55;cursor:wait}
+#refreshStatus{max-width:300px;color:var(--mut);font-size:.76rem;line-height:1.4}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .stat{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:.82rem;color:var(--mut)}
 .stat b{color:var(--txt);font-size:.95rem;margin-inline-start:6px}
@@ -58,7 +65,8 @@ header{padding:22px 0 12px}
 #filters{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.88);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);padding:12px 0;margin:10px -14px 16px;padding-inline:14px}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media(min-width:760px){.frow{grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr auto}}
+@media(min-width:760px){.frow{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(min-width:1120px){.frow{grid-template-columns:2fr repeat(8,minmax(90px,1fr)) auto}}
 #q{grid-column:1/-1}
 @media(min-width:760px){#q{grid-column:auto}}
 .f{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--txt);width:100%}
@@ -66,6 +74,8 @@ header{padding:22px 0 12px}
 #reset{background:var(--chip);border:1px solid var(--line);border-radius:12px;color:var(--mut);padding:11px 16px;cursor:pointer;white-space:nowrap}
 .count{color:var(--mut);font-size:.85rem;margin-top:10px}
 .count b{color:var(--acc)}
+.source-note{margin-top:9px;padding:9px 12px;border:1px solid rgba(56,189,248,.3);border-radius:10px;
+  background:rgba(56,189,248,.08);color:#b9d9ef;font-size:.8rem;line-height:1.5}
 
 /* ---------- cards ---------- */
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
@@ -96,6 +106,7 @@ header{padding:22px 0 12px}
 .src{font-size:.75rem;color:var(--mut)}
 .open{margin-inline-start:auto;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#05263b;
   font-weight:800;font-size:.85rem;padding:9px 18px;border-radius:11px}
+.open.unavailable{background:var(--chip);color:var(--mut);cursor:not-allowed;opacity:.72}
 
 /* ---------- pagination ---------- */
 #pager{display:flex;gap:10px;justify-content:center;align-items:center;margin:26px 0}
@@ -126,10 +137,17 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
 
 <div class="wrap hidden" id="app">
   <header>
-    <div class="brand">
-      <div class="logo">🚘</div>
-      <div>
-        <h1>رادار الصفقات <small>أفضل عروض السيارات في أوروبا — محسوبة بالجمارك والسوق الجزائري</small></h1>
+    <div class="brandrow">
+      <div class="brand">
+        <div class="logo">🚘</div>
+        <div>
+          <h1>رادار الصفقات <small>مصادر شنغن — محسوبة بالجمارك والسوق الجزائري</small></h1>
+        </div>
+      </div>
+      <div class="refreshctl">
+        <button class="refresh-button" id="refreshBtn" type="button">⚡ جلب وتحديث ذكي</button>
+        <button class="refresh-button full" id="fullRefreshBtn" type="button">🌍 تحديث شامل</button>
+        <span id="refreshStatus">التحديث الذكي يجلب عروضًا جديدة؛ الشامل يمر على كل مسارات المصادر</span>
       </div>
     </div>
     <div class="stats" id="stats"></div>
@@ -139,6 +157,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     <div class="frow">
       <input class="f" id="q" placeholder="🔍 ابحث: موديل، عنوان…">
       <select class="f" id="fc"><option value="">كل الدول</option></select>
+      <select class="f" id="fsrc"><option value="">كل المصادر</option></select>
       <select class="f" id="ff"><option value="">كل الوقود</option></select>
       <select class="f" id="fy"><option value="">كل السنوات</option></select>
       <select class="f" id="fp">
@@ -149,7 +168,10 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="20000-30000">20—30 ألف €</option>
         <option value="30000-999999">فوق 30 ألف €</option>
       </select>
+      <input class="f" id="fb" type="number" inputmode="numeric" min="0" step="50000" placeholder="💰 ميزانيتي القصوى (دج)" title="أقصى مبلغ أستطيع دفعه — يُظهر فقط ما تكلفة وصوله للجزائر أقل منه">
+      <button id="binfo" class="f" style="cursor:default;background:transparent;border:0;color:var(--mut)">= تكلفة الوصول ≤ ميزانيتك</button>
       <select class="f" id="fs">
+        <option value="best">✨ الأفضل موصى به</option>
         <option value="profit">🏆 أعلى ربح</option>
         <option value="roi">📈 أعلى عائد ROI</option>
         <option value="price">💶 الأرخص سعراً</option>
@@ -162,25 +184,29 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
         <input type="checkbox" id="ft"> موثّق فقط (سعر جزائري حقيقي)
       </label>
+      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="flive" checked> رابط الإعلان مؤكّد حيًا فقط
+      </label>
     </div>
+    <div class="source-note hidden" id="sourceNote"></div>
     <div class="count" id="count"></div>
   </div>
 
-  <div id="loading"><div class="spin"></div>جاري فك التشفير وتحميل الصفقات…</div>
+  <div id="loading"><div class="spin"></div>جاري تحميل الصفقات…</div>
   <div id="grid"></div>
   <div id="pager" class="hidden">
     <button id="prev">‹ السابق</button>
     <span id="pageinfo"></span>
     <button id="next">التالي ›</button>
   </div>
-  <footer>يتجدد تلقائياً كل 6 ساعات · الأسعار الجزائرية من سوق Ouedkniss · الجمارك محسوبة بالنظام الفعلي (أقل من 3 سنوات، بنزين/هايبرد)</footer>
+  <footer id="coverageNote">كل مصدر شنغن مؤهل يملك مقعدًا في اللوحة · لا يظهر المصدر إن لم توجد له صفقة مؤهلة للجزائر</footer>
 </div>
 
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
-const FLAGS={DE:"🇩🇪",FR:"🇫🇷",ES:"🇪🇸",IT:"🇮🇹",AT:"🇦🇹",PL:"🇵🇱",CZ:"🇨🇿",BG:"🇧🇬",PT:"🇵🇹",BE:"🇧🇪",NL:"🇳🇱",RO:"🇷🇴",FI:"🇫🇮",SE:"🇸🇪",DK:"🇩🇰",SK:"🇸🇰",NO:"🇳🇴",LV:"🇱🇻",LU:"🇱🇺",SI:"🇸🇮",HR:"🇭🇷",CH:"🇨🇭",HU:"🇭🇺",GR:"🇬🇷",IE:"🇮🇪",EE:"🇪🇪",LT:"🇱🇹"};
-const CN={DE:"ألمانيا",FR:"فرنسا",ES:"إسبانيا",IT:"إيطاليا",AT:"النمسا",PL:"بولندا",CZ:"التشيك",BG:"بلغاريا",PT:"البرتغال",BE:"بلجيكا",NL:"هولندا",RO:"رومانيا",FI:"فنلندا",SE:"السويد",DK:"الدانمارك",SK:"سلوفاكيا",NO:"النرويج",LV:"لاتفيا",LU:"لوكسمبورغ",SI:"سلوفينيا",HR:"كرواتيا",CH:"سويسرا"};
+const FLAGS={DE:"🇩🇪",FR:"🇫🇷",ES:"🇪🇸",IT:"🇮🇹",AT:"🇦🇹",PL:"🇵🇱",CZ:"🇨🇿",BG:"🇧🇬",PT:"🇵🇹",BE:"🇧🇪",NL:"🇳🇱",RO:"🇷🇴",FI:"🇫🇮",SE:"🇸🇪",DK:"🇩🇰",SK:"🇸🇰",NO:"🇳🇴",LV:"🇱🇻",LU:"🇱🇺",SI:"🇸🇮",HR:"🇭🇷",CH:"🇨🇭",HU:"🇭🇺",GR:"🇬🇷",EE:"🇪🇪",LT:"🇱🇹",IS:"🇮🇸",LI:"🇱🇮",MT:"🇲🇹"};
+const CN={DE:"ألمانيا",FR:"فرنسا",ES:"إسبانيا",IT:"إيطاليا",AT:"النمسا",PL:"بولندا",CZ:"التشيك",BG:"بلغاريا",PT:"البرتغال",BE:"بلجيكا",NL:"هولندا",RO:"رومانيا",FI:"فنلندا",SE:"السويد",DK:"الدانمارك",SK:"سلوفاكيا",NO:"النرويج",LV:"لاتفيا",LU:"لوكسمبورغ",SI:"سلوفينيا",HR:"كرواتيا",CH:"سويسرا",HU:"المجر",GR:"اليونان",EE:"إستونيا",LT:"ليتوانيا",IS:"آيسلندا",LI:"ليختنشتاين",MT:"مالطا"};
 const FUEL_AR=f=>{f=(f||"").toLowerCase();
   if(/hyb|هجين/.test(f))return"هايبرد";
   if(/petrol|gasoline|benzin|essence|بنزين/.test(f)||f==="")return"بنزين";
@@ -188,8 +214,13 @@ const FUEL_AR=f=>{f=(f||"").toLowerCase();
 const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
 const fmtDz=v=>nf.format(Math.round(v))+" دج";
 const fmtEu=v=>nf.format(Math.round(v))+" €";
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl=v=>{try{const u=new URL(String(v||""));return /^(https?):$/.test(u.protocol)?u.href:"#";}catch(e){return"#";}};
+const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
+const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
-let DATA=[],VIEW=[],page=1;const PER=60;
+let DATA=[],VIEW=[],page=1,SOURCE_META=new Map(),VERIFICATION_FRESH=false,ACTIVE_PIN="";
+const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
 
 /* ---------- crypto ---------- */
 async function deriveKey(pin,salt){
@@ -221,6 +252,7 @@ async function tryUnlock(pin,silent){
   $("enter").disabled=true;$("lockmsg").textContent=silent?"":"جاري الفتح…";$("lockmsg").style.color="var(--mut)";
   try{
     const payload=await unlock(pin);
+    ACTIVE_PIN=pin;
     if($("remember").checked)localStorage.setItem("dzk",pin);
     sessionStorage.setItem("dzk",pin);
     boot(payload);
@@ -246,51 +278,124 @@ if(typeof DecompressionStream==="undefined"){
 function boot(payload){
   DATA=payload.offers;
   $("lock").classList.add("hidden");$("app").classList.remove("hidden");
-  const upd=new Date(payload.updated_utc);
+  const dataUpd=new Date(payload.data_generated_at_utc||payload.updated_utc);
+  const boardBuilt=new Date(payload.board_built_at_utc||payload.updated_utc);
+  const fullRefresh=new Date(payload.last_full_refresh_at_utc||"");
+  const validationAt=new Date(payload.validation&&payload.validation.generated_at||"");
+  const validationAge=Date.now()-validationAt.getTime();
+  VERIFICATION_FRESH=!Number.isNaN(validationAt.getTime())&&
+    validationAge>=-5*60*1000&&validationAge<=LIVE_VERIFICATION_MAX_AGE_MS;
+  const fmtTime=value=>Number.isNaN(value.getTime())?"غير معروف":value.toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"});
   const avg=DATA.length?DATA.reduce((a,o)=>a+o.pr,0)/DATA.length:0;
+  const connected=payload.connected_source_count||new Set(DATA.map(o=>o.s).filter(Boolean)).size;
+  const liveCount=payload.live_source_count||connected;
+  const extraCount=payload.extra_source_count||0;
+  const displayed=payload.displayed_source_count||new Set(DATA.map(o=>o.s).filter(Boolean)).size;
+  const displayedCountries=payload.displayed_country_count||new Set(DATA.map(o=>o.c).filter(Boolean)).size;
+  const connectedCountries=payload.connected_country_count||displayedCountries;
+  const universe=payload.universe_unique_offers||payload.selection_universe_count||payload.live_inventory_count||0;
+  const qualifiedUniverse=payload.qualified_universe_offers||payload.qualified_universe_planets||0;
   $("stats").innerHTML=
-    `<div class="stat">العروض<b>${nf.format(DATA.length)}</b></div>`+
+    `<div class="stat">أفضل العروض المعروضة<b>${nf.format(DATA.length)}</b></div>`+
+    (universe?`<div class="stat">مخزون فريد فُحص ورتّب<b>${nf.format(universe)}</b></div>`:"")+
+    (qualifiedUniverse?`<div class="stat">مرشح مؤهل<b>${nf.format(qualifiedUniverse)}</b></div>`:"")+
+    `<div class="stat">المصادر المؤهلة<b>${displayed}</b></div>`+
+    `<div class="stat">المصادر المرتبطة<b>${connected}</b></div>`+
+    `<div class="stat">داخل مخزون الصفقات<b>${liveCount}</b></div>`+
+    (extraCount?`<div class="stat">مراقبة أو تهيئة<b>${extraCount}</b></div>`:"")+
+    `<div class="stat">تغطية دول شنغن<b>${connectedCountries}/${payload.schengen_country_total||29}</b></div>`+
+    `<div class="stat">دول بصفقات مؤهلة<b>${displayedCountries}/${connectedCountries}</b></div>`+
     `<div class="stat">متوسط الربح<b>${fmtEu(avg)}</b></div>`+
-    `<div class="stat">آخر تحديث<b>${upd.toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"})}</b></div>`;
-  const cs=[...new Set(DATA.map(o=>o.c).filter(Boolean))].sort();
-  $("fc").innerHTML='<option value="">كل الدول</option>'+cs.map(c=>`<option value="${c}">${FLAGS[c]||""} ${CN[c]||c}</option>`).join("");
+    `<div class="stat">آخر تصنيف للبيانات<b>${fmtTime(dataUpd)}</b></div>`+
+    `<div class="stat">آخر حصاد شامل<b>${fmtTime(fullRefresh)}</b></div>`+
+    `<div class="stat">بناء اللوحة<b>${fmtTime(boardBuilt)}</b></div>`;
+  const availableCountries=new Set(DATA.map(o=>o.c).filter(Boolean));
+  const connectedCountrySet=new Set(Object.keys(payload.connected_country_counts||{}));
+  const cs=Object.keys(FLAGS).sort();
+  $("fc").innerHTML='<option value="">كل الدول</option>'+cs.map(c=>{
+    const available=availableCountries.has(c);
+    const note=available?"":connectedCountrySet.has(c)?" — متصلة، لا صفقة مؤهلة الآن":" — لا بيانات مرتبطة حاليًا";
+    return `<option value="${esc(c)}"${available?"":" disabled"}>${FLAGS[c]||""} ${esc(CN[c]||c)}${note}</option>`;
+  }).join("");
+  const displayedSources=new Set(DATA.map(o=>o.s).filter(Boolean));
+  SOURCE_META=new Map((payload.extra_sources||[]).map(record=>[record.name,record]));
+  const sources=(Array.isArray(payload.connected_sources)?payload.connected_sources:[...displayedSources])
+    .filter(Boolean).sort((a,b)=>a.localeCompare(b));
+  $("fsrc").innerHTML='<option value="">كل المصادر</option>'+sources.map(s=>{
+    const available=displayedSources.has(s);
+    const extra=SOURCE_META.get(s);
+    const note=available?"":extra?` — ${extra.note_ar}`:" — متصل، لا صفقة مؤهلة الآن";
+    return `<option value="${esc(s)}">${esc(s)}${esc(note)}</option>`;
+  }).join("");
   const fs=[...new Set(DATA.map(o=>FUEL_AR(o.f)))].sort();
-  $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option>${f}</option>`).join("");
+  $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option>${esc(f)}</option>`).join("");
   const ys=[...new Set(DATA.map(o=>o.y).filter(y=>y>2000))].sort((a,b)=>b-a);
   $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
-  ["q","fc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();}));
-  $("ft").addEventListener("change",()=>{page=1;apply();});
-  $("reset").onclick=()=>{["q","fc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="profit";$("ft").checked=false;page=1;apply();};
+  ["q","fc","fsrc","ff","fy","fp","fs","fb"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();}));
+  ["ft","flive"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();}));
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp","fb"].forEach(id=>$(id).value="");$("fs").value="best";$("ft").checked=false;$("flive").checked=true;page=1;apply();};
   $("prev").onclick=()=>{page--;render();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();scrollTo({top:0,behavior:"smooth"});};
   $("loading").classList.add("hidden");
+  const deferredSources=payload.deferred_sources||[];
+  const deferred=deferredSources.length;
+  const watchOnly=payload.watch_only_sources||[];
+  const staging=payload.staging_sources||[];
+  const withoutQualified=payload.countries_without_qualified_offers||[];
+  $("coverageNote").textContent=`${connected} مصدرًا مرتبطًا داخل شنغن: ${liveCount} داخل مخزون الصفقات و${extraCount} للمراقبة أو التهيئة؛ ${displayed} لديها صفقات مؤهلة معروضة`+
+    ` · تغطية المخزون ${connectedCountries}/${payload.schengen_country_total||29} دولة، والصفقات المؤهلة من ${displayedCountries}`+
+    (withoutQualified.length?` · متصلة بلا صفقة مؤهلة حاليًا (${withoutQualified.join("، ")})`:"")+
+    (deferred?` · ${deferred} داخل المخزون بلا صفقة مؤهلة الآن (${deferredSources.join("، ")})`:"")+
+    (watchOnly.length?` · مراقبة فقط (${watchOnly.join("، ")})`:"")+
+    (staging.length?` · قيد التطبيع قبل الحساب (${staging.join("، ")})`:"")+
+    (VERIFICATION_FRESH?` · المؤكد حيًا الآن: ${payload.live_verified_offer_count||0}`:
+      " · انتهت صلاحية فحص الروابط؛ لن تُعرض روابط على أنها حية حتى يكتمل التحديث التالي")+
+    ` · الأسعار الجزائرية من سوق Ouedkniss`;
   apply();
 }
 function apply(){
-  const q=$("q").value.trim().toLowerCase(),c=$("fc").value,f=$("ff").value,y=$("fy").value,
-        p=$("fp").value,t=$("ft").checked,s=$("fs").value;
+  const q=$("q").value.trim().toLowerCase(),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
+        p=$("fp").value,t=$("ft").checked,liveOnly=$("flive").checked,s=$("fs").value;
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
+  const bmax=Number($("fb").value)||0;
   VIEW=DATA.filter(o=>
+    o.v!==-1&&
     (!q||(o.t+" "+o.m).toLowerCase().includes(q))&&
-    (!c||o.c===c)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
-    o.p>=pmin&&o.p<=pmax&&(!t||!o.e));
-  const K={profit:(a,b)=>b.pr-a.pr,roi:(a,b)=>b.roi-a.roi,price:(a,b)=>a.p-b.p,
+    (!c||o.c===c)&&(!src||o.s===src)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
+    o.p>=pmin&&o.p<=pmax&&(!t||!o.e)&&(!liveOnly||(VERIFICATION_FRESH&&o.v===1))&&
+    (!bmax||Number(o.ld||0)<=bmax));
+  const K={best:(a,b)=>(a.a||0)-(b.a||0)||(b.ep||b.pr)-(a.ep||a.pr)||(b.cr||0)-(a.cr||0)||b.pr-a.pr,
+           profit:(a,b)=>b.pr-a.pr,roi:(a,b)=>b.roi-a.roi,price:(a,b)=>a.p-b.p,
            year:(a,b)=>b.y-a.y||b.pr-a.pr,km:(a,b)=>a.km-b.km||b.pr-a.pr};
-  VIEW.sort(K[s]||K.profit);
+  VIEW.sort(K[s]||K.best);
+  const sourceMeta=SOURCE_META.get(src);
+  if(src&&sourceMeta){
+    const observed=new Date(sourceMeta.updated_utc).toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"});
+    $("sourceNote").textContent=`${src}: ${nf.format(sourceMeta.row_count)} سجلًا مرتبطًا خارج حساب الصفقات. ${sourceMeta.note_ar}. آخر رصد: ${observed}`;
+    $("sourceNote").classList.remove("hidden");
+  }else if(src&&VIEW.length===0){
+    $("sourceNote").textContent=`${src}: متصل بمخزون الصفقات، لكن لا توجد له صفقة مؤهلة للجزائر في آخر تصنيف مكتمل.`;
+    $("sourceNote").classList.remove("hidden");
+  }else{
+    $("sourceNote").classList.add("hidden");
+  }
   $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> من ${nf.format(DATA.length)} صفقة`;
   render();
 }
 function card(o){
   const roiCls=o.roi>=60?"hi":o.roi>=30?"md":"lo";
-  const badge=o.e?'<span class="badge b-est">تقديري</span>':'<span class="badge b-real">موثّق ✓</span>';
-  const live=o.v?'<span class="badge b-live">✓ مؤكد الآن</span>':"";
+  const badge=VERIFICATION_FRESH&&o.v===1?'<span class="badge b-live">مؤكد حيًا ✓</span>':o.e?'<span class="badge b-est">سعر بيع تقديري</span>':'<span class="badge b-real">محسوب بسعر سوق حقيقي</span>';
+  const href=safeUrl(o.u);
+  const link=VERIFICATION_FRESH&&o.v===1&&href!=="#"?
+    `<a class="open" href="${esc(href)}" target="_blank" rel="noopener">فتح الإعلان ↗</a>`:
+    '<span class="open unavailable" aria-disabled="true">الرابط غير مؤكّد</span>';
   return `<div class="card">
     <div class="top">
       <span class="flag">${FLAGS[o.c]||"🌍"}</span>
-      <span class="chip">${o.m||"—"}</span>${badge}${live}
-      <span class="chip">${o.s||""}</span>
+      <span class="chip">${esc(o.m||"—")}</span>${badge}
+      <span class="chip">${esc(o.s||"")}</span>
     </div>
-    <div class="title">${o.t||"—"}</div>
+    <div class="title">${esc(o.t||"—")}</div>
     <div class="profit">
       <span class="dz">+${fmtDz(o.prd)}</span><span class="eu">≈ ${fmtEu(o.pr)}</span>
       <span class="roi ${roiCls}">ROI ${Math.round(o.roi)}%</span>
@@ -305,7 +410,7 @@ function card(o){
     </div>
     <div class="foot">
       <span class="src">الثقة ${o.cr||0}%</span>
-      <a class="open" href="${o.u}" target="_blank" rel="noopener">فتح الإعلان ↗</a>
+      ${link}
     </div>
   </div>`;
 }
@@ -317,6 +422,62 @@ function render(){
   $("pageinfo").textContent=`صفحة ${page} / ${pages}`;
   $("prev").disabled=page<=1;$("next").disabled=page>=pages;
 }
+
+let refreshPoll=null,awaitingRefresh=false,requestedRefreshMode="smart",requestedJobId="";
+function bytesHex(buffer){return [...new Uint8Array(buffer)].map(b=>b.toString(16).padStart(2,"0")).join("");}
+async function signedRefreshHeaders(mode){
+  if(!ACTIVE_PIN)throw new Error("locked");
+  const material=await crypto.subtle.importKey("raw",new TextEncoder().encode(ACTIVE_PIN),"PBKDF2",false,["deriveBits"]);
+  const rawKey=await crypto.subtle.deriveBits({name:"PBKDF2",salt:CONTROL_SALT,iterations:210000,hash:"SHA-256"},material,256);
+  const hmacKey=await crypto.subtle.importKey("raw",rawKey,{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  const stamp=String(Math.floor(Date.now()/1000));
+  const nonce=bytesHex(crypto.getRandomValues(new Uint8Array(16)));
+  const canonical=`${stamp}\n${nonce}\nPOST\n/api/refresh\n${mode}`;
+  const signature=bytesHex(await crypto.subtle.sign("HMAC",hmacKey,new TextEncoder().encode(canonical)));
+  return {"Content-Type":"application/json","X-Radar-Time":stamp,"X-Radar-Nonce":nonce,"X-Radar-Signature":signature};
+}
+function paintRefresh(state){
+  const running=!!state.running||state.status==="pending"||state.status==="queued";
+  if(running)awaitingRefresh=true;
+  $("refreshBtn").disabled=running;$("fullRefreshBtn").disabled=running;
+  $("refreshBtn").textContent=running&&state.mode==="smart"?"⏳ تحديث ذكي…":"⚡ جلب وتحديث ذكي";
+  $("fullRefreshBtn").textContent=running&&state.mode==="full"?"⏳ تحديث شامل…":"🌍 تحديث شامل";
+  if(state.message)$("refreshStatus").textContent=state.message;
+  if(state.job_id)requestedJobId=state.job_id;
+  if(!running&&state.status==="ok"){
+    clearInterval(refreshPoll);refreshPoll=null;
+    if(awaitingRefresh){
+      awaitingRefresh=false;
+      $("refreshStatus").textContent="تم التحديث — جاري إعادة تحميل اللوحة…";
+      setTimeout(()=>location.reload(),15000);
+    }else{
+      $("refreshStatus").textContent="جاهز — آخر تحديث اكتمل بنجاح";
+    }
+  }else if(!running&&state.status==="failed"){
+    clearInterval(refreshPoll);refreshPoll=null;
+    $("refreshStatus").textContent=state.message||"فشل التحديث";
+  }else if(!running&&state.status==="skipped"){
+    clearInterval(refreshPoll);refreshPoll=null;awaitingRefresh=false;
+    $("refreshStatus").textContent=state.message||"يوجد تحديث آخر يعمل الآن";
+  }
+}
+async function readRefreshStatus(){
+  try{const r=await fetch(`${CONTROL_API}/api/status`,{cache:"no-store"});if(r.ok)paintRefresh(await r.json());}catch(e){}
+}
+async function startRefresh(mode){
+  requestedRefreshMode=mode;awaitingRefresh=true;$("refreshBtn").disabled=true;$("fullRefreshBtn").disabled=true;
+  $("refreshStatus").textContent=mode==="full"?"بدء حصاد شامل لكل المصادر…":"بدء جلب العروض الجديدة وإعادة ترتيبها…";
+  try{
+    const headers=await signedRefreshHeaders(mode);
+    const r=await fetch(`${CONTROL_API}/api/refresh`,{method:"POST",headers,body:JSON.stringify({mode})});
+    const state=await r.json();paintRefresh(state);
+    if(!r.ok)throw new Error(state.error||"request_failed");
+    if(!refreshPoll)refreshPoll=setInterval(readRefreshStatus,10000);
+  }catch(e){$("refreshBtn").disabled=false;$("fullRefreshBtn").disabled=false;$("refreshStatus").textContent="تعذر الاتصال بخدمة التحديث";}
+}
+$("refreshBtn").onclick=()=>startRefresh("smart");
+$("fullRefreshBtn").onclick=()=>startRefresh("full");
+setInterval(readRefreshStatus,60000);
 </script>
 </body>
 </html>

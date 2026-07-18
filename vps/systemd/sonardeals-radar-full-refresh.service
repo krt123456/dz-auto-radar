@@ -1,0 +1,19 @@
+[Unit]
+Description=SonarDeals scheduled full Schengen radar refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sonardeals-radar/radar_refresh.sh full scheduled-full
+User=root
+Group=root
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5
+TimeoutStartSec=8h
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/sonardeals-radar /home/krt/car_deal_finder /srv/sonardeals-radar /run/lock

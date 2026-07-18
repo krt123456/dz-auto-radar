@@ -1,0 +1,6 @@
+board.json
+__pycache__/
+*.pyc
+worker/.dev.vars
+worker/.wrangler/
+worker/node_modules/

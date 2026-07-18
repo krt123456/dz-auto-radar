@@ -1,0 +1,19 @@
+[Unit]
+Description=SonarDeals scheduled smart radar refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/sonardeals-radar/radar_refresh.sh smart scheduled-smart
+User=root
+Group=root
+Nice=5
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5
+TimeoutStartSec=6h
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/sonardeals-radar /home/krt/car_deal_finder /srv/sonardeals-radar /run/lock
