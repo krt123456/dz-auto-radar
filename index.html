@@ -90,6 +90,10 @@ header{padding:22px 0 12px}
 .b-real{background:rgba(34,211,165,.14);color:var(--acc);border:1px solid rgba(34,211,165,.35)}
 .b-est{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.3)}
 .b-live{background:rgba(34,211,165,.22);color:#7df5d4;border:1px solid rgba(34,211,165,.5);font-weight:800}
+.b-new{background:rgba(56,189,248,.2);color:#8edcff;border:1px solid rgba(56,189,248,.55);font-weight:800}
+.b-opened{background:rgba(167,139,250,.16);color:#c4b5fd;border:1px solid rgba(167,139,250,.42)}
+.card.is-new{border-color:rgba(56,189,248,.62);box-shadow:0 0 0 1px rgba(56,189,248,.12)}
+.card.is-visited{border-color:rgba(167,139,250,.34)}
 .title{font-size:.95rem;font-weight:500;line-height:1.5;color:var(--txt);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.8em}
 .profit{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
@@ -107,6 +111,7 @@ header{padding:22px 0 12px}
 .open{margin-inline-start:auto;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#05263b;
   font-weight:800;font-size:.85rem;padding:9px 18px;border-radius:11px}
 .open.unavailable{background:var(--chip);color:var(--mut);cursor:not-allowed;opacity:.72}
+.open:visited{color:#6b215f}
 
 /* ---------- pagination ---------- */
 #pager{display:flex;gap:10px;justify-content:center;align-items:center;margin:26px 0}
@@ -187,6 +192,12 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
         <input type="checkbox" id="flive" checked> رابط الإعلان مؤكّد حيًا فقط
       </label>
+      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="fnew"> العروض الجديدة فقط
+      </label>
+      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="funseen"> لم أفتحها فقط
+      </label>
     </div>
     <div class="source-note hidden" id="sourceNote"></div>
     <div class="count" id="count"></div>
@@ -220,7 +231,49 @@ const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
 const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
 let DATA=[],VIEW=[],page=1,SOURCE_META=new Map(),VERIFICATION_FRESH=false,ACTIVE_PIN="";
+let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
+const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
+const HISTORY_LIMIT=50000;
+
+function readIdSet(key){
+  try{
+    const value=JSON.parse(localStorage.getItem(key)||"[]");
+    return new Set(Array.isArray(value)?value.map(String).filter(Boolean):[]);
+  }catch(e){return new Set();}
+}
+function writeIdSet(key,values){
+  try{localStorage.setItem(key,JSON.stringify([...values].slice(-HISTORY_LIMIT)));}catch(e){}
+}
+function initializeOfferHistory(){
+  const ids=DATA.map(o=>String(o.id||"")).filter(Boolean);
+  const current=new Set(ids);
+  VISITED_IDS=readIdSet(VISITED_KEY);
+  const hasBaseline=localStorage.getItem(KNOWN_KEY)!==null;
+  KNOWN_IDS=hasBaseline?readIdSet(KNOWN_KEY):new Set(ids);
+  NEW_IDS=hasBaseline?readIdSet(NEW_KEY):new Set();
+  if(hasBaseline){
+    for(const id of ids){
+      if(!KNOWN_IDS.has(id)&&!VISITED_IDS.has(id))NEW_IDS.add(id);
+      KNOWN_IDS.add(id);
+    }
+  }
+  NEW_IDS=new Set([...NEW_IDS].filter(id=>current.has(id)&&!VISITED_IDS.has(id)));
+  writeIdSet(KNOWN_KEY,KNOWN_IDS);writeIdSet(NEW_KEY,NEW_IDS);writeIdSet(VISITED_KEY,VISITED_IDS);
+}
+function updateHistoryStats(){
+  const current=new Set(DATA.map(o=>String(o.id||"")));
+  const fresh=[...NEW_IDS].filter(id=>current.has(id)).length;
+  const opened=[...VISITED_IDS].filter(id=>current.has(id)).length;
+  if($("newStat"))$("newStat").textContent=nf.format(fresh);
+  if($("openedStat"))$("openedStat").textContent=nf.format(opened);
+}
+function recordVisited(id){
+  id=String(id||"");if(!id)return;
+  VISITED_IDS.add(id);NEW_IDS.delete(id);KNOWN_IDS.add(id);
+  writeIdSet(VISITED_KEY,VISITED_IDS);writeIdSet(NEW_KEY,NEW_IDS);writeIdSet(KNOWN_KEY,KNOWN_IDS);
+  updateHistoryStats();
+}
 
 /* ---------- crypto ---------- */
 async function deriveKey(pin,salt){
@@ -277,6 +330,7 @@ if(typeof DecompressionStream==="undefined"){
 /* ---------- app ---------- */
 function boot(payload){
   DATA=payload.offers;
+  initializeOfferHistory();
   $("lock").classList.add("hidden");$("app").classList.remove("hidden");
   const dataUpd=new Date(payload.data_generated_at_utc||payload.updated_utc);
   const boardBuilt=new Date(payload.board_built_at_utc||payload.updated_utc);
@@ -297,6 +351,8 @@ function boot(payload){
   const qualifiedUniverse=payload.qualified_universe_offers||payload.qualified_universe_planets||0;
   $("stats").innerHTML=
     `<div class="stat">أفضل العروض المعروضة<b>${nf.format(DATA.length)}</b></div>`+
+    `<div class="stat">جديدة لم ترها<b id="newStat">0</b></div>`+
+    `<div class="stat">فتحتها سابقًا<b id="openedStat">0</b></div>`+
     (universe?`<div class="stat">مخزون فريد فُحص ورتّب<b>${nf.format(universe)}</b></div>`:"")+
     (qualifiedUniverse?`<div class="stat">مرشح مؤهل<b>${nf.format(qualifiedUniverse)}</b></div>`:"")+
     `<div class="stat">المصادر المؤهلة<b>${displayed}</b></div>`+
@@ -309,6 +365,7 @@ function boot(payload){
     `<div class="stat">آخر تصنيف للبيانات<b>${fmtTime(dataUpd)}</b></div>`+
     `<div class="stat">آخر حصاد شامل<b>${fmtTime(fullRefresh)}</b></div>`+
     `<div class="stat">بناء اللوحة<b>${fmtTime(boardBuilt)}</b></div>`;
+  updateHistoryStats();
   const availableCountries=new Set(DATA.map(o=>o.c).filter(Boolean));
   const connectedCountrySet=new Set(Object.keys(payload.connected_country_counts||{}));
   const cs=Object.keys(FLAGS).sort();
@@ -332,10 +389,17 @@ function boot(payload){
   const ys=[...new Set(DATA.map(o=>o.y).filter(y=>y>2000))].sort((a,b)=>b-a);
   $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
   ["q","fc","fsrc","ff","fy","fp","fs","fb"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();}));
-  ["ft","flive"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();}));
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp","fb"].forEach(id=>$(id).value="");$("fs").value="best";$("ft").checked=false;$("flive").checked=true;page=1;apply();};
+  ["ft","flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();}));
+  $("fnew").checked=NEW_IDS.size>0;
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp","fb"].forEach(id=>$(id).value="");$("fs").value="best";$("ft").checked=false;$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;page=1;apply();};
   $("prev").onclick=()=>{page--;render();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();scrollTo({top:0,behavior:"smooth"});};
+  $("grid").onclick=event=>{
+    const link=event.target.closest("a.open[data-offer-id]");
+    if(!link)return;
+    recordVisited(link.dataset.offerId);
+    setTimeout(()=>{page=1;apply();},0);
+  };
   $("loading").classList.add("hidden");
   const deferredSources=payload.deferred_sources||[];
   const deferred=deferredSources.length;
@@ -355,7 +419,8 @@ function boot(payload){
 }
 function apply(){
   const q=$("q").value.trim().toLowerCase(),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
-        p=$("fp").value,t=$("ft").checked,liveOnly=$("flive").checked,s=$("fs").value;
+        p=$("fp").value,t=$("ft").checked,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
+        unseenOnly=$("funseen").checked,s=$("fs").value;
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
   const bmax=Number($("fb").value)||0;
   VIEW=DATA.filter(o=>
@@ -363,6 +428,8 @@ function apply(){
     (!q||(o.t+" "+o.m).toLowerCase().includes(q))&&
     (!c||o.c===c)&&(!src||o.s===src)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
     o.p>=pmin&&o.p<=pmax&&(!t||!o.e)&&(!liveOnly||(VERIFICATION_FRESH&&o.v===1))&&
+    (!newOnly||NEW_IDS.has(String(o.id||"")))&&
+    (!unseenOnly||!VISITED_IDS.has(String(o.id||"")))&&
     (!bmax||Number(o.ld||0)<=bmax));
   const K={best:(a,b)=>(a.a||0)-(b.a||0)||
              (b.ep||b.pr)-(a.ep||a.pr)||
@@ -390,16 +457,18 @@ function apply(){
   render();
 }
 function card(o){
+  const id=String(o.id||""),opened=VISITED_IDS.has(id),fresh=NEW_IDS.has(id);
   const roiCls=o.roi>=60?"hi":o.roi>=30?"md":"lo";
   const badge=VERIFICATION_FRESH&&o.v===1?'<span class="badge b-live">مؤكد حيًا ✓</span>':o.e?'<span class="badge b-est">سعر بيع تقديري</span>':'<span class="badge b-real">محسوب بسعر سوق حقيقي</span>';
+  const historyBadge=fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':'';
   const href=safeUrl(o.u);
   const link=VERIFICATION_FRESH&&o.v===1&&href!=="#"?
-    `<a class="open" href="${esc(href)}" target="_blank" rel="noopener">فتح الإعلان ↗</a>`:
+    `<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener">${opened?"فتحه مجددًا":"فتح الإعلان"} ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير مؤكّد</span>';
-  return `<div class="card">
+  return `<div class="card${fresh?" is-new":""}${opened?" is-visited":""}">
     <div class="top">
       <span class="flag">${FLAGS[o.c]||"🌍"}</span>
-      <span class="chip">${esc(o.m||"—")}</span>${badge}
+      <span class="chip">${esc(o.m||"—")}</span>${historyBadge}${badge}
       <span class="chip">${esc(o.s||"")}</span>
     </div>
     <div class="title">${esc(o.t||"—")}</div>
