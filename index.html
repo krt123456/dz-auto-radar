@@ -553,6 +553,7 @@ async function startRefresh(mode){
 }
 $("refreshBtn").onclick=()=>startRefresh("smart");
 $("fullRefreshBtn").onclick=()=>startRefresh("full");
+readRefreshStatus();
 setInterval(readRefreshStatus,60000);
 </script>
 </body>
