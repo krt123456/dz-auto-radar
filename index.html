@@ -364,7 +364,14 @@ function apply(){
     (!c||o.c===c)&&(!src||o.s===src)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
     o.p>=pmin&&o.p<=pmax&&(!t||!o.e)&&(!liveOnly||(VERIFICATION_FRESH&&o.v===1))&&
     (!bmax||Number(o.ld||0)<=bmax));
-  const K={best:(a,b)=>(a.a||0)-(b.a||0)||(b.ep||b.pr)-(a.ep||a.pr)||(b.cr||0)-(a.cr||0)||b.pr-a.pr,
+  const K={best:(a,b)=>(a.a||0)-(b.a||0)||
+             (b.ep||b.pr)-(a.ep||a.pr)||
+             (b.cr||0)-(a.cr||0)||
+             b.pr-a.pr||
+             (b.er||b.roi)-(a.er||a.roi)||
+             a.p-b.p||
+             (a.km||0)-(b.km||0)||
+             String(a.id||"").localeCompare(String(b.id||"")),
            profit:(a,b)=>b.pr-a.pr,roi:(a,b)=>b.roi-a.roi,price:(a,b)=>a.p-b.p,
            year:(a,b)=>b.y-a.y||b.pr-a.pr,km:(a,b)=>a.km-b.km||b.pr-a.pr};
   VIEW.sort(K[s]||K.best);
