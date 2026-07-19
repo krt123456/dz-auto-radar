@@ -461,6 +461,11 @@ function card(o){
   const roiCls=o.roi>=60?"hi":o.roi>=30?"md":"lo";
   const badge=VERIFICATION_FRESH&&o.v===1?'<span class="badge b-live">مؤكد حيًا ✓</span>':o.e?'<span class="badge b-est">سعر بيع تقديري</span>':'<span class="badge b-real">محسوب بسعر سوق حقيقي</span>';
   const historyBadge=fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':'';
+  const analysisPrice=Number(o.ap||o.p||0);
+  const exportPriceLine=analysisPrice>0&&analysisPrice<Number(o.p||0)?
+    `<div>🧾 سعر التصدير المؤكد <b>${fmtEu(analysisPrice)}</b></div>`:'';
+  const customsLines=Number(o.cd||0)>0?
+    `<div>🛃 جمارك عند الاستيراد <b>${fmtDz(o.ci||o.cd)}</b></div>${Number(o.cb||0)>0?`<div>↩️ إرجاع الامتياز عند البيع <b>${fmtDz(o.cb)}</b></div>`:''}`:'';
   const href=safeUrl(o.u);
   const link=VERIFICATION_FRESH&&o.v===1&&href!=="#"?
     `<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener">${opened?"فتحه مجددًا":"فتح الإعلان"} ↗</a>`:
@@ -477,10 +482,12 @@ function card(o){
       <span class="roi ${roiCls}">ROI ${Math.round(o.roi)}%</span>
     </div>
     <div class="meta">
-      <div>💶 الشراء <b>${fmtEu(o.p)}</b></div>
+      <div>💶 سعر الإعلان <b>${fmtEu(o.p)}</b></div>
+      ${exportPriceLine}
       <div>🗓️ السنة <b>${o.y||"—"}</b></div>
       <div>🛣️ العداد <b>${o.km?nf.format(o.km)+" كم":"—"}</b></div>
       <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
+      ${customsLines}
       <div>🏛️ تكلفة الوصول <b>${fmtDz(o.ld)}</b></div>
       <div>🇩🇿 البيع المتوقع <b>${fmtDz(o.rd)}</b></div>
     </div>
