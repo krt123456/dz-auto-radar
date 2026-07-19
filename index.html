@@ -234,7 +234,38 @@ let DATA=[],VIEW=[],page=1,SOURCE_META=new Map(),VERIFICATION_FRESH=false,ACTIVE
 let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
+const NAV_KEY="dzr-navigation-v1";
+const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs","fb"];
+const NAV_CHECK_IDS=["ft","flive","fnew","funseen"];
 const HISTORY_LIMIT=50000;
+
+function readNavigationState(){
+  try{
+    const value=JSON.parse(sessionStorage.getItem(NAV_KEY)||"null");
+    return value&&typeof value==="object"?value:null;
+  }catch(e){return null;}
+}
+function saveNavigationState(){
+  if($("app").classList.contains("hidden"))return;
+  const values={},checks={};
+  for(const id of NAV_VALUE_IDS)values[id]=$(id).value;
+  for(const id of NAV_CHECK_IDS)checks[id]=$(id).checked;
+  try{
+    sessionStorage.setItem(NAV_KEY,JSON.stringify({page,scrollY:window.scrollY,values,checks}));
+  }catch(e){}
+}
+function restoreNavigationState(state){
+  if(!state)return false;
+  for(const id of NAV_VALUE_IDS){
+    if(Object.prototype.hasOwnProperty.call(state.values||{},id))$(id).value=state.values[id];
+  }
+  for(const id of NAV_CHECK_IDS){
+    if(Object.prototype.hasOwnProperty.call(state.checks||{},id))$(id).checked=!!state.checks[id];
+  }
+  const restoredPage=Number(state.page);
+  page=Number.isInteger(restoredPage)&&restoredPage>0?restoredPage:1;
+  return true;
+}
 
 function readIdSet(key){
   try{
@@ -329,6 +360,7 @@ if(typeof DecompressionStream==="undefined"){
 
 /* ---------- app ---------- */
 function boot(payload){
+  const navigationState=readNavigationState();
   DATA=payload.offers;
   initializeOfferHistory();
   $("lock").classList.add("hidden");$("app").classList.remove("hidden");
@@ -388,17 +420,18 @@ function boot(payload){
   $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option>${esc(f)}</option>`).join("");
   const ys=[...new Set(DATA.map(o=>o.y).filter(y=>y>2000))].sort((a,b)=>b-a);
   $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
-  ["q","fc","fsrc","ff","fy","fp","fs","fb"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();}));
-  ["ft","flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();}));
-  $("fnew").checked=NEW_IDS.size>0;
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp","fb"].forEach(id=>$(id).value="");$("fs").value="best";$("ft").checked=false;$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;page=1;apply();};
-  $("prev").onclick=()=>{page--;render();scrollTo({top:0,behavior:"smooth"});};
-  $("next").onclick=()=>{page++;render();scrollTo({top:0,behavior:"smooth"});};
+  ["q","fc","fsrc","ff","fy","fp","fs","fb"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
+  ["ft","flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
+  if(!restoreNavigationState(navigationState))$("fnew").checked=NEW_IDS.size>0;
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp","fb"].forEach(id=>$(id).value="");$("fs").value="best";$("ft").checked=false;$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
+  $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
     const link=event.target.closest("a.open[data-offer-id]");
     if(!link)return;
+    saveNavigationState();
     recordVisited(link.dataset.offerId);
-    setTimeout(()=>{page=1;apply();},0);
+    setTimeout(()=>{apply();saveNavigationState();},0);
   };
   $("loading").classList.add("hidden");
   const deferredSources=payload.deferred_sources||[];
@@ -416,6 +449,10 @@ function boot(payload){
       " · انتهت صلاحية فحص الروابط؛ لن تُعرض روابط على أنها حية حتى يكتمل التحديث التالي")+
     ` · الأسعار الجزائرية من سوق Ouedkniss`;
   apply();
+  saveNavigationState();
+  if(navigationState&&Number.isFinite(Number(navigationState.scrollY))){
+    requestAnimationFrame(()=>requestAnimationFrame(()=>scrollTo({top:Number(navigationState.scrollY),behavior:"auto"})));
+  }
 }
 function apply(){
   const q=$("q").value.trim().toLowerCase(),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
@@ -505,6 +542,8 @@ function render(){
   $("pageinfo").textContent=`صفحة ${page} / ${pages}`;
   $("prev").disabled=page<=1;$("next").disabled=page>=pages;
 }
+
+addEventListener("pagehide",saveNavigationState);
 
 let refreshPoll=null,awaitingRefresh=false,requestedRefreshMode="smart",requestedJobId="";
 function bytesHex(buffer){return [...new Uint8Array(buffer)].map(b=>b.toString(16).padStart(2,"0")).join("");}
