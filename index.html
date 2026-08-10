@@ -110,6 +110,7 @@ header{padding:22px 0 12px}
 .src{font-size:.75rem;color:var(--mut)}
 .open{margin-inline-start:auto;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#05263b;
   font-weight:800;font-size:.85rem;padding:9px 18px;border-radius:11px}
+.open.needs-check{background:linear-gradient(135deg,#fbbf24,#fb923c);color:#301b02}
 .open.unavailable{background:var(--chip);color:var(--mut);cursor:not-allowed;opacity:.72}
 .open:visited{color:#6b215f}
 
@@ -190,7 +191,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <input type="checkbox" id="ft"> موثّق فقط (سعر جزائري حقيقي)
       </label>
       <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
-        <input type="checkbox" id="flive" checked> رابط الإعلان مؤكّد حيًا فقط
+        <input type="checkbox" id="flive" checked> روابط سبق التحقق منها فقط
       </label>
       <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
         <input type="checkbox" id="fnew"> العروض الجديدة فقط
@@ -226,7 +227,10 @@ const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
 const fmtDz=v=>nf.format(Math.round(v))+" دج";
 const fmtEu=v=>nf.format(Math.round(v))+" €";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const safeUrl=v=>{try{const u=new URL(String(v||""));return /^(https?):$/.test(u.protocol)?u.href:"#";}catch(e){return"#";}};
+const safeUrl=v=>{try{
+  const u=new URL(String(v||"").trim());
+  return /^(https?):$/.test(u.protocol)&&!u.username&&!u.password&&u.hostname?u.href:"#";
+}catch(e){return"#";}};
 const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
 const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
@@ -446,7 +450,7 @@ function boot(payload){
     (watchOnly.length?` · مراقبة فقط (${watchOnly.join("، ")})`:"")+
     (staging.length?` · قيد التطبيع قبل الحساب (${staging.join("، ")})`:"")+
     (VERIFICATION_FRESH?` · المؤكد حيًا الآن: ${payload.live_verified_offer_count||0}`:
-      " · انتهت صلاحية فحص الروابط؛ لن تُعرض روابط على أنها حية حتى يكتمل التحديث التالي")+
+      " · انتهت صلاحية الفحص الحديث؛ تبقى الروابط متاحة للفتح بعلامة تحذير حتى يكتمل التحديث التالي")+
     ` · الأسعار الجزائرية من سوق Ouedkniss`;
   apply();
   saveNavigationState();
@@ -464,7 +468,7 @@ function apply(){
     o.v!==-1&&
     (!q||(o.t+" "+o.m).toLowerCase().includes(q))&&
     (!c||o.c===c)&&(!src||o.s===src)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
-    o.p>=pmin&&o.p<=pmax&&(!t||!o.e)&&(!liveOnly||(VERIFICATION_FRESH&&o.v===1))&&
+    o.p>=pmin&&o.p<=pmax&&(!t||!o.e)&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&
     (!unseenOnly||!VISITED_IDS.has(String(o.id||"")))&&
     (!bmax||Number(o.ld||0)<=bmax));
@@ -504,9 +508,10 @@ function card(o){
   const customsLines=Number(o.cd||0)>0?
     `<div>🛃 جمارك عند الاستيراد <b>${fmtDz(o.ci||o.cd)}</b></div>${Number(o.cb||0)>0?`<div>↩️ إرجاع الامتياز عند البيع <b>${fmtDz(o.cb)}</b></div>`:''}`:'';
   const href=safeUrl(o.u);
-  const link=VERIFICATION_FRESH&&o.v===1&&href!=="#"?
-    `<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener">${opened?"فتحه مجددًا":"فتح الإعلان"} ↗</a>`:
-    '<span class="open unavailable" aria-disabled="true">الرابط غير مؤكّد</span>';
+  const linkFresh=VERIFICATION_FRESH&&o.v===1;
+  const link=href!=="#"?
+    `<a class="open${linkFresh?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" title="${linkFresh?"تم التحقق من الرابط حديثًا":"الرابط متاح لكن يحتاج إعادة تحقق"}">${opened?"فتحه مجددًا":"فتح الإعلان"}${linkFresh?"":" ⚠"} ↗</a>`:
+    '<span class="open unavailable" aria-disabled="true">الرابط غير صالح</span>';
   return `<div class="card${fresh?" is-new":""}${opened?" is-visited":""}">
     <div class="top">
       <span class="flag">${FLAGS[o.c]||"🌍"}</span>
