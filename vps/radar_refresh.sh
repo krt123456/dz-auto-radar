@@ -8,8 +8,11 @@ STATE="${RADAR_STATE_DIR:-/var/lib/sonardeals-radar}"
 CLIENT="${RADAR_CONTROL_CLIENT:-/opt/sonardeals-radar/radar_control_client.py}"
 PUBLISHER="${RADAR_PUBLISHER:-/opt/sonardeals-radar/publish_radar_dashboard.py}"
 AUDITOR="${RADAR_AUDITOR:-/opt/sonardeals-radar/audit_best_selection.py}"
+LIVE_CONVERGENCE="${RADAR_LIVE_CONVERGENCE:-/opt/sonardeals-radar/audit_live_convergence.py}"
 SITE="${RADAR_SITE:-/srv/sonardeals-radar/site}"
 AUDIT="$STATE/latest_selection_audit.json"
+LIVE_AUDIT="$STATE/latest_live_selection_audit.json"
+LIVE_DATA_URL="${RADAR_LIVE_DATA_URL:-https://krt123456.github.io/dz-auto-radar/data.enc}"
 LOG_DIR="$STATE/logs"
 NOTIFY=1
 PHASE="starting"
@@ -24,7 +27,12 @@ fi
 
 mkdir -p "$STATE" "$LOG_DIR"
 exec 9>/run/lock/sonardeals-radar-refresh.lock
-if ! flock -w 21600 9; then
+if [[ "$JOB_ID" == scheduled* ]]; then
+  if ! flock -n 9; then
+    echo "RADAR_REFRESH_SKIPPED_BUSY mode=$MODE job=$JOB_ID" >&2
+    exit 0
+  fi
+elif ! flock -w 300 9; then
   echo "refresh lock timeout" >&2
   exit 75
 fi
@@ -51,6 +59,24 @@ trap fail ERR INT TERM
 
 cd "$ROOT"
 echo "RADAR_REFRESH_START mode=$MODE job=$JOB_ID at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+PHASE="disk_preflight"
+notify running "$PHASE" "يتحقق الخادم من مساحة العمل الآمنة قبل التحديث"
+if [[ "$MODE" == "full" ]]; then
+  REQUIRED_FREE_BYTES="${RADAR_FULL_MIN_FREE_BYTES:-68719476736}"
+else
+  REQUIRED_FREE_BYTES="${RADAR_SMART_MIN_FREE_BYTES:-34359738368}"
+fi
+if [[ ! "$REQUIRED_FREE_BYTES" =~ ^[0-9]+$ ]]; then
+  echo "invalid minimum-free-bytes policy: $REQUIRED_FREE_BYTES" >&2
+  (exit 64)
+fi
+AVAILABLE_FREE_BYTES="$(df -PB1 -- "$ROOT" | awk 'NR==2 {print $4}')"
+if [[ ! "$AVAILABLE_FREE_BYTES" =~ ^[0-9]+$ ]] || (( AVAILABLE_FREE_BYTES < REQUIRED_FREE_BYTES )); then
+  echo "insufficient disk headroom: available=$AVAILABLE_FREE_BYTES required=$REQUIRED_FREE_BYTES" >&2
+  (exit 73)
+fi
+echo "RADAR_DISK_PREFLIGHT_PASS available=$AVAILABLE_FREE_BYTES required=$REQUIRED_FREE_BYTES"
 
 PHASE="harvest"
 notify running "$PHASE" "يجلب الخادم أحدث العروض من المصادر"
@@ -93,16 +119,20 @@ PHASE="validation"
 notify running "$PHASE" "يفحص الروابط الأعلى ويستبعد المؤكد ميتًا"
 python3 "$ROOT/export_schengen_board.py" --top-n 0
 if [[ "$MODE" == "full" ]]; then
-  VERIFY_LIMIT="${RADAR_FULL_VERIFY_LIMIT:-5000}"
+  VERIFY_LIMIT="${RADAR_FULL_VERIFY_LIMIT:-0}"
 else
-  VERIFY_LIMIT="${RADAR_SMART_VERIFY_LIMIT:-1500}"
+  VERIFY_LIMIT="${RADAR_SMART_VERIFY_LIMIT:-0}"
 fi
-python3 "$ROOT/validate_top400.py" \
+xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --input "$ROOT/mobile_site_local/board.json" \
   --id-index "$ROOT/top_offers.json" \
   --output-json "$ROOT/top400_validation.json" \
   --limit "$VERIFY_LIMIT" --workers "${RADAR_VERIFY_WORKERS:-24}" \
-  --timeout-sec "${RADAR_VERIFY_TIMEOUT:-8}"
+  --timeout-sec "${RADAR_VERIFY_TIMEOUT:-8}" \
+  --browser-fallback \
+  --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-3000}" \
+  --browser-workers "${RADAR_BROWSER_VERIFY_WORKERS:-8}" \
+  --browser-timeout-sec "${RADAR_BROWSER_VERIFY_TIMEOUT:-30}"
 python3 "$ROOT/export_schengen_board.py" --top-n 0
 
 PHASE="publication_audit"
@@ -113,6 +143,22 @@ python3 "$AUDITOR" --root "$ROOT" --site "$SITE" --output "$AUDIT"
 PHASE="publish"
 notify running "$PHASE" "ينشر النسخة المشفرة بعد اجتياز تدقيق الاختيار"
 python3 "$PUBLISHER" --root "$ROOT" --site "$SITE" --push-only
+
+PHASE="live_publication_audit"
+notify running "$PHASE" "يتحقق أن النسخة العامة تطابق المصدر والترتيب الصارم حقلًا بحقل"
+expected_generation="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["generation_id"])' "$AUDIT")"
+python3 "$LIVE_CONVERGENCE" \
+  --root "$ROOT" \
+  --data-url "$LIVE_DATA_URL" \
+  --expected-generation "$expected_generation" \
+  --selection-manifest "$STATE/latest_selection_manifest.json" \
+  --selection-audit "$AUDIT" \
+  --output "$LIVE_AUDIT" \
+  --deadline-sec "${RADAR_LIVE_AUDIT_DEADLINE_SEC:-1800}" \
+  --request-timeout-sec "${RADAR_LIVE_AUDIT_REQUEST_TIMEOUT_SEC:-30}" \
+  --initial-backoff-sec "${RADAR_LIVE_AUDIT_INITIAL_BACKOFF_SEC:-5}" \
+  --max-backoff-sec "${RADAR_LIVE_AUDIT_MAX_BACKOFF_SEC:-60}" \
+  --max-network-errors "${RADAR_LIVE_AUDIT_MAX_NETWORK_ERRORS:-8}"
 
 PHASE="complete"
 notify ok "$PHASE" "اكتمل التحديث والتدقيق والنشر بنجاح" --metrics-file "$AUDIT"

@@ -409,6 +409,9 @@ def audit_payload(
     regression against a newer local board.
     """
     board = json.loads((root / "mobile_site_local" / "board.json").read_text())
+    data_generated_at = board.get("data_generated_at_utc")
+    if not isinstance(data_generated_at, str) or not data_generated_at.strip():
+        raise AssertionError("source board has no generation-bound data timestamp")
     candidates = candidate_list(board.get("offers", []))
     expected = expected_selection(
         candidates, top_n, per_country_min, per_source_min
@@ -438,6 +441,8 @@ def audit_payload(
         )
     if payload.get("selection_algorithm") != ALGORITHM:
         raise AssertionError("selection algorithm version mismatch")
+    if payload.get("data_generated_at_utc") != data_generated_at:
+        raise AssertionError("payload data timestamp differs from source board")
     if payload.get("selection_candidate_sha256") != digest(candidates):
         raise AssertionError("candidate-universe digest mismatch")
     if payload.get("selected_ids_sha256") != digest(expected):
@@ -448,7 +453,7 @@ def audit_payload(
         raise AssertionError("selected-field digest mismatch")
     expected_generation = hashlib.sha256(
         (
-            f"{ALGORITHM}\n{board.get('data_generated_at_utc')}\n"
+            f"{ALGORITHM}\n{data_generated_at}\n"
             f"{digest_fields(candidates)}\n{digest_fields(expected)}\n"
         ).encode("utf-8")
     ).hexdigest()[:16]
@@ -649,6 +654,9 @@ def audit_payload(
         "verified_live_count": verified_count,
         "candidate_ids_sha256": digest(candidates),
         "selected_ids_sha256": digest(expected),
+        "candidate_fields_sha256": digest_fields(candidates),
+        "selected_fields_sha256": digest_fields(expected),
+        "data_generated_at_utc": data_generated_at,
         "exact_order_match": True,
         "exact_source_fields_match": True,
         "strict_global_top_n": True,

@@ -34,11 +34,20 @@ fi
 install -m 0755 "$SOURCE/radar_refresh.sh" /opt/sonardeals-radar/radar_refresh.sh
 install -m 0755 "$SOURCE/publish_radar_dashboard.py" /opt/sonardeals-radar/publish_radar_dashboard.py
 install -m 0755 "$SOURCE/audit_best_selection.py" /opt/sonardeals-radar/audit_best_selection.py
+install -m 0755 "$SOURCE/audit_live_convergence.py" /opt/sonardeals-radar/audit_live_convergence.py
 install -m 0755 "$SOURCE/radar_control_client.py" /opt/sonardeals-radar/radar_control_client.py
 install -m 0755 "$SOURCE/radar_poller.py" /opt/sonardeals-radar/radar_poller.py
 install -m 0755 "$SOURCE/build_schengen_lake.py" /opt/sonardeals-radar/build_schengen_lake.py
 install -d -m 0755 /opt/sonardeals-radar/dashboard
-install -m 0644 "$SOURCE/dashboard/index.html" /opt/sonardeals-radar/dashboard/index.html
+if [[ -f "$SOURCE/dashboard/index.html" ]]; then
+  DASHBOARD_INDEX="$SOURCE/dashboard/index.html"
+elif [[ -f "$SOURCE/../index.html" ]]; then
+  DASHBOARD_INDEX="$SOURCE/../index.html"
+else
+  echo "dashboard index is unavailable beneath $SOURCE" >&2
+  exit 1
+fi
+install -m 0644 "$DASHBOARD_INDEX" /opt/sonardeals-radar/dashboard/index.html
 
 for unit in "$SOURCE"/systemd/*; do
   install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"

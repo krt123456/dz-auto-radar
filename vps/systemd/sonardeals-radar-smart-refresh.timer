@@ -1,11 +1,10 @@
 [Unit]
-Description=Refresh SonarDeals radar every six hours
+Description=Refresh SonarDeals radar three times daily
 
 [Timer]
-OnBootSec=20min
-OnUnitActiveSec=6h
+OnCalendar=*-*-* 08,14,20:20:00
 Persistent=true
-RandomizedDelaySec=5min
+RandomizedDelaySec=10min
 
 [Install]
 WantedBy=timers.target

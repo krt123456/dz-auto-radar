@@ -108,6 +108,7 @@ def main() -> int:
     payload: dict[str, Any] = {
         "job_id": args.job_id,
         "status": args.status,
+        "running": args.status in {"pending", "queued", "running"},
         "phase": args.phase,
         "message": args.message,
     }

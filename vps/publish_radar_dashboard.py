@@ -303,6 +303,8 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
     candidate_fields_hash = digest_fields(candidates)
     selected_fields_hash = digest_fields(selected)
     data_generated_at = board.get("data_generated_at_utc")
+    if not isinstance(data_generated_at, str) or not data_generated_at.strip():
+        raise RuntimeError("board has no generation-bound data timestamp")
     generation_id = hashlib.sha256(
         (
             f"{ALGORITHM_VERSION}\n{data_generated_at}\n"
@@ -417,7 +419,10 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
     if audit.get("result") != "BEST_SELECTION_AUDIT_PASS":
         raise RuntimeError("selection audit did not pass")
     for key in (
-        "generation_id", "candidate_ids_sha256", "selected_ids_sha256",
+        "generation_id", "algorithm", "data_generated_at_utc",
+        "candidate_ids_sha256", "selected_ids_sha256",
+        "candidate_fields_sha256", "selected_fields_sha256",
+        "universe_unique_offers", "qualified_universe_offers",
         "published_offer_count", "verified_live_count",
     ):
         if audit.get(key) != manifest.get(key):
