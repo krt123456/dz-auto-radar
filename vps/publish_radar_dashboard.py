@@ -13,11 +13,12 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
 import tempfile
-from collections import Counter
+import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -26,21 +27,57 @@ from urllib.parse import urlparse
 
 MAGIC = b"DZAR1"
 PBKDF2_ITERATIONS = 310_000
-ALGORITHM_VERSION = "schengen-verified-economics-v3"
+ALGORITHM_VERSION = "schengen-strict-global-economics-v5-semantic-price"
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
 DEFAULT_INDEX = Path("/opt/sonardeals-radar/dashboard/index.html")
 DEFAULT_AUDIT = Path("/var/lib/sonardeals-radar/latest_selection_manifest.json")
-
-LEASE_MARKERS = (
-    "leasingsübernahme", "leasingübernahme", "leasingübertragung",
-    "leasing", "übernahme", "monthly payment", "finance payment",
-    "credit restant", "mensualité", "mensualite", "financement",
-    "cesja najmu", "cesja leasingu", "cesja umowy leasingu",
-    "odstępne", "odstepne", "rata miesięczna", "rata miesieczna",
-    "лизинг", "lizing", "takeover", "flex lease",
+LAUNCHER_GUARD = Path(
+    "/usr/local/libexec/sonardeals/sonardeals-launcher-guard.py"
 )
+
+SEMANTIC_PRICE_PATTERNS = (
+    ("cesja", re.compile(r"\bcesja\b")),
+    ("lease", re.compile(r"\b(?:leasing|lease|lizing|лизинг)\b")),
+    ("transfer", re.compile(
+        r"\b(?:lease|leasing|contract|contrat|contrato|umow\w*|najem)\b.{0,40}"
+        r"\b(?:takeover|transfer|assignment|cession|cesion|cessione|subentro|preluare|ubernahme|ubertragung)\b|"
+        r"\b(?:takeover|transfer|assignment|cession|cesion|cessione|subentro|preluare|ubernahme|ubertragung)\b.{0,40}"
+        r"\b(?:lease|leasing|contract|contrat|contrato|umow\w*|najem)\b"
+    )),
+    ("deposit", re.compile(
+        r"\b(?:down\s*payment|deposit|transfer\s*fee|kaucja|zaliczka|wplata\s+wlasna|"
+        r"oplata\s+wstepna|anzahlung|abloese(?:gebuhr)?|kaution|acompte|apport\s+initial|"
+        r"depot\s+de\s+garantie|anticipo|deposito|entrada|avans|aanbetaling|borgsom|kontantinsats)\b"
+    )),
+    ("instalment", re.compile(
+        r"\b(?:installments?|instalments?|monthly\s+payment|finance\s+payment|monatsrate|"
+        r"ratenzahlung|mensualite|cuota\s+mensual|maandtermijn|manadsavgift|manedlig\s+ydelse|"
+        r"rata|raty|rataln\w*|miesieczn\w*\s+rat\w*|credit\s+restant|restschuld)\b"
+    )),
+    ("finance-only", re.compile(r"\b(?:financement|finanzierung|kredyt|flex\s+lease|loa|lld)\b")),
+    ("takeover-fee", re.compile(r"\b(?:odstepne|takeover)\b")),
+)
+
+
+def normalized_semantic_text(value: Any) -> str:
+    folded = unicodedata.normalize(
+        "NFKD", str(value or "").casefold().translate(
+            str.maketrans({"ł": "l", "ø": "o", "đ": "d", "ß": "ss"})
+        )
+    )
+    return " ".join(
+        "".join(ch for ch in folded if not unicodedata.combining(ch)).split()
+    )
+
+
+def semantic_price_reason(value: Any) -> str | None:
+    text = normalized_semantic_text(value)
+    return next(
+        (name for name, pattern in SEMANTIC_PRICE_PATTERNS if pattern.search(text)),
+        None,
+    )
 
 
 def utc_now() -> str:
@@ -76,7 +113,7 @@ def valid_https_url(value: Any) -> bool:
 
 def eligible_offer(offer: dict[str, Any]) -> bool:
     title = f"{offer.get('t', '')} {offer.get('m', '')}".casefold()
-    if any(marker in title for marker in LEASE_MARKERS):
+    if semantic_price_reason(title) is not None:
         return False
     price = number(offer.get("p"))
     profit = number(offer.get("pr"))
@@ -133,23 +170,16 @@ def select_offers(
     per_country_min: int,
     per_source_min: int,
 ) -> list[dict[str, Any]]:
-    if top_n <= 0 or top_n >= len(candidates):
+    """Return the literal global top-N without quota-based substitutions.
+
+    The legacy minimum arguments remain in the callable interface so older
+    service invocations do not break, but coverage quotas must never displace a
+    better-ranked deal from a dashboard labelled as the global best selection.
+    """
+    del per_country_min, per_source_min
+    if top_n <= 0:
         return list(candidates)
-    selected: set[int] = set()
-    countries: Counter[str] = Counter()
-    sources: Counter[str] = Counter()
-    for index, offer in enumerate(candidates):
-        country = str(offer.get("c") or "").upper()
-        source = str(offer.get("s") or "")
-        if countries[country] < per_country_min or sources[source] < per_source_min:
-            selected.add(index)
-            countries[country] += 1
-            sources[source] += 1
-    for index in range(len(candidates)):
-        if len(selected) >= max(top_n, len(selected)):
-            break
-        selected.add(index)
-    return [candidates[index] for index in sorted(selected)]
+    return list(candidates[:top_n])
 
 
 def digest_ids(offers: Iterable[dict[str, Any]]) -> str:
@@ -226,6 +256,20 @@ def load_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def load_dashboard_pin(path: Path) -> str:
+    """Load either a legacy plain-text PIN or the current JSON secret format."""
+    raw = path.read_text(encoding="utf-8").strip()
+    try:
+        secret = json.loads(raw)
+    except json.JSONDecodeError:
+        pin = raw
+    else:
+        pin = str(secret.get("pin") or "").strip() if isinstance(secret, dict) else raw
+    if len(pin) < 8:
+        raise RuntimeError("dashboard secret is unexpectedly short")
+    return pin
+
+
 def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
     board = load_json(args.board)
     offers = board.get("offers")
@@ -238,10 +282,14 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         candidates, args.top_n, args.per_country_min, args.per_source_min
     )
     ranked_meta = load_json(args.ranked_meta) if args.ranked_meta.exists() else {}
+    effective_path = args.root / "effective_planet_dashboard.json"
+    effective_meta = load_json(effective_path) if effective_path.exists() else {}
     metrics = universe_metrics(args.database)
     candidate_hash = digest_ids(candidates)
     selected_hash = digest_ids(selected)
-    generation_id = candidate_hash[:16]
+    generation_id = hashlib.sha256(
+        f"{ALGORITHM_VERSION}\n{candidate_hash}\n{selected_hash}\n".encode("utf-8")
+    ).hexdigest()[:16]
 
     payload = {key: value for key, value in board.items() if key != "offers"}
     payload.update(
@@ -261,9 +309,19 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
             "generation_id": generation_id,
             "selection": {
                 "top_n": args.top_n,
-                "per_country_min": args.per_country_min,
-                "per_source_min": args.per_source_min,
+                "strict_global_order": True,
+                "coverage_quota_substitutions": 0,
                 "ranking": "analyzed-only, non-auction, effective-profit, credibility, profit, effective-roi",
+            },
+            "selection_input_counts": {
+                "universe_unique_after_source_identity_dedupe": metrics["universe_unique_offers"],
+                "qualified_after_age_fuel_legal_filters": int(effective_meta.get("qualified_universe_planets") or 0),
+                "economics_analyzed_and_ranked": int(ranked_meta.get("total_all") or 0),
+                "ranking_qualified_before_final_publication_filters": int(ranked_meta.get("qualified") or 0),
+                "ranking_saved": int(ranked_meta.get("shown") or 0),
+                "ranking_saved_non_estimated": int(ranked_meta.get("qualified_non_estimated") or 0),
+                "publication_candidates_after_all_filters_and_dedupe": len(candidates),
+                **(ranked_meta.get("input_counts") or {}),
             },
             "offers": selected,
         }
@@ -286,6 +344,7 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         "connected_country_count": payload.get("connected_country_count", 0),
         "connected_source_count": payload.get("connected_source_count", 0),
         "data_generated_at_utc": payload.get("data_generated_at_utc"),
+        "selection_input_counts": payload["selection_input_counts"],
     }
     return payload, manifest
 
@@ -293,9 +352,7 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
 def prepare(args: argparse.Namespace) -> None:
     if not args.pin.is_file():
         raise RuntimeError(f"PIN secret is unavailable: {args.pin}")
-    pin = args.pin.read_text(encoding="utf-8").strip()
-    if len(pin) < 8:
-        raise RuntimeError("dashboard secret is unexpectedly short")
+    pin = load_dashboard_pin(args.pin)
     payload, manifest = build_payload(args)
     if not args.index.is_file():
         raise RuntimeError(f"dashboard index is unavailable: {args.index}")
@@ -330,7 +387,23 @@ def run_git(site: Path, *arguments: str, check: bool = True) -> subprocess.Compl
     )
 
 
+def enforce_launcher_guard() -> None:
+    """Fence only the irreversible Git publication step.
+
+    Preparing encrypted assets and an audit manifest is deliberately testable
+    and reversible.  The guard remains mandatory immediately before staging,
+    committing, or pushing production files.
+    """
+    guard = subprocess.run(
+        [str(LAUNCHER_GUARD), "check", "sonardeals-radar-full-refresh.service"],
+        check=False,
+    )
+    if guard.returncode != 0:
+        raise RuntimeError("launcher guard denied radar publication")
+
+
 def publish(args: argparse.Namespace) -> None:
+    enforce_launcher_guard()
     if not (args.site / ".git").is_dir():
         raise RuntimeError(f"publication directory is not a git checkout: {args.site}")
     (args.site / "board.json").unlink(missing_ok=True)

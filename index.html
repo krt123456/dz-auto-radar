@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<meta name="sonardeals-build" content="20260811-freshness-truth-v1">
 <title>رادار الصفقات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -60,6 +61,8 @@ header{padding:22px 0 12px}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .stat{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:8px 14px;font-size:.82rem;color:var(--mut)}
 .stat b{color:var(--txt);font-size:.95rem;margin-inline-start:6px}
+.freshness-alert{margin-top:10px;padding:11px 13px;border:1px solid rgba(251,191,36,.48);border-radius:12px;
+  background:rgba(251,191,36,.1);color:#fde68a;font-size:.82rem;line-height:1.55}
 
 /* ---------- filters ---------- */
 #filters{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.88);backdrop-filter:blur(12px);
@@ -134,7 +137,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     <div class="lockicon">🚘</div>
     <h1>رادار الصفقات</h1>
     <p>أدخل الرقم السري لفتح اللوحة</p>
-    <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="••••••••">
+    <input id="pin" type="password" inputmode="numeric" autocomplete="off" aria-label="الرقم السري" placeholder="••••••••">
     <button id="enter">دخول</button>
     <label class="remember"><input type="checkbox" id="remember"> تذكرني على هذا الجهاز</label>
     <div id="lockmsg"></div>
@@ -157,6 +160,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       </div>
     </div>
     <div class="stats" id="stats"></div>
+    <div class="freshness-alert hidden" id="freshnessAlert" role="status"></div>
   </header>
 
   <div id="filters">
@@ -237,6 +241,8 @@ const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 let DATA=[],VIEW=[],page=1,SOURCE_META=new Map(),VERIFICATION_FRESH=false,ACTIVE_PIN="";
 let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
+let DATA_GENERATED_AT_MS=NaN,DATA_FRESH=false,DATA_AGE_HOURS=NaN;
+const DATA_MAX_AGE_MS=36*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
 const NAV_KEY="dzr-navigation-v1";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs","fb"];
@@ -375,6 +381,15 @@ function boot(payload){
   const validationAge=Date.now()-validationAt.getTime();
   VERIFICATION_FRESH=!Number.isNaN(validationAt.getTime())&&
     validationAge>=-5*60*1000&&validationAge<=LIVE_VERIFICATION_MAX_AGE_MS;
+  DATA_GENERATED_AT_MS=dataUpd.getTime();
+  const dataAge=Date.now()-DATA_GENERATED_AT_MS;
+  DATA_FRESH=Number.isFinite(DATA_GENERATED_AT_MS)&&dataAge>=-5*60*1000&&dataAge<=DATA_MAX_AGE_MS;
+  DATA_AGE_HOURS=Number.isFinite(dataAge)?Math.max(0,dataAge/3600000):NaN;
+  const freshnessAlert=$("freshnessAlert");
+  freshnessAlert.classList.toggle("hidden",DATA_FRESH);
+  freshnessAlert.textContent=DATA_FRESH?"":Number.isFinite(DATA_AGE_HOURS)
+    ?`تنبيه حداثة: آخر بيانات مصنفة عمرها ${Math.floor(DATA_AGE_HOURS)} ساعة. لا تُعامل العروض كحديثة حتى يكتمل التحديث التالي.`
+    :"تنبيه حداثة: تعذر إثبات وقت توليد البيانات. لا تُعامل العروض كحديثة حتى يكتمل التحديث التالي.";
   const fmtTime=value=>Number.isNaN(value.getTime())?"غير معروف":value.toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"});
   const avg=DATA.length?DATA.reduce((a,o)=>a+o.pr,0)/DATA.length:0;
   const connected=payload.connected_source_count||new Set(DATA.map(o=>o.s).filter(Boolean)).size;
@@ -569,7 +584,8 @@ function paintRefresh(state){
   $("refreshBtn").disabled=running;$("fullRefreshBtn").disabled=running;
   $("refreshBtn").textContent=running&&state.mode==="smart"?"⏳ تحديث ذكي…":"⚡ جلب وتحديث ذكي";
   $("fullRefreshBtn").textContent=running&&state.mode==="full"?"⏳ تحديث شامل…":"🌍 تحديث شامل";
-  if(state.message)$("refreshStatus").textContent=state.message;
+  $("refreshStatus").style.color=DATA_FRESH?"var(--mut)":"var(--warn)";
+  if(state.message&&running)$("refreshStatus").textContent=state.message;
   if(state.job_id)requestedJobId=state.job_id;
   if(!running&&state.status==="ok"){
     clearInterval(refreshPoll);refreshPoll=null;
@@ -577,6 +593,12 @@ function paintRefresh(state){
       awaitingRefresh=false;
       $("refreshStatus").textContent="تم التحديث — جاري إعادة تحميل اللوحة…";
       setTimeout(()=>location.reload(),15000);
+    }else if(!DATA_FRESH){
+      $("refreshStatus").textContent=Number.isFinite(DATA_AGE_HOURS)
+        ?`البيانات متأخرة (${Math.floor(DATA_AGE_HOURS)} ساعة) — حالة الخدمة القديمة ليست دليل حداثة`
+        :"حداثة البيانات غير مثبتة — حالة الخدمة القديمة ليست دليل حداثة";
+    }else if(Number.isFinite(Date.parse(state.completed_at||""))&&Date.parse(state.completed_at)<DATA_GENERATED_AT_MS-5*60*1000){
+      $("refreshStatus").textContent="البيانات المنشورة أحدث من سجل خدمة التحديث؛ يعتمد وقت البيانات المعروض أعلاه";
     }else{
       $("refreshStatus").textContent="جاهز — آخر تحديث اكتمل بنجاح";
     }

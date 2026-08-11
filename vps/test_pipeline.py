@@ -95,8 +95,31 @@ class PipelineTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            ranked_offers = [
+                {
+                    "id": offer["id"], "title": offer["t"], "model": offer["m"],
+                    "price": offer["p"], "profit": offer["pr"],
+                    "effective_profit": offer["ep"], "roi": offer["roi"],
+                    "effective_roi": offer["er"], "year": offer["y"],
+                    "mileage": offer["km"], "fuel": offer["f"],
+                    "country": offer["c"], "source": offer["s"],
+                    "url": offer["u"], "credibility": offer["cr"],
+                    "auction": False, "estimated": False, "eligible": True,
+                    "engine_cc": 999,
+                }
+                for offer in offers[:30]
+            ]
             (root / "top_offers.json").write_text(
-                json.dumps({"total_all": 1_500_000}), encoding="utf-8"
+                json.dumps(
+                    {
+                        "total_all": len(ranked_offers), "qualified": len(ranked_offers),
+                        "shown": len(ranked_offers),
+                        "qualified_non_estimated": len(ranked_offers),
+                        "non_estimated_partition_complete": True,
+                        "offers": ranked_offers,
+                    }
+                ),
+                encoding="utf-8",
             )
             database = sqlite3.connect(root / "universe_offers.sqlite")
             database.execute("CREATE TABLE offers (id INTEGER PRIMARY KEY, last_seen_at TEXT)")
