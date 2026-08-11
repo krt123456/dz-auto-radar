@@ -60,6 +60,28 @@ trap fail ERR INT TERM
 cd "$ROOT"
 echo "RADAR_REFRESH_START mode=$MODE job=$JOB_ID at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+PHASE="ranking_preflight"
+notify running "$PHASE" "يتحقق الخادم من توفر محرك ترتيب آمن قبل الحصاد"
+python3 - "$ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root))
+try:
+    import deal_finder
+except Exception as error:
+    raise SystemExit(f"radar ranking preflight import failed: {type(error).__name__}") from error
+if not getattr(deal_finder, "LEGACY_CANDIDATE_GENERATION_ENABLED", False):
+    reason = getattr(
+        deal_finder,
+        "LEGACY_CANDIDATE_GENERATION_BLOCK_REASON",
+        "ranking capability is not release-ready",
+    )
+    raise SystemExit(f"RADAR_RANKING_PREFLIGHT_BLOCKED: {reason}")
+PY
+echo "RADAR_RANKING_PREFLIGHT_PASS"
+
 PHASE="disk_preflight"
 notify running "$PHASE" "يتحقق الخادم من مساحة العمل الآمنة قبل التحديث"
 if [[ "$MODE" == "full" ]]; then
