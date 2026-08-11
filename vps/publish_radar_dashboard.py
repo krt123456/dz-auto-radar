@@ -27,14 +27,14 @@ from urllib.parse import urlparse
 
 MAGIC = b"DZAR1"
 PBKDF2_ITERATIONS = 310_000
-ALGORITHM_VERSION = "schengen-strict-global-economics-v5-semantic-price"
+ALGORITHM_VERSION = "schengen-strict-global-economics-v6-live-verified"
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
 DEFAULT_INDEX = Path("/opt/sonardeals-radar/dashboard/index.html")
 DEFAULT_AUDIT = Path("/var/lib/sonardeals-radar/latest_selection_manifest.json")
-LAUNCHER_GUARD = Path(
-    "/usr/local/libexec/sonardeals/sonardeals-launcher-guard.py"
+DEFAULT_SELECTION_AUDIT = Path(
+    "/var/lib/sonardeals-radar/latest_selection_audit.json"
 )
 
 SEMANTIC_PRICE_PATTERNS = (
@@ -128,7 +128,7 @@ def eligible_offer(offer: dict[str, Any]) -> bool:
         and 0 < roi <= 120
         and 30 <= credibility <= 100
         and integer(offer.get("e")) == 0
-        and integer(offer.get("v")) != -1
+        and integer(offer.get("v")) == 1
     )
 
 
@@ -186,6 +186,19 @@ def digest_ids(offers: Iterable[dict[str, Any]]) -> str:
     digest = hashlib.sha256()
     for offer in offers:
         digest.update(canonical_id(offer).encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def digest_fields(offers: Iterable[dict[str, Any]]) -> str:
+    """Bind generation identity to every public field, not IDs alone."""
+    digest = hashlib.sha256()
+    for offer in offers:
+        digest.update(
+            json.dumps(
+                offer, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        )
         digest.update(b"\n")
     return digest.hexdigest()
 
@@ -287,8 +300,14 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
     metrics = universe_metrics(args.database)
     candidate_hash = digest_ids(candidates)
     selected_hash = digest_ids(selected)
+    candidate_fields_hash = digest_fields(candidates)
+    selected_fields_hash = digest_fields(selected)
+    data_generated_at = board.get("data_generated_at_utc")
     generation_id = hashlib.sha256(
-        f"{ALGORITHM_VERSION}\n{candidate_hash}\n{selected_hash}\n".encode("utf-8")
+        (
+            f"{ALGORITHM_VERSION}\n{data_generated_at}\n"
+            f"{candidate_fields_hash}\n{selected_fields_hash}\n"
+        ).encode("utf-8")
     ).hexdigest()[:16]
 
     payload = {key: value for key, value in board.items() if key != "offers"}
@@ -306,6 +325,8 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
             "selection_algorithm": ALGORITHM_VERSION,
             "selection_candidate_sha256": candidate_hash,
             "selected_ids_sha256": selected_hash,
+            "selection_candidate_fields_sha256": candidate_fields_hash,
+            "selected_fields_sha256": selected_fields_hash,
             "generation_id": generation_id,
             "selection": {
                 "top_n": args.top_n,
@@ -341,6 +362,8 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         "verified_live_count": payload["verified_live_count"],
         "candidate_ids_sha256": candidate_hash,
         "selected_ids_sha256": selected_hash,
+        "candidate_fields_sha256": candidate_fields_hash,
+        "selected_fields_sha256": selected_fields_hash,
         "connected_country_count": payload.get("connected_country_count", 0),
         "connected_source_count": payload.get("connected_source_count", 0),
         "data_generated_at_utc": payload.get("data_generated_at_utc"),
@@ -387,23 +410,24 @@ def run_git(site: Path, *arguments: str, check: bool = True) -> subprocess.Compl
     )
 
 
-def enforce_launcher_guard() -> None:
-    """Fence only the irreversible Git publication step.
-
-    Preparing encrypted assets and an audit manifest is deliberately testable
-    and reversible.  The guard remains mandatory immediately before staging,
-    committing, or pushing production files.
-    """
-    guard = subprocess.run(
-        [str(LAUNCHER_GUARD), "check", "sonardeals-radar-full-refresh.service"],
-        check=False,
-    )
-    if guard.returncode != 0:
-        raise RuntimeError("launcher guard denied radar publication")
+def enforce_publication_audit(args: argparse.Namespace) -> None:
+    """Require the independent, same-generation audit before Git mutation."""
+    manifest = load_json(args.audit_manifest)
+    audit = load_json(args.selection_audit)
+    if audit.get("result") != "BEST_SELECTION_AUDIT_PASS":
+        raise RuntimeError("selection audit did not pass")
+    for key in (
+        "generation_id", "candidate_ids_sha256", "selected_ids_sha256",
+        "published_offer_count", "verified_live_count",
+    ):
+        if audit.get(key) != manifest.get(key):
+            raise RuntimeError(f"selection audit does not match manifest: {key}")
+    if manifest.get("verified_live_count") != manifest.get("published_offer_count"):
+        raise RuntimeError("publication contains links not verified in this generation")
 
 
 def publish(args: argparse.Namespace) -> None:
-    enforce_launcher_guard()
+    enforce_publication_audit(args)
     if not (args.site / ".git").is_dir():
         raise RuntimeError(f"publication directory is not a git checkout: {args.site}")
     (args.site / "board.json").unlink(missing_ok=True)
@@ -435,6 +459,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pin", type=Path, default=DEFAULT_PIN)
     parser.add_argument("--index", type=Path, default=DEFAULT_INDEX)
     parser.add_argument("--audit-manifest", type=Path, default=DEFAULT_AUDIT)
+    parser.add_argument("--selection-audit", type=Path, default=DEFAULT_SELECTION_AUDIT)
     parser.add_argument("--top-n", type=int, default=10_000)
     parser.add_argument("--per-country-min", type=int, default=20)
     parser.add_argument("--per-source-min", type=int, default=5)

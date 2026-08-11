@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 
 MAGIC = b"DZAR1"
 ITERATIONS = 310_000
-ALGORITHM = "schengen-strict-global-economics-v5-semantic-price"
+ALGORITHM = "schengen-strict-global-economics-v6-live-verified"
 MAX_RECEIPT_COUNT = 100_000_000
 MAX_CONNECTED_COUNT = 100_000
 SCHENGEN_COUNTRIES = frozenset(
@@ -138,7 +138,7 @@ def ranked_crosspost_winner_key(offer: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def validation_dead_urls(root: Path, data_generated_at: Any) -> set[str]:
+def validation_excluded_urls(root: Path, data_generated_at: Any) -> set[str]:
     path = root / "top400_validation.json"
     if not path.exists() or not data_generated_at:
         return set()
@@ -147,7 +147,7 @@ def validation_dead_urls(root: Path, data_generated_at: Any) -> set[str]:
         return set()
     return {
         str(item.get("url") or "") for item in value.get("results", [])
-        if isinstance(item, dict) and item.get("status") == "dead"
+        if isinstance(item, dict) and item.get("status") != "verified"
     }
 
 
@@ -277,7 +277,7 @@ def eligible(offer: dict[str, Any]) -> bool:
         and 0 < num(offer.get("roi")) <= 120
         and 30 <= integer(offer.get("cr")) <= 100
         and integer(offer.get("e")) == 0
-        and integer(offer.get("v")) != -1
+        and integer(offer.get("v")) == 1
     )
 
 
@@ -324,6 +324,18 @@ def digest(offers: list[dict[str, Any]]) -> str:
     value = hashlib.sha256()
     for offer in offers:
         value.update(offer_id(offer).encode())
+        value.update(b"\n")
+    return value.hexdigest()
+
+
+def digest_fields(offers: list[dict[str, Any]]) -> str:
+    value = hashlib.sha256()
+    for offer in offers:
+        value.update(
+            json.dumps(
+                offer, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+        )
         value.update(b"\n")
     return value.hexdigest()
 
@@ -430,9 +442,14 @@ def audit_payload(
         raise AssertionError("candidate-universe digest mismatch")
     if payload.get("selected_ids_sha256") != digest(expected):
         raise AssertionError("published-selection digest mismatch")
+    if payload.get("selection_candidate_fields_sha256") != digest_fields(candidates):
+        raise AssertionError("candidate-field digest mismatch")
+    if payload.get("selected_fields_sha256") != digest_fields(expected):
+        raise AssertionError("selected-field digest mismatch")
     expected_generation = hashlib.sha256(
         (
-            f"{ALGORITHM}\n{digest(candidates)}\n{digest(expected)}\n"
+            f"{ALGORITHM}\n{board.get('data_generated_at_utc')}\n"
+            f"{digest_fields(candidates)}\n{digest_fields(expected)}\n"
         ).encode("utf-8")
     ).hexdigest()[:16]
     if payload.get("generation_id") != expected_generation:
@@ -453,10 +470,12 @@ def audit_payload(
         for offer in published
     )
     confirmed_dead_count = sum(integer(offer.get("v")) == -1 for offer in published)
-    if cesja_count or lease_like_count or confirmed_dead_count:
+    unverified_count = sum(integer(offer.get("v")) != 1 for offer in published)
+    if cesja_count or lease_like_count or confirmed_dead_count or unverified_count:
         raise AssertionError(
-            "semantic-price/dead publication gate failed: "
-            f"cesja={cesja_count} lease_like={lease_like_count} dead={confirmed_dead_count}"
+            "semantic-price/live publication gate failed: "
+            f"cesja={cesja_count} lease_like={lease_like_count} "
+            f"dead={confirmed_dead_count} unverified={unverified_count}"
         )
     if any(not eligible(offer) for offer in published):
         raise AssertionError("publication includes an ineligible/dead/lease-like offer")
@@ -549,7 +568,7 @@ def audit_payload(
     if shown_count != len(ranked_offers):
         raise AssertionError("ranking saved-count metadata does not match the artifact")
 
-    dead_urls = validation_dead_urls(root, board.get("data_generated_at_utc"))
+    dead_urls = validation_excluded_urls(root, board.get("data_generated_at_utc"))
     full_candidates, full_counts = full_ranked_candidates(
         ranked_offers, board, dead_urls,
     )
@@ -594,6 +613,8 @@ def audit_payload(
         sum(integer(offer.get("v")) == 1 for offer in published),
         "verified_live_count",
     )
+    if verified_count != len(published):
+        raise AssertionError("every published offer must be same-generation verified")
     full_ranked_count = bounded_uint(
         ranked_payload.get("total_all", 0),
         "full_ranked_input_offers",
@@ -651,6 +672,7 @@ def audit_payload(
         "lease_like_count": lease_like_count,
         "confirmed_dead_count": confirmed_dead_count,
         "confirmed_dead_or_lease_like_published": confirmed_dead_count + lease_like_count,
+        "same_generation_verified_only": True,
         "outside_better_than_cutoff": outside_better_than_cutoff,
         "negative_control_pass": negative_control_pass,
         "allowed_substring_control_pass": allowed_substring_control_pass,

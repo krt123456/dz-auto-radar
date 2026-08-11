@@ -76,6 +76,7 @@ class PipelineTest(unittest.TestCase):
                         "cr": 90, "v": 1, "a": 0,
                     }
                 )
+            offers[-1]["v"] = 0
             offers.extend(
                 [
                     {**offers[0], "id": "lease", "u": "https://example.test/lease", "t": "cesja najmu"},
@@ -88,9 +89,25 @@ class PipelineTest(unittest.TestCase):
                 json.dumps(
                     {
                         "updated_utc": "2026-07-18T00:00:00Z",
+                        "data_generated_at_utc": "2026-07-18T00:00:00Z",
                         "connected_country_count": 29,
                         "connected_source_count": 90,
                         "offers": offers,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (root / "top400_validation.json").write_text(
+                json.dumps(
+                    {
+                        "input_updated_at": "2026-07-18T00:00:00Z",
+                        "results": [
+                            {
+                                "url": offer["u"],
+                                "status": "verified" if index < 29 else "unknown",
+                            }
+                            for index, offer in enumerate(offers[:30])
+                        ],
                     }
                 ),
                 encoding="utf-8",
@@ -155,8 +172,10 @@ class PipelineTest(unittest.TestCase):
             self.assertIn("BEST_SELECTION_AUDIT_PASS", result.stdout)
             report = json.loads(audit.read_text(encoding="utf-8"))
             self.assertEqual(report["universe_unique_offers"], 100)
-            self.assertEqual(report["qualified_universe_offers"], 30)
+            self.assertEqual(report["qualified_universe_offers"], 29)
             self.assertEqual(report["published_offer_count"], 10)
+            self.assertEqual(report["verified_live_count"], 10)
+            self.assertTrue(report["same_generation_verified_only"])
             self.assertEqual(report["confirmed_dead_or_lease_like_published"], 0)
 
 
