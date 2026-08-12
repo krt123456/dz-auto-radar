@@ -611,14 +611,19 @@ def audit_payload(
     ):
         raise AssertionError("source board contract is unsupported")
     blocked_sources = board.get("policy_blocked_sources")
+    source_policy_sha256 = optional_sha256_file(
+        root / "schengen_source_policy.json"
+    )
     if (
+        source_policy_sha256 is None
+        or
         not isinstance(blocked_sources, list)
         or any(not isinstance(item, str) or not item for item in blocked_sources)
         or blocked_sources != sorted(set(blocked_sources))
         or board.get("blocked_source_key_count") != len(blocked_sources)
         or board.get("blocked_source_keys_sha256") != canonical_json_sha256(blocked_sources)
         or board.get("source_policy_sha256")
-        != optional_sha256_file(root / "schengen_source_policy.json")
+        != source_policy_sha256
         or board.get("quarantine_manifest_sha256")
         != optional_sha256_file(Path("/data/car_deal_sonar_export/current/quarantined_sources.json"))
     ):

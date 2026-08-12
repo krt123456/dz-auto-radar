@@ -131,6 +131,11 @@ class PipelineTest(unittest.TestCase):
         site = temp / "site"
         board_dir.mkdir(parents=True)
         site.mkdir()
+        source_policy = root / "schengen_source_policy.json"
+        source_policy.write_text(
+            json.dumps({"schema_version": 1, "sources": {}}),
+            encoding="utf-8",
+        )
         pin = temp / "pin"
         pin.write_text("correct-horse-radar-secret\n", encoding="utf-8")
         index = temp / "index.html"
@@ -154,7 +159,7 @@ class PipelineTest(unittest.TestCase):
             "max_observation_age_hours": 72,
             "snapshot_eligible_sha256": snapshot_digest,
             "offer_fields_sha256": offer_fields_digest,
-            "source_policy_sha256": None,
+            "source_policy_sha256": publisher.sha256_file(source_policy),
             "quarantine_manifest_sha256": publisher.optional_sha256_file(
                 Path("/data/car_deal_sonar_export/current/quarantined_sources.json")
             ),
@@ -356,6 +361,22 @@ class PipelineTest(unittest.TestCase):
             fixture["board_path"].write_text(
                 json.dumps(fixture["board"]), encoding="utf-8"
             )
+
+    def test_publisher_and_auditor_fail_closed_without_source_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.write_v7_fixture(Path(directory))
+            payload, _ = publisher.build_payload(fixture["args"])
+            (fixture["root"] / "schengen_source_policy.json").unlink()
+
+            with self.subTest(component="publisher"):
+                with self.assertRaises(RuntimeError):
+                    publisher.build_payload(fixture["args"])
+            with self.subTest(component="auditor"):
+                with self.assertRaises(AssertionError):
+                    selection_audit.audit_payload(
+                        root=fixture["root"], payload=payload, top_n=10,
+                        per_country_min=1, per_source_min=1,
+                    )
 
     def test_publisher_and_auditor_reject_forbidden_long_economics(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

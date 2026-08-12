@@ -57,6 +57,11 @@ class SameGenerationEvidenceTest(unittest.TestCase):
         self.root = Path(self.temporary.name) / "car_deal_finder"
         board_dir = self.root / "mobile_site_local"
         board_dir.mkdir(parents=True)
+        source_policy = self.root / "schengen_source_policy.json"
+        source_policy.write_text(
+            json.dumps({"schema_version": 1, "sources": {}}),
+            encoding="utf-8",
+        )
 
         timestamp = "2026-08-11T00:00:00+00:00"
         self.offer: dict[str, object] = {
@@ -118,7 +123,7 @@ class SameGenerationEvidenceTest(unittest.TestCase):
             "max_observation_age_hours": 72,
             "snapshot_eligible_sha256": snapshot_digest,
             "offer_fields_sha256": offer_fields_digest,
-            "source_policy_sha256": None,
+            "source_policy_sha256": selection_audit.sha256_file(source_policy),
             "quarantine_manifest_sha256": selection_audit.optional_sha256_file(
                 Path("/data/car_deal_sonar_export/current/quarantined_sources.json")
             ),
@@ -328,6 +333,83 @@ class SameGenerationEvidenceTest(unittest.TestCase):
         changed["offers"][0]["p"] = 9_000
         with self.assertRaisesRegex(live_audit.RemoteInvalid, "selection_field_digest_unbound"):
             self.classify(changed)
+
+    def test_previous_contract_generation_is_deployment_pending(self) -> None:
+        previous = copy.deepcopy(self.payload)
+        previous.update(
+            {
+                "schema_version": 1,
+                "algorithm": "schengen-strict-global-economics-v6-live-verified",
+                "selection_algorithm": "schengen-strict-global-economics-v6-live-verified",
+                "generation_id": "0123456789abcdef",
+            }
+        )
+        result = self.classify(previous)
+        self.assertEqual(result.state, "pending")
+        self.assertEqual(result.report["result"], "DEPLOYMENT_PENDING")
+        self.assertEqual(result.report["observed_generation"], "0123456789abcdef")
+
+    def test_previous_contract_can_converge_within_bounded_wait(self) -> None:
+        previous = copy.deepcopy(self.payload)
+        previous.update(
+            {
+                "schema_version": 1,
+                "algorithm": "schengen-strict-global-economics-v6-live-verified",
+                "selection_algorithm": "schengen-strict-global-economics-v6-live-verified",
+                "generation_id": "0123456789abcdef",
+            }
+        )
+        payloads = iter((previous, copy.deepcopy(self.payload)))
+        now = [0.0]
+
+        exit_code, report = live_audit.wait_for_convergence(
+            expected_generation=self.generation,
+            probe=lambda _attempt, _remaining: self.classify(next(payloads)),
+            deadline_sec=10,
+            initial_backoff_sec=1,
+            max_backoff_sec=1,
+            max_network_errors=0,
+            clock=lambda: now[0],
+            sleeper=lambda delay: now.__setitem__(0, now[0] + delay),
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["result"], "LIVE_GENERATION_AUDIT_PASS")
+        self.assertEqual(report["attempts"], 2)
+
+    def test_previous_contract_never_passes_after_bounded_deadline(self) -> None:
+        previous = copy.deepcopy(self.payload)
+        previous.update(
+            {
+                "schema_version": 1,
+                "algorithm": "schengen-strict-global-economics-v6-live-verified",
+                "selection_algorithm": "schengen-strict-global-economics-v6-live-verified",
+                "generation_id": "0123456789abcdef",
+            }
+        )
+        now = [0.0]
+
+        exit_code, report = live_audit.wait_for_convergence(
+            expected_generation=self.generation,
+            probe=lambda _attempt, _remaining: self.classify(previous),
+            deadline_sec=2,
+            initial_backoff_sec=1,
+            max_backoff_sec=1,
+            max_network_errors=0,
+            clock=lambda: now[0],
+            sleeper=lambda delay: now.__setitem__(0, now[0] + delay),
+        )
+
+        self.assertEqual(exit_code, live_audit.EXIT_RETRY_EXHAUSTED)
+        self.assertEqual(report["result"], "DEPLOYMENT_PENDING_TIMEOUT")
+        self.assertEqual(report["attempts"], 2)
+        self.assertEqual(report["observed_generation"], "0123456789abcdef")
+
+    def test_expected_generation_with_wrong_contract_remains_fatal(self) -> None:
+        invalid = copy.deepcopy(self.payload)
+        invalid["schema_version"] = 1
+        with self.assertRaisesRegex(live_audit.RemoteInvalid, "contract_invalid"):
+            self.classify(invalid)
 
 
 if __name__ == "__main__":

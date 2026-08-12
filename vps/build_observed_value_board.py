@@ -218,15 +218,16 @@ def load_blocked_source_evidence(
 ) -> BlockedSourceEvidence:
     names: set[str] = set()
     policy, policy_sha256 = _load_json_and_hash(policy_path)
-    if policy is not None:
-        payload = policy
-        if not isinstance(payload, dict) or not isinstance(payload.get("sources"), dict):
-            raise ValueError(f"invalid source policy: {policy_path}")
-        for name, record in payload["sources"].items():
-            if not isinstance(record, dict):
-                raise ValueError(f"invalid source policy record: {name}")
-            if record.get("mode") != "active":
-                names.add(str(name).strip())
+    if policy is None or policy_sha256 is None:
+        raise FileNotFoundError(f"required source policy is unavailable: {policy_path}")
+    payload = policy
+    if not isinstance(payload, dict) or not isinstance(payload.get("sources"), dict):
+        raise ValueError(f"invalid source policy: {policy_path}")
+    for name, record in payload["sources"].items():
+        if not isinstance(record, dict):
+            raise ValueError(f"invalid source policy record: {name}")
+        if record.get("mode") != "active":
+            names.add(str(name).strip())
     quarantine, quarantine_sha256 = _load_json_and_hash(quarantine_path)
     if quarantine is not None:
         payload = quarantine

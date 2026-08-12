@@ -334,6 +334,11 @@ class ObservedValueBoardTest(unittest.TestCase):
         )
         self.assertEqual(first["snapshot_eligible_sha256"], second["snapshot_eligible_sha256"])
 
+    def test_required_source_policy_fails_closed_when_missing(self) -> None:
+        self.policy.unlink()
+        with self.assertRaisesRegex(FileNotFoundError, "required source policy"):
+            observed.build(self.arguments())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -504,7 +504,29 @@ def classify_blob(
         payload = selection_audit.decrypt_blob(blob, pin)
     except Exception as error:  # cryptography and gzip/json expose several types
         raise RemoteInvalid("decrypt_or_envelope_invalid") from error
-    observed_generation = validated_generation(payload)
+    try:
+        observed_generation = validated_generation(payload)
+    except RemoteInvalid:
+        # A cache or Pages edge can briefly serve the previous, internally
+        # self-identified contract while a schema/algorithm upgrade deploys.
+        # Treat that as deployment lag only when its generation is a valid,
+        # different identity.  A malformed payload or the expected generation
+        # under a bad contract remains immediately fatal.
+        observed_generation = payload.get("generation_id")
+        if (
+            not isinstance(observed_generation, str)
+            or not HEX_16.fullmatch(observed_generation)
+            or observed_generation == expected_generation
+        ):
+            raise
+        return ProbeResult(
+            "pending",
+            {
+                "result": "DEPLOYMENT_PENDING",
+                "expected_generation": expected_generation,
+                "observed_generation": observed_generation,
+            },
+        )
     if observed_generation != expected_generation:
         # Deliberately do not report offer IDs, ranking indices, or field diffs.
         return ProbeResult(
