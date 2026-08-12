@@ -96,7 +96,8 @@ class SealValidationReportTests(unittest.TestCase):
 
         sealed = json.loads(self.validation_path.read_text(encoding="utf-8"))
         expected_digest = hashlib.sha256()
-        for offer in self.board["offers"]:
+        for raw_offer in self.board["offers"]:
+            offer = {**raw_offer, "v": 0} if "v" in raw_offer else raw_offer
             expected_digest.update(json.dumps(
                 offer,
                 ensure_ascii=False,
@@ -113,6 +114,38 @@ class SealValidationReportTests(unittest.TestCase):
             expected_digest.hexdigest(),
         )
         self.assertEqual(stat.S_IMODE(self.validation_path.stat().st_mode), 0o600)
+
+    def test_retry_normalizes_existing_verification_verdicts(self) -> None:
+        self.board["offers"][0]["v"] = 1
+        self.board["offers"][1]["v"] = -1
+        self.write_inputs()
+
+        self.assertEqual(
+            sealer.main(
+                [
+                    "--board",
+                    str(self.board_path),
+                    "--validation",
+                    str(self.validation_path),
+                ]
+            ),
+            0,
+        )
+        sealed = json.loads(self.validation_path.read_text(encoding="utf-8"))
+        expected = hashlib.sha256()
+        for raw_offer in self.board["offers"]:
+            offer = {**raw_offer, "v": 0}
+            expected.update(
+                json.dumps(
+                    offer,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                ).encode("utf-8")
+            )
+            expected.update(b"\n")
+        self.assertEqual(sealed["input_offer_fields_sha256"], expected.hexdigest())
 
     def test_capability_check_needs_no_files(self) -> None:
         stdout = io.StringIO()

@@ -239,6 +239,17 @@ const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
 const pctf=new Intl.NumberFormat("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2});
 const finiteNumber=(value,fallback=0)=>{const number=Number(value);return Number.isFinite(number)?number:fallback;};
 const finiteCount=value=>Math.max(0,Math.trunc(finiteNumber(value,0)));
+const roundRatioHalfEven=(numerator,denominator)=>{
+  if(!Number.isSafeInteger(numerator)||!Number.isSafeInteger(denominator)||numerator<0||denominator<=0)return NaN;
+  const quotient=Math.floor(numerator/denominator),remainder=numerator-quotient*denominator;
+  if(remainder*2<denominator)return quotient;
+  if(remainder*2>denominator)return quotient+1;
+  return quotient+(quotient%2);
+};
+const percentBasisPoints=value=>{
+  const scaled=100*Number(value),rounded=Math.round(scaled);
+  return Number.isFinite(scaled)&&Math.abs(scaled-rounded)<=1e-9?rounded:NaN;
+};
 const fmtEu=v=>nf.format(Math.round(finiteNumber(v)))+" €";
 const fmtPct=v=>pctf.format(finiteNumber(v))+"%";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -283,8 +294,8 @@ function validateOffer(offer){
   if(!Object.prototype.hasOwnProperty.call(FLAGS,offer.c)||!["petrol","hybrid"].includes(offer.f)||
      safeUrl(offer.u)==="#"||timestampMs(offer.ls)===null||p<4000||p>45000||q1<=p||median<q1||saving!==q1-p||
      conservative<=0||conservative>=100||medianDiscount<conservative||medianDiscount>=100||
-     Math.round(10000*saving/q1)!==Math.round(100*conservative)||
-     Math.round(10000*(median-p)/median)!==Math.round(100*medianDiscount)||
+     roundRatioHalfEven(10000*saving,q1)!==percentBasisPoints(conservative)||
+     roundRatioHalfEven(10000*(median-p),median)!==percentBasisPoints(medianDiscount)||
      !Number.isInteger(peerCount)||peerCount<20||!Number.isInteger(peerSources)||peerSources<3||
      !Number.isInteger(peerCountries)||peerCountries<2||!Number.isInteger(Number(offer.y))||Number(offer.y)<1900||
      !Number.isInteger(Number(offer.km))||Number(offer.km)<0||![-1,0,1].includes(Number(offer.v)))throw contractFailure();

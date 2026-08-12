@@ -101,7 +101,12 @@ def offer_url(offer: dict[str, Any], position: int) -> str:
 def canonical_offer_fields_sha256(offers: list[dict[str, Any]]) -> str:
     digest = hashlib.sha256()
     try:
-        for offer in offers:
+        for raw_offer in offers:
+            # Verification is an output of this report, not part of its input
+            # identity.  Normalize it so retrying the same snapshot cannot
+            # bind a newly sealed report to stale, nonzero verdicts from the
+            # preceding board build.
+            offer = {**raw_offer, "v": 0} if "v" in raw_offer else raw_offer
             digest.update(
                 json.dumps(
                     offer,

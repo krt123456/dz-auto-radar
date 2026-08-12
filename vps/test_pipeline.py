@@ -378,6 +378,63 @@ class PipelineTest(unittest.TestCase):
 
 
 class RuntimeWiringTest(unittest.TestCase):
+    def test_real_dashboard_accepts_python_half_even_basis_points(self) -> None:
+        html = (HERE.parent / "index.html").read_text(encoding="utf-8")
+        match = re.search(
+            r'<script>\s*"use strict";(?P<contract>.*?)const CONTROL_API=',
+            html,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match)
+        payload = {
+            "schema_version": 2,
+            "algorithm": V7_ALGORITHM,
+            "unsupported_economics_published": 0,
+            "offers": [
+                {
+                    "id": "half-even-offer",
+                    "m": "clio5_tce90",
+                    "t": "Renault Clio TCe 90",
+                    "p": 13_996,
+                    "q1": 16_000,
+                    "mp": 18_000,
+                    "sv": 2_004,
+                    "sp": 12.52,
+                    "dp": 22.24,
+                    "pn": 30,
+                    "ps": 4,
+                    "pc": 3,
+                    "y": 2025,
+                    "km": 20_000,
+                    "f": "petrol",
+                    "c": "DE",
+                    "s": "Source A",
+                    "u": "https://example.test/listing/half-even",
+                    "ls": "2026-08-11T00:00:00+00:00",
+                    "v": 1,
+                }
+            ],
+        }
+        contract = '"use strict";\n' + match.group("contract")
+        exercise = f"""
+const payload={json.dumps(payload, separators=(',', ':'))};
+validatePayload(payload);
+payload.offers[0].sp=12.53;
+let rejected=false;
+try{{validatePayload(payload);}}catch(error){{rejected=error&&error.code==="unsupported_contract";}}
+if(!rejected)process.exit(9);
+process.stdout.write("DASHBOARD_CONTRACT_PASS");
+"""
+        result = subprocess.run(
+            ["node", "-"],
+            input=contract + exercise,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "DASHBOARD_CONTRACT_PASS")
+
     def test_refresh_and_installer_use_only_observed_value_pipeline(self) -> None:
         refresh = (HERE / "radar_refresh.sh").read_text(encoding="utf-8")
         installer = (HERE / "install_radar_runtime.sh").read_text(encoding="utf-8")
