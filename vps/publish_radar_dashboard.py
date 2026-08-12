@@ -12,6 +12,7 @@ import base64
 import gzip
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -27,7 +28,8 @@ from urllib.parse import urlparse
 
 MAGIC = b"DZAR1"
 PBKDF2_ITERATIONS = 310_000
-ALGORITHM_VERSION = "schengen-strict-global-economics-v6-live-verified"
+ALGORITHM_VERSION = "schengen-observed-peer-value-v7-live-verified"
+CONTRACT_SCHEMA_VERSION = 2
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
@@ -35,6 +37,38 @@ DEFAULT_INDEX = Path("/opt/sonardeals-radar/dashboard/index.html")
 DEFAULT_AUDIT = Path("/var/lib/sonardeals-radar/latest_selection_manifest.json")
 DEFAULT_SELECTION_AUDIT = Path(
     "/var/lib/sonardeals-radar/latest_selection_audit.json"
+)
+SCHENGEN_COUNTRIES = frozenset(
+    {
+        "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI",
+        "FR", "GR", "HR", "HU", "IS", "IT", "LI", "LT", "LU", "LV",
+        "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
+    }
+)
+COMPACT_OFFER_FIELDS = frozenset(
+    {
+        "id", "m", "t", "p", "q1", "mp", "sv", "sp", "dp", "pn",
+        "ps", "pc", "y", "km", "f", "c", "s", "u", "ls", "v",
+    }
+)
+RAW_OFFER_FIELDS = frozenset(
+    {
+        "id", "model", "title", "source", "url", "price", "year",
+        "mileage", "fuel", "country", "seller", "last_seen_at",
+        "peer_lower_quartile_eur", "peer_median_eur",
+        "savings_vs_lower_quartile_eur", "conservative_discount_bps",
+        "median_discount_bps", "peer_count", "peer_source_count",
+        "peer_country_count", "peer_dispersion",
+    }
+)
+FORBIDDEN_ECONOMICS_FIELDS = frozenset(
+    {
+        "pr", "ep", "prd", "roi", "er", "rd", "ld", "cd", "ci", "cb", "cr",
+        "profit", "effective_profit", "profit_dzd", "effective_profit_dzd",
+        "landed_cost", "landed_cost_dzd", "resale", "resale_dzd",
+        "customs", "customs_dzd", "algerian_price", "algerian_price_dzd",
+        "confidence",
+    }
 )
 
 SEMANTIC_PRICE_PATTERNS = (
@@ -58,6 +92,10 @@ SEMANTIC_PRICE_PATTERNS = (
     )),
     ("finance-only", re.compile(r"\b(?:financement|finanzierung|kredyt|flex\s+lease|loa|lld)\b")),
     ("takeover-fee", re.compile(r"\b(?:odstepne|takeover)\b")),
+)
+RISK_PATTERN = re.compile(
+    r"\b(?:salvage|accident(?:ed)?|damaged|unfall|motorschaden|bastler|epave|"
+    r"sinistr\w*|uszkodz\w*|powypadk\w*|pour\s+pieces|parts\s+only|non\s+runner)\b"
 )
 
 
@@ -95,6 +133,22 @@ def integer(value: Any) -> int:
     return int(round(number(value)))
 
 
+def canonical_timestamp(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip() or len(value) > 128:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC).isoformat()
+
+
+def valid_timestamp(value: Any) -> bool:
+    return canonical_timestamp(value) is not None
+
+
 def canonical_id(offer: dict[str, Any]) -> str:
     explicit = str(offer.get("id") or "").strip()
     if explicit:
@@ -108,26 +162,62 @@ def valid_https_url(value: Any) -> bool:
         parsed = urlparse(str(value or ""))
     except ValueError:
         return False
-    return parsed.scheme == "https" and bool(parsed.netloc) and len(str(value)) <= 2048
+    return (
+        parsed.scheme == "https"
+        and bool(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+        and len(str(value)) <= 2048
+    )
 
 
 def eligible_offer(offer: dict[str, Any]) -> bool:
+    if set(offer) != COMPACT_OFFER_FIELDS or FORBIDDEN_ECONOMICS_FIELDS.intersection(offer):
+        return False
+    if any(
+        not isinstance(offer.get(field), str) or not str(offer[field]).strip()
+        for field in ("id", "m", "t", "f", "c", "s", "u", "ls")
+    ):
+        return False
+    if any(type(offer.get(field)) is not int for field in ("p", "q1", "mp", "sv", "pn", "ps", "pc", "y", "km", "v")):
+        return False
+    if any(
+        isinstance(offer.get(field), bool)
+        or not isinstance(offer.get(field), (int, float))
+        or not math.isfinite(float(offer[field]))
+        for field in ("sp", "dp")
+    ):
+        return False
     title = f"{offer.get('t', '')} {offer.get('m', '')}".casefold()
     if semantic_price_reason(title) is not None:
         return False
-    price = number(offer.get("p"))
-    profit = number(offer.get("pr"))
-    roi = number(offer.get("roi"))
-    credibility = integer(offer.get("cr"))
+    if RISK_PATTERN.search(normalized_semantic_text(title)) is not None:
+        return False
+    price = integer(offer.get("p"))
+    lower_quartile = integer(offer.get("q1"))
+    peer_median = integer(offer.get("mp"))
+    savings = integer(offer.get("sv"))
+    conservative_discount = number(offer.get("sp"))
+    median_discount = number(offer.get("dp"))
+    peer_count = integer(offer.get("pn"))
+    peer_sources = integer(offer.get("ps"))
+    peer_countries = integer(offer.get("pc"))
     return (
-        bool(str(offer.get("c") or "").strip())
-        and bool(str(offer.get("s") or "").strip())
+        str(offer["c"]).upper() in SCHENGEN_COUNTRIES
+        and offer["f"] in {"petrol", "hybrid"}
         and valid_https_url(offer.get("u"))
+        and valid_timestamp(offer.get("ls"))
         and 4_000 <= price <= 45_000
-        and 0 < profit <= 25_000
-        and 0 < roi <= 120
-        and 30 <= credibility <= 100
-        and integer(offer.get("e")) == 0
+        and lower_quartile > price
+        and peer_median >= lower_quartile
+        and savings == lower_quartile - price
+        and 0 < conservative_discount < 100
+        and conservative_discount <= median_discount < 100
+        and integer(10_000 * savings / lower_quartile) == integer(100 * conservative_discount)
+        and integer(10_000 * (peer_median - price) / peer_median) == integer(100 * median_discount)
+        and peer_count >= 20
+        and peer_sources >= 3
+        and peer_countries >= 2
         and integer(offer.get("v")) == 1
     )
 
@@ -135,15 +225,46 @@ def eligible_offer(offer: dict[str, Any]) -> bool:
 def rank_key(offer: dict[str, Any]) -> tuple[Any, ...]:
     """Lower tuple is better; this is the public dashboard's ranking contract."""
     return (
-        1 if integer(offer.get("a")) else 0,
-        -number(offer.get("ep") or offer.get("pr")),
-        -integer(offer.get("cr")),
-        -number(offer.get("pr")),
-        -number(offer.get("er") or offer.get("roi")),
+        -integer(number(offer.get("sp")) * 100),
+        -integer(offer.get("sv")),
+        -integer(number(offer.get("dp")) * 100),
+        -integer(offer.get("ps")),
+        -integer(offer.get("pn")),
+        -integer(offer.get("y")),
+        integer(offer.get("km")),
         number(offer.get("p")),
-        number(offer.get("km")),
         canonical_id(offer),
     )
+
+
+def compact_ranked_offer(
+    offer: dict[str, Any], verification: int,
+) -> dict[str, Any]:
+    """Project one exact ranked-evidence row into the public v7 contract."""
+    if set(offer) != RAW_OFFER_FIELDS:
+        raise RuntimeError("ranked offer does not have the exact v7 fields")
+    return {
+        "id": offer["id"],
+        "m": offer["model"],
+        "t": offer["title"],
+        "p": offer["price"],
+        "q1": offer["peer_lower_quartile_eur"],
+        "mp": offer["peer_median_eur"],
+        "sv": offer["savings_vs_lower_quartile_eur"],
+        "sp": round(offer["conservative_discount_bps"] / 100, 2),
+        "dp": round(offer["median_discount_bps"] / 100, 2),
+        "pn": offer["peer_count"],
+        "ps": offer["peer_source_count"],
+        "pc": offer["peer_country_count"],
+        "y": offer["year"],
+        "km": offer["mileage"],
+        "f": offer["fuel"],
+        "c": offer["country"],
+        "s": offer["source"],
+        "u": offer["url"],
+        "ls": offer["last_seen_at"],
+        "v": verification,
+    }
 
 
 def normalized_candidates(offers: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -211,6 +332,19 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def optional_sha256_file(path: Path) -> str | None:
+    return sha256_file(path) if path.is_file() else None
+
+
+def canonical_json_sha256(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 def atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary: Path | None = None
@@ -256,7 +390,7 @@ def universe_metrics(database: Path) -> dict[str, Any]:
         ).fetchone()
         return {
             "universe_unique_offers": int(count or 0),
-            "universe_last_seen_at": last_seen,
+            "universe_last_seen_at": canonical_timestamp(last_seen),
         }
     finally:
         connection.close()
@@ -285,6 +419,35 @@ def load_dashboard_pin(path: Path) -> str:
 
 def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
     board = load_json(args.board)
+    if (
+        board.get("schema_version") != CONTRACT_SCHEMA_VERSION
+        or board.get("algorithm") != ALGORITHM_VERSION
+        or board.get("unsupported_economics_published") != 0
+    ):
+        raise RuntimeError("unsupported observed-value board contract")
+    snapshot_digest = board.get("snapshot_eligible_sha256")
+    if not isinstance(snapshot_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", snapshot_digest):
+        raise RuntimeError("board snapshot digest is invalid")
+    blocked_sources = board.get("policy_blocked_sources")
+    if (
+        not isinstance(blocked_sources, list)
+        or any(not isinstance(item, str) or not item for item in blocked_sources)
+        or blocked_sources != sorted(set(blocked_sources))
+        or board.get("blocked_source_key_count") != len(blocked_sources)
+        or board.get("blocked_source_keys_sha256") != canonical_json_sha256(blocked_sources)
+        or board.get("source_policy_sha256")
+        != optional_sha256_file(args.root / "schengen_source_policy.json")
+        or board.get("quarantine_manifest_sha256")
+        != optional_sha256_file(Path("/data/car_deal_sonar_export/current/quarantined_sources.json"))
+    ):
+        raise RuntimeError("board source-policy evidence is invalid or stale")
+    data_generated_at = board.get("data_generated_at_utc")
+    if (
+        not valid_timestamp(data_generated_at)
+        or board.get("generated_at") != data_generated_at
+        or board.get("updated_utc") != data_generated_at
+    ):
+        raise RuntimeError("board data timestamp is invalid or inconsistent")
     offers = board.get("offers")
     if not isinstance(offers, list) or not offers:
         raise RuntimeError("refusing to publish an empty board")
@@ -294,17 +457,54 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
     selected = select_offers(
         candidates, args.top_n, args.per_country_min, args.per_source_min
     )
-    ranked_meta = load_json(args.ranked_meta) if args.ranked_meta.exists() else {}
-    effective_path = args.root / "effective_planet_dashboard.json"
-    effective_meta = load_json(effective_path) if effective_path.exists() else {}
+    if not args.ranked_meta.is_file():
+        raise RuntimeError("ranked observed-value evidence is unavailable")
+    ranked_meta = load_json(args.ranked_meta)
+    if (
+        ranked_meta.get("schema_version") != CONTRACT_SCHEMA_VERSION
+        or ranked_meta.get("algorithm") != ALGORITHM_VERSION
+        or ranked_meta.get("generated_at") != data_generated_at
+        or ranked_meta.get("snapshot_eligible_sha256") != snapshot_digest
+        or ranked_meta.get("unsupported_economics_published") != 0
+        or any(
+            ranked_meta.get(key) != board.get(key)
+            for key in (
+                "offer_fields_sha256", "source_policy_sha256",
+                "quarantine_manifest_sha256", "blocked_source_keys_sha256",
+                "blocked_source_key_count", "policy_blocked_sources",
+            )
+        )
+    ):
+        raise RuntimeError("ranked evidence does not match the board snapshot")
+    ranked_offers = ranked_meta.get("offers")
+    if (
+        not isinstance(ranked_offers, list)
+        or len(ranked_offers) != len(offers)
+        or ranked_meta.get("shown") != len(ranked_offers)
+    ):
+        raise RuntimeError("ranked evidence does not cover the exact board")
+    try:
+        projected_board = [
+            compact_ranked_offer(ranked, compact["v"])
+            for ranked, compact in zip(ranked_offers, offers, strict=True)
+            if isinstance(ranked, dict) and isinstance(compact, dict)
+        ]
+    except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
+        raise RuntimeError("ranked evidence cannot be projected to the board") from exc
+    if len(projected_board) != len(offers) or projected_board != offers:
+        raise RuntimeError("ranked offer fields do not match the board")
     metrics = universe_metrics(args.database)
+    if (
+        type(board.get("universe_unique_offers")) is not int
+        or board["universe_unique_offers"] != metrics["universe_unique_offers"]
+        or metrics["universe_last_seen_at"] != data_generated_at
+        or ranked_meta.get("total_all") != board["universe_unique_offers"]
+    ):
+        raise RuntimeError("universe changed after the observed-value snapshot")
     candidate_hash = digest_ids(candidates)
     selected_hash = digest_ids(selected)
     candidate_fields_hash = digest_fields(candidates)
     selected_fields_hash = digest_fields(selected)
-    data_generated_at = board.get("data_generated_at_utc")
-    if not isinstance(data_generated_at, str) or not data_generated_at.strip():
-        raise RuntimeError("board has no generation-bound data timestamp")
     generation_id = hashlib.sha256(
         (
             f"{ALGORITHM_VERSION}\n{data_generated_at}\n"
@@ -317,9 +517,9 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         {
             "published_at_utc": utc_now(),
             "count": len(selected),
-            "universe_unique_offers": metrics["universe_unique_offers"],
+            "universe_unique_offers": board["universe_unique_offers"],
             "universe_last_seen_at": metrics["universe_last_seen_at"],
-            "ranked_offer_count": int(ranked_meta.get("total_all") or len(offers)),
+            "ranked_offer_count": int(ranked_meta.get("qualified") or 0),
             "qualified_universe_offers": len(candidates),
             "published_offer_count": len(selected),
             "verified_live_count": sum(integer(offer.get("v")) == 1 for offer in selected),
@@ -334,17 +534,19 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
                 "top_n": args.top_n,
                 "strict_global_order": True,
                 "coverage_quota_substitutions": 0,
-                "ranking": "analyzed-only, non-auction, effective-profit, credibility, profit, effective-roi",
+                "ranking": (
+                    "observed European peer price: lower-quartile discount, euro gap, "
+                    "median discount, peer diversity, model year and mileage"
+                ),
+                "algeria_economics_included": False,
             },
             "selection_input_counts": {
-                "universe_unique_after_source_identity_dedupe": metrics["universe_unique_offers"],
-                "qualified_after_age_fuel_legal_filters": int(effective_meta.get("qualified_universe_planets") or 0),
-                "economics_analyzed_and_ranked": int(ranked_meta.get("total_all") or 0),
-                "ranking_qualified_before_final_publication_filters": int(ranked_meta.get("qualified") or 0),
+                "universe_unique_after_source_identity_dedupe": board["universe_unique_offers"],
+                "recent_snapshot_rows_scanned": int(ranked_meta.get("scanned_recent_rows") or 0),
+                "eligible_observed_rows": int(ranked_meta.get("eligible_observed_rows") or 0),
+                "peer_ranked_candidates": int(ranked_meta.get("qualified") or 0),
                 "ranking_saved": int(ranked_meta.get("shown") or 0),
-                "ranking_saved_non_estimated": int(ranked_meta.get("qualified_non_estimated") or 0),
                 "publication_candidates_after_all_filters_and_dedupe": len(candidates),
-                **(ranked_meta.get("input_counts") or {}),
             },
             "offers": selected,
         }
@@ -369,6 +571,7 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         "connected_country_count": payload.get("connected_country_count", 0),
         "connected_source_count": payload.get("connected_source_count", 0),
         "data_generated_at_utc": payload.get("data_generated_at_utc"),
+        "snapshot_eligible_sha256": snapshot_digest,
         "selection_input_counts": payload["selection_input_counts"],
     }
     return payload, manifest
@@ -424,6 +627,8 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
         "candidate_fields_sha256", "selected_fields_sha256",
         "universe_unique_offers", "qualified_universe_offers",
         "published_offer_count", "verified_live_count",
+        "snapshot_eligible_sha256",
+        "source_board_sha256",
     ):
         if audit.get(key) != manifest.get(key):
             raise RuntimeError(f"selection audit does not match manifest: {key}")

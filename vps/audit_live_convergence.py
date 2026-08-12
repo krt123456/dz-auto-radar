@@ -49,6 +49,7 @@ DEFAULT_SELECTION_AUDIT = Path(
 SAFE_REMOTE_INVALID_REASONS = frozenset(
     {
         "algorithm_invalid",
+        "contract_invalid",
         "candidate_digest_invalid",
         "candidate_field_digest_invalid",
         "data_timestamp_invalid",
@@ -64,6 +65,7 @@ SAFE_REMOTE_INVALID_REASONS = frozenset(
         "selection_field_digest_invalid",
         "selection_field_digest_unbound",
         "selection_digest_unbound",
+        "snapshot_digest_invalid",
     }
 )
 PASS_UINT_FIELDS = (
@@ -75,13 +77,14 @@ PASS_UINT_FIELDS = (
     "full_ranked_input_offers",
     "ranking_qualified_offers",
     "ranking_saved_offers",
-    "ranking_saved_non_estimated_offers",
+    "ranking_saved_observed_offers",
     "cesja_count",
     "lease_like_count",
+    "risk_listing_count",
     "confirmed_dead_count",
     "outside_better_than_cutoff",
     "confirmed_dead_or_lease_like_published",
-    "estimated_economics_published",
+    "unsupported_economics_published",
     "connected_country_count",
     "connected_source_count",
 )
@@ -89,11 +92,12 @@ PASS_TRUE_FIELDS = (
     "exact_order_match",
     "exact_source_fields_match",
     "strict_global_top_n",
-    "ranking_non_estimated_partition_complete",
+    "ranking_observed_partition_complete",
     "unique_ids",
     "unique_urls",
     "negative_control_pass",
-    "allowed_substring_control_pass",
+    "risk_negative_control_pass",
+    "positive_control_pass",
     "same_generation_verified_only",
 )
 
@@ -124,7 +128,9 @@ class SealedGenerationEvidence:
     selected_ids_sha256: str
     candidate_fields_sha256: str
     selected_fields_sha256: str
+    snapshot_eligible_sha256: str
     data_generated_at_utc: str
+    pass_report: dict[str, Any]
 
 
 def load_json_object(path: Path) -> dict[str, Any]:
@@ -175,6 +181,7 @@ def load_sealed_generation_evidence(
         raise ValueError("sealed evidence digest mismatch")
     candidate_fields_digest = manifest.get("candidate_fields_sha256")
     selected_fields_digest = manifest.get("selected_fields_sha256")
+    snapshot_digest = manifest.get("snapshot_eligible_sha256")
     data_generated_at = manifest.get("data_generated_at_utc")
     if (
         not isinstance(candidate_fields_digest, str)
@@ -183,6 +190,9 @@ def load_sealed_generation_evidence(
         or not isinstance(selected_fields_digest, str)
         or not HEX_64.fullmatch(selected_fields_digest)
         or audit.get("selected_fields_sha256") != selected_fields_digest
+        or not isinstance(snapshot_digest, str)
+        or not HEX_64.fullmatch(snapshot_digest)
+        or audit.get("snapshot_eligible_sha256") != snapshot_digest
         or not isinstance(data_generated_at, str)
         or not data_generated_at.strip()
         or len(data_generated_at) > 128
@@ -217,7 +227,12 @@ def load_sealed_generation_evidence(
         selected_ids_sha256=selected_digest,
         candidate_fields_sha256=candidate_fields_digest,
         selected_fields_sha256=selected_fields_digest,
+        snapshot_eligible_sha256=snapshot_digest,
         data_generated_at_utc=data_generated_at,
+        pass_report=sanitized_pass_report(
+            audit,
+            expected_generation=expected_generation,
+        ),
     )
 
 
@@ -235,6 +250,7 @@ def validate_payload_against_sealed_evidence(
         != evidence.candidate_fields_sha256
         or payload.get("selected_fields_sha256") != evidence.selected_fields_sha256
         or payload.get("data_generated_at_utc") != evidence.data_generated_at_utc
+        or payload.get("snapshot_eligible_sha256") != evidence.snapshot_eligible_sha256
     ):
         raise AssertionError("payload selection digests do not match sealed evidence")
     remote_count = selection_audit.bounded_uint(
@@ -243,6 +259,20 @@ def validate_payload_against_sealed_evidence(
     )
     if remote_count != evidence.universe_unique_offers:
         raise AssertionError("payload universe counter does not match sealed evidence")
+    if (
+        payload.get("schema_version") != selection_audit.CONTRACT_SCHEMA_VERSION
+        or payload.get("algorithm") != selection_audit.ALGORITHM
+        or payload.get("unsupported_economics_published") != 0
+        or not isinstance(payload.get("selection"), dict)
+        or payload["selection"].get("algeria_economics_included") is not False
+    ):
+        raise AssertionError("payload contract metadata differs from sealed evidence")
+    for field in (
+        "qualified_universe_offers", "published_offer_count", "verified_live_count",
+        "connected_country_count", "connected_source_count",
+    ):
+        if payload.get(field) != evidence.pass_report.get(field):
+            raise AssertionError("payload counters differ from sealed evidence")
 
 
 def cache_busted_url(url: str, expected_generation: str, attempt: int) -> str:
@@ -296,6 +326,13 @@ def validated_generation(payload: dict[str, Any]) -> str:
     data_generated_at = payload.get("data_generated_at_utc")
     generation = payload.get("generation_id")
     offers = payload.get("offers")
+    snapshot_digest = payload.get("snapshot_eligible_sha256")
+    if (
+        payload.get("schema_version") != selection_audit.CONTRACT_SCHEMA_VERSION
+        or payload.get("algorithm") != selection_audit.ALGORITHM
+        or payload.get("unsupported_economics_published") != 0
+    ):
+        raise RemoteInvalid("contract_invalid")
     if algorithm != selection_audit.ALGORITHM:
         raise RemoteInvalid("algorithm_invalid")
     if not isinstance(candidate_hash, str) or not HEX_64.fullmatch(candidate_hash):
@@ -316,6 +353,8 @@ def validated_generation(payload: dict[str, Any]) -> str:
         raise RemoteInvalid("generation_invalid")
     if not isinstance(offers, list) or not offers:
         raise RemoteInvalid("offers_invalid")
+    if not isinstance(snapshot_digest, str) or not HEX_64.fullmatch(snapshot_digest):
+        raise RemoteInvalid("snapshot_digest_invalid")
     if selection_audit.digest(offers) != selected_hash:
         raise RemoteInvalid("selection_digest_unbound")
     if selection_audit.digest_fields(offers) != selected_fields_hash:
@@ -348,6 +387,7 @@ def sanitized_pass_report(
     for field in (
         "candidate_ids_sha256", "selected_ids_sha256",
         "candidate_fields_sha256", "selected_fields_sha256",
+        "snapshot_eligible_sha256",
     ):
         value = report.get(field)
         if not isinstance(value, str) or not HEX_64.fullmatch(value):
@@ -360,6 +400,7 @@ def sanitized_pass_report(
         "selected_ids_sha256": report["selected_ids_sha256"],
         "candidate_fields_sha256": report["candidate_fields_sha256"],
         "selected_fields_sha256": report["selected_fields_sha256"],
+        "snapshot_eligible_sha256": report["snapshot_eligible_sha256"],
         "data_generated_at_utc": report["data_generated_at_utc"],
     }
     for field in PASS_UINT_FIELDS:
@@ -381,10 +422,11 @@ def sanitized_pass_report(
         "coverage_quota_substitutions",
         "cesja_count",
         "lease_like_count",
+        "risk_listing_count",
         "confirmed_dead_count",
         "outside_better_than_cutoff",
         "confirmed_dead_or_lease_like_published",
-        "estimated_economics_published",
+        "unsupported_economics_published",
     ):
         if safe[field] != 0:
             raise ValueError("pass zero invariant invalid")
@@ -455,6 +497,7 @@ def classify_blob(
     per_source_min: int,
     sealed_evidence: SealedGenerationEvidence,
 ) -> ProbeResult:
+    del root, top_n, per_country_min, per_source_min
     if not isinstance(expected_generation, str) or not HEX_16.fullmatch(expected_generation):
         raise RemoteInvalid("expected_generation_invalid")
     try:
@@ -474,14 +517,6 @@ def classify_blob(
         )
     try:
         validate_payload_against_sealed_evidence(payload, sealed_evidence)
-        report = selection_audit.audit_payload(
-            root=root,
-            payload=payload,
-            top_n=top_n,
-            per_country_min=per_country_min,
-            per_source_min=per_source_min,
-            sealed_universe_count=sealed_evidence.universe_unique_offers,
-        )
     except (AssertionError, KeyError, TypeError, ValueError):
         return ProbeResult(
             "fatal",
@@ -494,7 +529,10 @@ def classify_blob(
         )
     try:
         safe_report = sanitized_pass_report(
-            report,
+            {
+                **sealed_evidence.pass_report,
+                "result": "BEST_SELECTION_AUDIT_PASS",
+            },
             expected_generation=expected_generation,
         )
     except (AssertionError, KeyError, TypeError, ValueError):

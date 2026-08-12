@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="sonardeals-build" content="20260811-freshness-truth-v1">
+<meta name="sonardeals-build" content="20260812-observed-peer-v7-ui">
 <title>رادار الصفقات</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
@@ -22,7 +22,10 @@ body::before{content:"";position:fixed;inset:0;background:
   radial-gradient(50% 35% at 10% -10%,rgba(34,211,165,.12),transparent 60%);pointer-events:none}
 a{color:inherit;text-decoration:none}
 button,input,select{font-family:inherit;font-size:1rem}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc2);outline-offset:2px}
 .wrap{max-width:1280px;margin:0 auto;padding:0 14px 90px}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
+  overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
 /* ---------- lock screen ---------- */
 #lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:50}
@@ -69,7 +72,7 @@ header{padding:22px 0 12px}
   border-bottom:1px solid var(--line);padding:12px 0;margin:10px -14px 16px;padding-inline:14px}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(min-width:760px){.frow{grid-template-columns:repeat(5,minmax(0,1fr))}}
-@media(min-width:1120px){.frow{grid-template-columns:2fr repeat(8,minmax(90px,1fr)) auto}}
+@media(min-width:1120px){.frow{grid-template-columns:2fr repeat(6,minmax(100px,1fr)) auto}}
 #q{grid-column:1/-1}
 @media(min-width:760px){#q{grid-column:auto}}
 .f{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--txt);width:100%}
@@ -77,11 +80,12 @@ header{padding:22px 0 12px}
 #reset{background:var(--chip);border:1px solid var(--line);border-radius:12px;color:var(--mut);padding:11px 16px;cursor:pointer;white-space:nowrap}
 .count{color:var(--mut);font-size:.85rem;margin-top:10px}
 .count b{color:var(--acc)}
-.source-note{margin-top:9px;padding:9px 12px;border:1px solid rgba(56,189,248,.3);border-radius:10px;
-  background:rgba(56,189,248,.08);color:#b9d9ef;font-size:.8rem;line-height:1.5}
+.secondary-filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px}
+@media(min-width:760px){.secondary-filters{grid-template-columns:repeat(3,max-content);justify-content:start}}
+.check{display:flex;gap:8px;align-items:center;cursor:pointer}
 
 /* ---------- cards ---------- */
-#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:12px}
 .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:18px;
   padding:16px;display:flex;flex-direction:column;gap:10px;transition:transform .15s,border-color .15s}
 .card:active{transform:scale(.985)}
@@ -99,18 +103,21 @@ header{padding:22px 0 12px}
 .card.is-visited{border-color:rgba(167,139,250,.34)}
 .title{font-size:.95rem;font-weight:500;line-height:1.5;color:var(--txt);
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.8em}
-.profit{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.profit .dz{font-size:1.45rem;font-weight:800;color:var(--acc)}
-.profit .eu{color:var(--mut);font-size:.85rem}
-.roi{margin-inline-start:auto;font-weight:800;font-size:.85rem;padding:4px 10px;border-radius:10px}
-.roi.hi{background:rgba(34,211,165,.14);color:var(--acc)}
-.roi.md{background:rgba(56,189,248,.13);color:var(--acc2)}
-.roi.lo{background:rgba(251,191,36,.12);color:var(--warn)}
+.saving{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.saving strong{font-size:1.42rem;color:var(--acc)}
+.saving span{color:var(--mut);font-size:.85rem}
+.discounts{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.metric{background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.22);border-radius:11px;padding:8px 10px;
+  color:var(--mut);font-size:.76rem;line-height:1.45}
+.metric strong{display:block;color:var(--txt);font-size:1rem}
 .meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:.82rem;color:var(--mut);
   background:#0a1120;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
 .meta div b{color:var(--txt);font-weight:500}
-.foot{display:flex;align-items:center;gap:8px;margin-top:auto}
-.src{font-size:.75rem;color:var(--mut)}
+.evidence{padding:9px 11px;border:1px solid rgba(34,211,165,.25);border-radius:11px;background:rgba(34,211,165,.07);
+  color:#b9e9dc;font-size:.78rem;line-height:1.55}
+.recency{font-size:.76rem;color:var(--mut);line-height:1.5}
+.foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
+.verification{font-size:.75rem;color:var(--mut);line-height:1.45;max-width:65%}
 .open{margin-inline-start:auto;background:linear-gradient(135deg,var(--acc),var(--acc2));color:#05263b;
   font-weight:800;font-size:.85rem;padding:9px 18px;border-radius:11px}
 .open.needs-check{background:linear-gradient(135deg,#fbbf24,#fb923c);color:#301b02}
@@ -128,6 +135,11 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
 .spin{width:38px;height:38px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;
   margin:0 auto 14px;animation:rot 1s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
+@media(max-width:420px){
+  .wrap{padding-inline:10px}.meta,.discounts{grid-template-columns:1fr}.verification{max-width:100%}.open{width:100%;text-align:center}
+  #filters{margin-inline:-10px;padding-inline:10px}.card{padding:14px}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -140,7 +152,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     <input id="pin" type="password" inputmode="numeric" autocomplete="off" aria-label="الرقم السري" placeholder="••••••••">
     <button id="enter">دخول</button>
     <label class="remember"><input type="checkbox" id="remember"> تذكرني على هذا الجهاز</label>
-    <div id="lockmsg"></div>
+    <div id="lockmsg" role="alert" aria-live="polite"></div>
   </div>
 </div>
 
@@ -150,27 +162,28 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <div class="brand">
         <div class="logo">🚘</div>
         <div>
-          <h1>رادار الصفقات <small>مصادر شنغن — محسوبة بالجمارك والسوق الجزائري</small></h1>
+          <h1>رادار الصفقات <small>مقارنة أسعار إعلانات أوروبية مرصودة</small></h1>
         </div>
       </div>
       <div class="refreshctl">
         <button class="refresh-button" id="refreshBtn" type="button">⚡ جلب وتحديث ذكي</button>
         <button class="refresh-button full" id="fullRefreshBtn" type="button">🌍 تحديث شامل</button>
-        <span id="refreshStatus">التحديث الذكي يجلب عروضًا جديدة؛ الشامل يمر على كل مسارات المصادر</span>
+        <span id="refreshStatus" role="status" aria-live="polite">التحديث الذكي يجلب رصدًا جديدًا؛ الشامل يمر على كل مسارات المصادر</span>
       </div>
     </div>
-    <div class="stats" id="stats"></div>
-    <div class="freshness-alert hidden" id="freshnessAlert" role="status"></div>
+    <div class="stats" id="stats" aria-label="ملخص بيانات اللوحة"></div>
+    <div class="freshness-alert hidden" id="freshnessAlert" role="alert"></div>
   </header>
 
-  <div id="filters">
+  <section id="filters" aria-label="تصفية وترتيب العروض">
     <div class="frow">
-      <input class="f" id="q" placeholder="🔍 ابحث: موديل، عنوان…">
-      <select class="f" id="fc"><option value="">كل الدول</option></select>
-      <select class="f" id="fsrc"><option value="">كل المصادر</option></select>
-      <select class="f" id="ff"><option value="">كل الوقود</option></select>
-      <select class="f" id="fy"><option value="">كل السنوات</option></select>
-      <select class="f" id="fp">
+      <label class="sr-only" for="q">البحث في الموديل أو عنوان الإعلان</label>
+      <input class="f" id="q" type="search" aria-label="البحث في الموديل أو عنوان الإعلان" placeholder="🔍 ابحث: موديل، عنوان…">
+      <select class="f" id="fc" aria-label="الدولة"><option value="">كل الدول</option></select>
+      <select class="f" id="fsrc" aria-label="المصدر"><option value="">كل المصادر</option></select>
+      <select class="f" id="ff" aria-label="نوع الوقود"><option value="">كل الوقود</option></select>
+      <select class="f" id="fy" aria-label="السنة"><option value="">كل السنوات</option></select>
+      <select class="f" id="fp" aria-label="نطاق سعر الإعلان">
         <option value="">كل الأسعار</option>
         <option value="0-10000">حتى 10,000 €</option>
         <option value="10000-15000">10—15 ألف €</option>
@@ -178,75 +191,127 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="20000-30000">20—30 ألف €</option>
         <option value="30000-999999">فوق 30 ألف €</option>
       </select>
-      <input class="f" id="fb" type="number" inputmode="numeric" min="0" step="50000" placeholder="💰 ميزانيتي القصوى (دج)" title="أقصى مبلغ أستطيع دفعه — يُظهر فقط ما تكلفة وصوله للجزائر أقل منه">
-      <button id="binfo" class="f" style="cursor:default;background:transparent;border:0;color:var(--mut)">= تكلفة الوصول ≤ ميزانيتك</button>
-      <select class="f" id="fs">
-        <option value="best">✨ الأفضل موصى به</option>
-        <option value="profit">🏆 أعلى ربح</option>
-        <option value="roi">📈 أعلى عائد ROI</option>
+      <select class="f" id="fs" aria-label="ترتيب النتائج">
+        <option value="ranked">✨ ترتيب المقارنة الأصلي</option>
+        <option value="discount">📉 أكبر خصم محافظ</option>
+        <option value="saving">💶 أكبر فرق باليورو</option>
+        <option value="median">📊 أكبر فرق عن الوسيط</option>
         <option value="price">💶 الأرخص سعراً</option>
         <option value="year">🗓️ الأحدث سنة</option>
         <option value="km">🛣️ الأقل كيلومتراً</option>
+        <option value="recent">🕒 الأحدث رصدًا</option>
       </select>
-      <button id="reset">↺ مسح</button>
+      <button id="reset" type="button">↺ مسح</button>
     </div>
-    <div class="frow" style="margin-top:8px">
-      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
-        <input type="checkbox" id="ft"> موثّق فقط (سعر جزائري حقيقي)
+    <div class="frow secondary-filters">
+      <label class="f check">
+        <input type="checkbox" id="flive" checked> روابط متحقق منها فقط
       </label>
-      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
-        <input type="checkbox" id="flive" checked> روابط سبق التحقق منها فقط
-      </label>
-      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+      <label class="f check">
         <input type="checkbox" id="fnew"> العروض الجديدة فقط
       </label>
-      <label class="f" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+      <label class="f check">
         <input type="checkbox" id="funseen"> لم أفتحها فقط
       </label>
     </div>
-    <div class="source-note hidden" id="sourceNote"></div>
-    <div class="count" id="count"></div>
-  </div>
+    <div class="count" id="count" role="status" aria-live="polite"></div>
+  </section>
 
-  <div id="loading"><div class="spin"></div>جاري تحميل الصفقات…</div>
-  <div id="grid"></div>
+  <div id="loading" role="status"><div class="spin" aria-hidden="true"></div>جاري تحميل المقارنات…</div>
+  <main id="grid" aria-label="العروض المرتبة"></main>
   <div id="pager" class="hidden">
     <button id="prev">‹ السابق</button>
     <span id="pageinfo"></span>
     <button id="next">التالي ›</button>
   </div>
-  <footer id="coverageNote">كل مصدر شنغن مؤهل يملك مقعدًا في اللوحة · لا يظهر المصدر إن لم توجد له صفقة مؤهلة للجزائر</footer>
+  <footer id="coverageNote">مقارنة سعر الإعلان بعروض أوروبية مشابهة مرصودة حديثًا؛ لا تمثل تكلفة اقتناء نهائية أو عائدًا متوقعًا.</footer>
 </div>
 
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
+const CONTRACT_SCHEMA_VERSION=2;
+const CONTRACT_ALGORITHM="schengen-observed-peer-value-v7-live-verified";
 const FLAGS={DE:"🇩🇪",FR:"🇫🇷",ES:"🇪🇸",IT:"🇮🇹",AT:"🇦🇹",PL:"🇵🇱",CZ:"🇨🇿",BG:"🇧🇬",PT:"🇵🇹",BE:"🇧🇪",NL:"🇳🇱",RO:"🇷🇴",FI:"🇫🇮",SE:"🇸🇪",DK:"🇩🇰",SK:"🇸🇰",NO:"🇳🇴",LV:"🇱🇻",LU:"🇱🇺",SI:"🇸🇮",HR:"🇭🇷",CH:"🇨🇭",HU:"🇭🇺",GR:"🇬🇷",EE:"🇪🇪",LT:"🇱🇹",IS:"🇮🇸",LI:"🇱🇮",MT:"🇲🇹"};
 const CN={DE:"ألمانيا",FR:"فرنسا",ES:"إسبانيا",IT:"إيطاليا",AT:"النمسا",PL:"بولندا",CZ:"التشيك",BG:"بلغاريا",PT:"البرتغال",BE:"بلجيكا",NL:"هولندا",RO:"رومانيا",FI:"فنلندا",SE:"السويد",DK:"الدانمارك",SK:"سلوفاكيا",NO:"النرويج",LV:"لاتفيا",LU:"لوكسمبورغ",SI:"سلوفينيا",HR:"كرواتيا",CH:"سويسرا",HU:"المجر",GR:"اليونان",EE:"إستونيا",LT:"ليتوانيا",IS:"آيسلندا",LI:"ليختنشتاين",MT:"مالطا"};
-const FUEL_AR=f=>{f=(f||"").toLowerCase();
-  if(/hyb|هجين/.test(f))return"هايبرد";
-  if(/petrol|gasoline|benzin|essence|بنزين/.test(f)||f==="")return"بنزين";
-  return f||"—"};
+const FUEL_AR=f=>({petrol:"بنزين",hybrid:"هجين"}[String(f||"").trim().toLowerCase()]||"غير محدد");
 const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
-const fmtDz=v=>nf.format(Math.round(v))+" دج";
-const fmtEu=v=>nf.format(Math.round(v))+" €";
+const pctf=new Intl.NumberFormat("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2});
+const finiteNumber=(value,fallback=0)=>{const number=Number(value);return Number.isFinite(number)?number:fallback;};
+const finiteCount=value=>Math.max(0,Math.trunc(finiteNumber(value,0)));
+const fmtEu=v=>nf.format(Math.round(finiteNumber(v)))+" €";
+const fmtPct=v=>pctf.format(finiteNumber(v))+"%";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const safeUrl=v=>{try{
   const u=new URL(String(v||"").trim());
-  return /^(https?):$/.test(u.protocol)&&!u.username&&!u.password&&u.hostname?u.href:"#";
+  return u.protocol==="https:"&&!u.username&&!u.password&&u.hostname?u.href:"#";
 }catch(e){return"#";}};
+const timestampMs=value=>{
+  if(typeof value==="number"&&Number.isFinite(value))return value;
+  const parsed=Date.parse(String(value||""));return Number.isFinite(parsed)?parsed:null;
+};
+const fmtTime=value=>{const parsed=timestampMs(value);return parsed===null?"غير متاح":new Date(parsed).toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"});};
+function recencyText(value){
+  const parsed=timestampMs(value);
+  if(parsed===null)return"وقت الرصد غير متاح";
+  const ageMinutes=Math.max(0,Math.floor((Date.now()-parsed)/60000));
+  const relative=ageMinutes<1?"الآن":ageMinutes<60?`منذ ${ageMinutes} دقيقة`:
+    ageMinutes<1440?`منذ ${Math.floor(ageMinutes/60)} ساعة`:`منذ ${Math.floor(ageMinutes/1440)} يومًا`;
+  return `${relative} · ${fmtTime(value)}`;
+}
+const FORBIDDEN_OFFER_FIELDS=new Set([
+  "pr","ep","prd","roi","er","rd","ld","cd","ci","cb","cr",
+  "profit","effective_profit","profit_dzd","effective_profit_dzd","landed_cost","landed_cost_dzd",
+  "resale","resale_dzd","customs","customs_dzd","algerian_price","algerian_price_dzd","confidence"
+]);
+const REQUIRED_OFFER_FIELDS=new Set(["id","m","t","p","q1","mp","sv","sp","dp","pn","ps","pc","y","km","f","c","s","u","ls","v"]);
+function contractFailure(){const error=new Error("contract");error.code="unsupported_contract";return error;}
+function validateOffer(offer){
+  if(!offer||typeof offer!=="object"||Array.isArray(offer))throw contractFailure();
+  const fields=Object.keys(offer);
+  if(fields.length!==REQUIRED_OFFER_FIELDS.size||fields.some(field=>!REQUIRED_OFFER_FIELDS.has(field)))throw contractFailure();
+  if([...FORBIDDEN_OFFER_FIELDS].some(field=>Object.prototype.hasOwnProperty.call(offer,field)))throw contractFailure();
+  for(const field of ["id","m","t","f","c","s","u","ls"]){
+    if(typeof offer[field]!=="string"||!offer[field].trim())throw contractFailure();
+  }
+  for(const field of ["p","q1","mp","sv","sp","dp","pn","ps","pc","y","km","v"]){
+    if(typeof offer[field]!=="number"||!Number.isFinite(offer[field]))throw contractFailure();
+  }
+  const p=Number(offer.p),q1=Number(offer.q1),median=Number(offer.mp),saving=Number(offer.sv);
+  const conservative=Number(offer.sp),medianDiscount=Number(offer.dp);
+  const peerCount=Number(offer.pn),peerSources=Number(offer.ps),peerCountries=Number(offer.pc);
+  if(!Object.prototype.hasOwnProperty.call(FLAGS,offer.c)||!["petrol","hybrid"].includes(offer.f)||
+     safeUrl(offer.u)==="#"||timestampMs(offer.ls)===null||p<4000||p>45000||q1<=p||median<q1||saving!==q1-p||
+     conservative<=0||conservative>=100||medianDiscount<conservative||medianDiscount>=100||
+     Math.round(10000*saving/q1)!==Math.round(100*conservative)||
+     Math.round(10000*(median-p)/median)!==Math.round(100*medianDiscount)||
+     !Number.isInteger(peerCount)||peerCount<20||!Number.isInteger(peerSources)||peerSources<3||
+     !Number.isInteger(peerCountries)||peerCountries<2||!Number.isInteger(Number(offer.y))||Number(offer.y)<1900||
+     !Number.isInteger(Number(offer.km))||Number(offer.km)<0||![-1,0,1].includes(Number(offer.v)))throw contractFailure();
+  return offer;
+}
+function validatePayload(payload){
+  if(!payload||typeof payload!=="object"||Array.isArray(payload)||payload.schema_version!==CONTRACT_SCHEMA_VERSION||
+     payload.algorithm!==CONTRACT_ALGORITHM||
+     (Object.prototype.hasOwnProperty.call(payload,"selection_algorithm")&&payload.selection_algorithm!==CONTRACT_ALGORITHM)||
+     Number(payload.unsupported_economics_published)!==0||!Array.isArray(payload.offers)||payload.offers.length===0){
+    throw contractFailure();
+  }
+  payload.offers.forEach(validateOffer);
+  return payload.offers;
+}
 const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
 const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
-let DATA=[],VIEW=[],page=1,SOURCE_META=new Map(),VERIFICATION_FRESH=false,ACTIVE_PIN="";
+let DATA=[],VIEW=[],page=1,VERIFICATION_RECENT=false,VERIFICATION_AT_MS=null,ACTIVE_PIN="",ORIGINAL_RANK=new Map();
 let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
-let DATA_GENERATED_AT_MS=NaN,DATA_FRESH=false,DATA_AGE_HOURS=NaN;
+let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
 const DATA_MAX_AGE_MS=36*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
-const NAV_KEY="dzr-navigation-v1";
-const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs","fb"];
-const NAV_CHECK_IDS=["ft","flive","fnew","funseen"];
+const NAV_KEY="dzr-navigation-v2";
+const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
+const NAV_CHECK_IDS=["flive","fnew","funseen"];
 const HISTORY_LIMIT=50000;
 
 function readNavigationState(){
@@ -346,16 +411,17 @@ async function tryUnlock(pin,silent){
   $("enter").disabled=true;$("lockmsg").textContent=silent?"":"جاري الفتح…";$("lockmsg").style.color="var(--mut)";
   try{
     const payload=await unlock(pin);
+    boot(payload);
     ACTIVE_PIN=pin;
     if($("remember").checked)localStorage.setItem("dzk",pin);
     sessionStorage.setItem("dzk",pin);
-    boot(payload);
   }catch(e){
     $("enter").disabled=false;
     if(silent){localStorage.removeItem("dzk");sessionStorage.removeItem("dzk");return;}
     $("lockmsg").style.color="var(--bad)";
     $("lockmsg").textContent = e.message==="pin"?"الرقم السري غير صحيح":
-      e.message==="net"?"تعذر تحميل البيانات — تحقق من الاتصال":"خطأ غير متوقع";
+      e.message==="net"?"تعذر تحميل البيانات — تحقق من الاتصال":
+      e.message==="contract"?"بيانات اللوحة غير متوافقة أو غير مكتملة — لم يتم عرضها":"خطأ غير متوقع";
     $("lockcard").classList.add("shake");setTimeout(()=>$("lockcard").classList.remove("shake"),450);
   }
 }
@@ -370,79 +436,63 @@ if(typeof DecompressionStream==="undefined"){
 
 /* ---------- app ---------- */
 function boot(payload){
+  const offers=validatePayload(payload);
   const navigationState=readNavigationState();
-  DATA=payload.offers;
+  DATA=offers.slice();
+  ORIGINAL_RANK=new Map(DATA.map((offer,index)=>[offer.id,index]));
   initializeOfferHistory();
   $("lock").classList.add("hidden");$("app").classList.remove("hidden");
-  const dataUpd=new Date(payload.data_generated_at_utc||payload.updated_utc);
-  const boardBuilt=new Date(payload.board_built_at_utc||payload.updated_utc);
-  const fullRefresh=new Date(payload.last_full_refresh_at_utc||"");
-  const validationAt=new Date(payload.validation&&payload.validation.generated_at||"");
-  const validationAge=Date.now()-validationAt.getTime();
-  VERIFICATION_FRESH=!Number.isNaN(validationAt.getTime())&&
-    validationAge>=-5*60*1000&&validationAge<=LIVE_VERIFICATION_MAX_AGE_MS;
-  DATA_GENERATED_AT_MS=dataUpd.getTime();
-  const dataAge=Date.now()-DATA_GENERATED_AT_MS;
-  DATA_FRESH=Number.isFinite(DATA_GENERATED_AT_MS)&&dataAge>=-5*60*1000&&dataAge<=DATA_MAX_AGE_MS;
-  DATA_AGE_HOURS=Number.isFinite(dataAge)?Math.max(0,dataAge/3600000):NaN;
+  const dataTimestamp=String(payload.data_generated_at_utc||payload.generated_at||"");
+  const boardTimestamp=String(payload.board_built_at_utc||"");
+  VERIFICATION_AT_MS=timestampMs(payload.validation&&payload.validation.generated_at);
+  const validationAge=VERIFICATION_AT_MS===null?null:Date.now()-VERIFICATION_AT_MS;
+  VERIFICATION_RECENT=validationAge!==null&&validationAge>=-5*60*1000&&validationAge<=LIVE_VERIFICATION_MAX_AGE_MS;
+  DATA_GENERATED_AT_MS=timestampMs(dataTimestamp);
+  const dataAge=DATA_GENERATED_AT_MS===null?null:Date.now()-DATA_GENERATED_AT_MS;
+  DATA_FRESH=dataAge!==null&&dataAge>=-5*60*1000&&dataAge<=DATA_MAX_AGE_MS;
+  DATA_AGE_HOURS=dataAge===null?null:Math.max(0,dataAge/3600000);
   const freshnessAlert=$("freshnessAlert");
   freshnessAlert.classList.toggle("hidden",DATA_FRESH);
-  freshnessAlert.textContent=DATA_FRESH?"":Number.isFinite(DATA_AGE_HOURS)
-    ?`تنبيه حداثة: آخر بيانات مصنفة عمرها ${Math.floor(DATA_AGE_HOURS)} ساعة. لا تُعامل العروض كحديثة حتى يكتمل التحديث التالي.`
-    :"تنبيه حداثة: تعذر إثبات وقت توليد البيانات. لا تُعامل العروض كحديثة حتى يكتمل التحديث التالي.";
-  const fmtTime=value=>Number.isNaN(value.getTime())?"غير معروف":value.toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"});
-  const avg=DATA.length?DATA.reduce((a,o)=>a+o.pr,0)/DATA.length:0;
-  const connected=payload.connected_source_count||new Set(DATA.map(o=>o.s).filter(Boolean)).size;
-  const liveCount=payload.live_source_count||connected;
-  const extraCount=payload.extra_source_count||0;
-  const displayed=payload.displayed_source_count||new Set(DATA.map(o=>o.s).filter(Boolean)).size;
-  const displayedCountries=payload.displayed_country_count||new Set(DATA.map(o=>o.c).filter(Boolean)).size;
-  const connectedCountries=payload.connected_country_count||displayedCountries;
-  const universe=payload.universe_unique_offers||payload.selection_universe_count||payload.live_inventory_count||0;
-  const qualifiedUniverse=payload.qualified_universe_offers||payload.qualified_universe_planets||0;
+  freshnessAlert.textContent=DATA_FRESH?"":DATA_AGE_HOURS!==null
+    ?`تنبيه حداثة: عمر لقطة البيانات ${Math.floor(DATA_AGE_HOURS)} ساعة. افحص وقت رصد كل إعلان قبل الاعتماد عليه.`
+    :"تنبيه حداثة: وقت لقطة البيانات غير متاح. لم تُعرض على أنها حديثة.";
+  const connected=finiteCount(payload.connected_source_count);
+  const connectedCountries=finiteCount(payload.connected_country_count);
+  const displayed=finiteCount(payload.displayed_source_count)||new Set(DATA.map(o=>o.s)).size;
+  const displayedCountries=finiteCount(payload.displayed_country_count)||new Set(DATA.map(o=>o.c)).size;
+  const universe=finiteCount(payload.universe_unique_offers);
+  const qualifiedUniverse=finiteCount(payload.qualified_universe_offers||payload.ranked_candidate_rows);
+  const eligibleRows=finiteCount(payload.eligible_observed_rows);
+  const verified=finiteCount(payload.verified_live_count||payload.live_verified_offer_count);
   $("stats").innerHTML=
-    `<div class="stat">أفضل العروض المعروضة<b>${nf.format(DATA.length)}</b></div>`+
+    `<div class="stat">مقارنات معروضة<b>${nf.format(DATA.length)}</b></div>`+
     `<div class="stat">جديدة لم ترها<b id="newStat">0</b></div>`+
     `<div class="stat">فتحتها سابقًا<b id="openedStat">0</b></div>`+
-    (universe?`<div class="stat">مخزون فريد فُحص ورتّب<b>${nf.format(universe)}</b></div>`:"")+
-    (qualifiedUniverse?`<div class="stat">مرشح مؤهل<b>${nf.format(qualifiedUniverse)}</b></div>`:"")+
-    `<div class="stat">المصادر المؤهلة<b>${displayed}</b></div>`+
-    `<div class="stat">المصادر المرتبطة<b>${connected}</b></div>`+
-    `<div class="stat">داخل مخزون الصفقات<b>${liveCount}</b></div>`+
-    (extraCount?`<div class="stat">مراقبة أو تهيئة<b>${extraCount}</b></div>`:"")+
-    `<div class="stat">تغطية دول شنغن<b>${connectedCountries}/${payload.schengen_country_total||29}</b></div>`+
-    `<div class="stat">دول بصفقات مؤهلة<b>${displayedCountries}/${connectedCountries}</b></div>`+
-    `<div class="stat">متوسط الربح<b>${fmtEu(avg)}</b></div>`+
-    `<div class="stat">آخر تصنيف للبيانات<b>${fmtTime(dataUpd)}</b></div>`+
-    `<div class="stat">آخر حصاد شامل<b>${fmtTime(fullRefresh)}</b></div>`+
-    `<div class="stat">بناء اللوحة<b>${fmtTime(boardBuilt)}</b></div>`;
+    (universe?`<div class="stat">مخزون فريد مفحوص<b>${nf.format(universe)}</b></div>`:"")+
+    (eligibleRows?`<div class="stat">سجلات حديثة مؤهلة<b>${nf.format(eligibleRows)}</b></div>`:"")+
+    (qualifiedUniverse?`<div class="stat">مرشحو المقارنة<b>${nf.format(qualifiedUniverse)}</b></div>`:"")+
+    `<div class="stat">مصادر الأدلة<b>${nf.format(connected)}</b></div>`+
+    `<div class="stat">دول الأدلة<b>${nf.format(connectedCountries)}</b></div>`+
+    `<div class="stat">مصادر العروض المعروضة<b>${nf.format(displayed)}</b></div>`+
+    `<div class="stat">دول العروض المعروضة<b>${nf.format(displayedCountries)}</b></div>`+
+    `<div class="stat">روابط متحقق منها في الجيل<b>${nf.format(verified)}</b></div>`+
+    `<div class="stat">لقطة البيانات<b>${fmtTime(dataTimestamp)}</b></div>`+
+    `<div class="stat">بناء اللوحة<b>${fmtTime(boardTimestamp)}</b></div>`;
   updateHistoryStats();
-  const availableCountries=new Set(DATA.map(o=>o.c).filter(Boolean));
-  const connectedCountrySet=new Set(Object.keys(payload.connected_country_counts||{}));
-  const cs=Object.keys(FLAGS).sort();
-  $("fc").innerHTML='<option value="">كل الدول</option>'+cs.map(c=>{
-    const available=availableCountries.has(c);
-    const note=available?"":connectedCountrySet.has(c)?" — متصلة، لا صفقة مؤهلة الآن":" — لا بيانات مرتبطة حاليًا";
-    return `<option value="${esc(c)}"${available?"":" disabled"}>${FLAGS[c]||""} ${esc(CN[c]||c)}${note}</option>`;
-  }).join("");
-  const displayedSources=new Set(DATA.map(o=>o.s).filter(Boolean));
-  SOURCE_META=new Map((payload.extra_sources||[]).map(record=>[record.name,record]));
-  const sources=(Array.isArray(payload.connected_sources)?payload.connected_sources:[...displayedSources])
-    .filter(Boolean).sort((a,b)=>a.localeCompare(b));
-  $("fsrc").innerHTML='<option value="">كل المصادر</option>'+sources.map(s=>{
-    const available=displayedSources.has(s);
-    const extra=SOURCE_META.get(s);
-    const note=available?"":extra?` — ${extra.note_ar}`:" — متصل، لا صفقة مؤهلة الآن";
-    return `<option value="${esc(s)}">${esc(s)}${esc(note)}</option>`;
-  }).join("");
-  const fs=[...new Set(DATA.map(o=>FUEL_AR(o.f)))].sort();
-  $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option>${esc(f)}</option>`).join("");
+  const countries=[...new Set(DATA.map(o=>o.c))].sort();
+  $("fc").innerHTML='<option value="">كل الدول</option>'+countries.map(c=>
+    `<option value="${esc(c)}">${FLAGS[c]||"🌍"} ${esc(CN[c]||c)}</option>`).join("");
+  const sources=[...new Set(DATA.map(o=>o.s))].sort((a,b)=>a.localeCompare(b));
+  $("fsrc").innerHTML='<option value="">كل المصادر</option>'+sources.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  const fs=[...new Set(DATA.map(o=>o.f))].sort();
+  $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option value="${esc(f)}">${esc(FUEL_AR(f))}</option>`).join("");
   const ys=[...new Set(DATA.map(o=>o.y).filter(y=>y>2000))].sort((a,b)=>b-a);
   $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
-  ["q","fc","fsrc","ff","fy","fp","fs","fb"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
-  ["ft","flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
+  ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
+  ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
   if(!restoreNavigationState(navigationState))$("fnew").checked=NEW_IDS.size>0;
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp","fb"].forEach(id=>$(id).value="");$("fs").value="best";$("ft").checked=false;$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  if(!$("fs").value)$("fs").value="ranked";
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
@@ -453,20 +503,12 @@ function boot(payload){
     setTimeout(()=>{apply();saveNavigationState();},0);
   };
   $("loading").classList.add("hidden");
-  const deferredSources=payload.deferred_sources||[];
-  const deferred=deferredSources.length;
-  const watchOnly=payload.watch_only_sources||[];
-  const staging=payload.staging_sources||[];
-  const withoutQualified=payload.countries_without_qualified_offers||[];
-  $("coverageNote").textContent=`${connected} مصدرًا مرتبطًا داخل شنغن: ${liveCount} داخل مخزون الصفقات و${extraCount} للمراقبة أو التهيئة؛ ${displayed} لديها صفقات مؤهلة معروضة`+
-    ` · تغطية المخزون ${connectedCountries}/${payload.schengen_country_total||29} دولة، والصفقات المؤهلة من ${displayedCountries}`+
-    (withoutQualified.length?` · متصلة بلا صفقة مؤهلة حاليًا (${withoutQualified.join("، ")})`:"")+
-    (deferred?` · ${deferred} داخل المخزون بلا صفقة مؤهلة الآن (${deferredSources.join("، ")})`:"")+
-    (watchOnly.length?` · مراقبة فقط (${watchOnly.join("، ")})`:"")+
-    (staging.length?` · قيد التطبيع قبل الحساب (${staging.join("، ")})`:"")+
-    (VERIFICATION_FRESH?` · المؤكد حيًا الآن: ${payload.live_verified_offer_count||0}`:
-      " · انتهت صلاحية الفحص الحديث؛ تبقى الروابط متاحة للفتح بعلامة تحذير حتى يكتمل التحديث التالي")+
-    ` · الأسعار الجزائرية من سوق Ouedkniss`;
+  $("coverageNote").textContent=
+    `الترتيب يقارن سعر الإعلان بالربع الأدنى ووسيط عروض أوروبية مماثلة، مع استبعاد عائلة مصدر المرشح من نظرائه. `+
+    `الأدلة تغطي ${nf.format(connected)} مصدرًا و${nf.format(connectedCountries)} دولة. `+
+    (VERIFICATION_RECENT?`فحص الروابط حديث (${fmtTime(VERIFICATION_AT_MS)}). `:
+      `حالة التحقق مرتبطة بجيل البيانات؛ آخر فحص ${VERIFICATION_AT_MS===null?"غير متاح":fmtTime(VERIFICATION_AT_MS)}. `)+
+    `المقارنة لسعر الإعلان فقط، وليست تكلفة اقتناء نهائية أو عائدًا متوقعًا.`;
   apply();
   saveNavigationState();
   if(navigationState&&Number.isFinite(Number(navigationState.scrollY))){
@@ -475,89 +517,78 @@ function boot(payload){
 }
 function apply(){
   const q=$("q").value.trim().toLowerCase(),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
-        p=$("fp").value,t=$("ft").checked,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
+        p=$("fp").value,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
         unseenOnly=$("funseen").checked,s=$("fs").value;
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
-  const bmax=Number($("fb").value)||0;
   VIEW=DATA.filter(o=>
-    o.v!==-1&&
     (!q||(o.t+" "+o.m).toLowerCase().includes(q))&&
-    (!c||o.c===c)&&(!src||o.s===src)&&(!f||FUEL_AR(o.f)===f)&&(!y||String(o.y)===y)&&
-    o.p>=pmin&&o.p<=pmax&&(!t||!o.e)&&(!liveOnly||o.v===1)&&
+    (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&(!y||String(o.y)===y)&&
+    o.p>=pmin&&o.p<=pmax&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&
-    (!unseenOnly||!VISITED_IDS.has(String(o.id||"")))&&
-    (!bmax||Number(o.ld||0)<=bmax));
-  const K={best:(a,b)=>(a.a||0)-(b.a||0)||
-             (b.ep||b.pr)-(a.ep||a.pr)||
-             (b.cr||0)-(a.cr||0)||
-             b.pr-a.pr||
-             (b.er||b.roi)-(a.er||a.roi)||
-             a.p-b.p||
-             (a.km||0)-(b.km||0)||
-             String(a.id||"").localeCompare(String(b.id||"")),
-           profit:(a,b)=>b.pr-a.pr,roi:(a,b)=>b.roi-a.roi,price:(a,b)=>a.p-b.p,
-           year:(a,b)=>b.y-a.y||b.pr-a.pr,km:(a,b)=>a.km-b.km||b.pr-a.pr};
-  VIEW.sort(K[s]||K.best);
-  const sourceMeta=SOURCE_META.get(src);
-  if(src&&sourceMeta){
-    const observed=new Date(sourceMeta.updated_utc).toLocaleString("ar-DZ",{dateStyle:"short",timeStyle:"short"});
-    $("sourceNote").textContent=`${src}: ${nf.format(sourceMeta.row_count)} سجلًا مرتبطًا خارج حساب الصفقات. ${sourceMeta.note_ar}. آخر رصد: ${observed}`;
-    $("sourceNote").classList.remove("hidden");
-  }else if(src&&VIEW.length===0){
-    $("sourceNote").textContent=`${src}: متصل بمخزون الصفقات، لكن لا توجد له صفقة مؤهلة للجزائر في آخر تصنيف مكتمل.`;
-    $("sourceNote").classList.remove("hidden");
-  }else{
-    $("sourceNote").classList.add("hidden");
-  }
-  $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> من ${nf.format(DATA.length)} صفقة`;
+    (!unseenOnly||!VISITED_IDS.has(String(o.id||""))));
+  const rankedTie=(a,b)=>(ORIGINAL_RANK.get(a.id)||0)-(ORIGINAL_RANK.get(b.id)||0);
+  const sorts={
+    discount:(a,b)=>b.sp-a.sp||rankedTie(a,b),saving:(a,b)=>b.sv-a.sv||rankedTie(a,b),
+    median:(a,b)=>b.dp-a.dp||rankedTie(a,b),price:(a,b)=>a.p-b.p||rankedTie(a,b),
+    year:(a,b)=>b.y-a.y||rankedTie(a,b),km:(a,b)=>a.km-b.km||rankedTie(a,b),
+    recent:(a,b)=>timestampMs(b.ls)-timestampMs(a.ls)||rankedTie(a,b)
+  };
+  if(s!=="ranked"&&sorts[s])VIEW.sort(sorts[s]);
+  $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> من ${nf.format(DATA.length)} مقارنة مرتبة`;
   render();
+}
+function verificationInfo(o){
+  const checked=VERIFICATION_AT_MS===null?"وقت الفحص غير متاح":fmtTime(VERIFICATION_AT_MS);
+  if(o.v===1&&VERIFICATION_RECENT)return{badge:'<span class="badge b-live">رابط متحقق حديثًا ✓</span>',detail:`تم فحص الرابط: ${checked}`,open:true,recent:true};
+  if(o.v===1)return{badge:'<span class="badge b-real">تحقق مرتبط بالجيل ✓</span>',detail:`آخر فحص مسجل: ${checked}`,open:true,recent:false};
+  if(o.v===-1)return{badge:'<span class="badge b-est">غير متاح وقت الفحص</span>',detail:`نتيجة الفحص: غير متاح · ${checked}`,open:false,recent:false};
+  return{badge:'<span class="badge b-est">لم يثبت التحقق</span>',detail:`لا توجد نتيجة تحقق مؤكدة · ${checked}`,open:true,recent:false};
 }
 function card(o){
   const id=String(o.id||""),opened=VISITED_IDS.has(id),fresh=NEW_IDS.has(id);
-  const roiCls=o.roi>=60?"hi":o.roi>=30?"md":"lo";
-  const badge=VERIFICATION_FRESH&&o.v===1?'<span class="badge b-live">مؤكد حيًا ✓</span>':o.e?'<span class="badge b-est">سعر بيع تقديري</span>':'<span class="badge b-real">محسوب بسعر سوق حقيقي</span>';
   const historyBadge=fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':'';
-  const analysisPrice=Number(o.ap||o.p||0);
-  const exportPriceLine=analysisPrice>0&&analysisPrice<Number(o.p||0)?
-    `<div>🧾 سعر التصدير المؤكد <b>${fmtEu(analysisPrice)}</b></div>`:'';
-  const customsLines=Number(o.cd||0)>0?
-    `<div>🛃 جمارك عند الاستيراد <b>${fmtDz(o.ci||o.cd)}</b></div>${Number(o.cb||0)>0?`<div>↩️ إرجاع الامتياز عند البيع <b>${fmtDz(o.cb)}</b></div>`:''}`:'';
+  const verification=verificationInfo(o);
   const href=safeUrl(o.u);
-  const linkFresh=VERIFICATION_FRESH&&o.v===1;
-  const link=href!=="#"?
-    `<a class="open${linkFresh?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" title="${linkFresh?"تم التحقق من الرابط حديثًا":"الرابط متاح لكن يحتاج إعادة تحقق"}">${opened?"فتحه مجددًا":"فتح الإعلان"}${linkFresh?"":" ⚠"} ↗</a>`:
-    '<span class="open unavailable" aria-disabled="true">الرابط غير صالح</span>';
-  return `<div class="card${fresh?" is-new":""}${opened?" is-visited":""}">
+  const link=verification.open&&href!=="#"?
+    `<a class="open${verification.recent?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="${opened?"فتح الإعلان مجددًا":"فتح الإعلان"}: ${esc(o.t)}">${opened?"فتحه مجددًا":"فتح الإعلان"}${verification.recent?"":" ⚠"} ↗</a>`:
+    '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
+  const countryName=CN[o.c]||o.c;
+  return `<article class="card${fresh?" is-new":""}${opened?" is-visited":""}" role="listitem">
     <div class="top">
-      <span class="flag">${FLAGS[o.c]||"🌍"}</span>
-      <span class="chip">${esc(o.m||"—")}</span>${historyBadge}${badge}
-      <span class="chip">${esc(o.s||"")}</span>
+      <span class="flag" role="img" aria-label="${esc(countryName)}">${FLAGS[o.c]||"🌍"}</span>
+      <span class="chip">${esc(o.m)}</span>${historyBadge}${verification.badge}
     </div>
-    <div class="title">${esc(o.t||"—")}</div>
-    <div class="profit">
-      <span class="dz">+${fmtDz(o.prd)}</span><span class="eu">≈ ${fmtEu(o.pr)}</span>
-      <span class="roi ${roiCls}">ROI ${Math.round(o.roi)}%</span>
+    <h2 class="title" title="${esc(o.t)}">${esc(o.t)}</h2>
+    <div class="saving">
+      <strong>${fmtEu(o.sv)}</strong><span>أقل من الربع الأدنى لنظرائه</span>
+    </div>
+    <div class="discounts">
+      <div class="metric">الخصم المحافظ عن الربع الأدنى<strong>${fmtPct(o.sp)}</strong></div>
+      <div class="metric">الخصم عن وسيط النظراء<strong>${fmtPct(o.dp)}</strong></div>
     </div>
     <div class="meta">
       <div>💶 سعر الإعلان <b>${fmtEu(o.p)}</b></div>
-      ${exportPriceLine}
-      <div>🗓️ السنة <b>${o.y||"—"}</b></div>
-      <div>🛣️ العداد <b>${o.km?nf.format(o.km)+" كم":"—"}</b></div>
+      <div>◼ الربع الأدنى للنظراء <b>${fmtEu(o.q1)}</b></div>
+      <div>◉ وسيط النظراء <b>${fmtEu(o.mp)}</b></div>
+      <div>🗓️ السنة <b>${nf.format(o.y)}</b></div>
+      <div>🛣️ العداد <b>${nf.format(o.km)} كم</b></div>
       <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
-      ${customsLines}
-      <div>🏛️ تكلفة الوصول <b>${fmtDz(o.ld)}</b></div>
-      <div>🇩🇿 البيع المتوقع <b>${fmtDz(o.rd)}</b></div>
+      <div>🌍 دولة الإعلان <b>${esc(countryName)}</b></div>
+      <div>🔎 المصدر <b>${esc(o.s)}</b></div>
     </div>
+    <div class="evidence">دليل النظراء: <b>${nf.format(o.pn)}</b> إعلانًا · <b>${nf.format(o.ps)}</b> عائلات مصادر · <b>${nf.format(o.pc)}</b> دول</div>
+    <div class="recency">آخر رصد للإعلان: ${esc(recencyText(o.ls))}</div>
     <div class="foot">
-      <span class="src">الثقة ${o.cr||0}%</span>
+      <span class="verification">${esc(verification.detail)}</span>
       ${link}
     </div>
-  </div>`;
+  </article>`;
 }
 function render(){
   const pages=Math.max(1,Math.ceil(VIEW.length/PER));
   page=Math.min(Math.max(1,page),pages);
-  $("grid").innerHTML=VIEW.slice((page-1)*PER,page*PER).map(card).join("");
+  $("grid").innerHTML=VIEW.length?VIEW.slice((page-1)*PER,page*PER).map(card).join(""):
+    '<div class="freshness-alert" role="status">لا توجد عروض تطابق عوامل التصفية الحالية.</div>';
   $("pager").classList.toggle("hidden",VIEW.length<=PER);
   $("pageinfo").textContent=`صفحة ${page} / ${pages}`;
   $("prev").disabled=page<=1;$("next").disabled=page>=pages;

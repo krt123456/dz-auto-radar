@@ -9,6 +9,8 @@ CLIENT="${RADAR_CONTROL_CLIENT:-/opt/sonardeals-radar/radar_control_client.py}"
 PUBLISHER="${RADAR_PUBLISHER:-/opt/sonardeals-radar/publish_radar_dashboard.py}"
 AUDITOR="${RADAR_AUDITOR:-/opt/sonardeals-radar/audit_best_selection.py}"
 LIVE_CONVERGENCE="${RADAR_LIVE_CONVERGENCE:-/opt/sonardeals-radar/audit_live_convergence.py}"
+RANKER="${RADAR_RANKER:-/opt/sonardeals-radar/build_observed_value_board.py}"
+VALIDATION_SEALER="${RADAR_VALIDATION_SEALER:-/opt/sonardeals-radar/seal_validation_report.py}"
 SITE="${RADAR_SITE:-/srv/sonardeals-radar/site}"
 AUDIT="$STATE/latest_selection_audit.json"
 LIVE_AUDIT="$STATE/latest_live_selection_audit.json"
@@ -62,24 +64,8 @@ echo "RADAR_REFRESH_START mode=$MODE job=$JOB_ID at=$(date -u +%Y-%m-%dT%H:%M:%S
 
 PHASE="ranking_preflight"
 notify running "$PHASE" "يتحقق الخادم من توفر محرك ترتيب آمن قبل الحصاد"
-python3 - "$ROOT" <<'PY'
-import sys
-from pathlib import Path
-
-root = Path(sys.argv[1])
-sys.path.insert(0, str(root))
-try:
-    import deal_finder
-except Exception as error:
-    raise SystemExit(f"radar ranking preflight import failed: {type(error).__name__}") from error
-if not getattr(deal_finder, "LEGACY_CANDIDATE_GENERATION_ENABLED", False):
-    reason = getattr(
-        deal_finder,
-        "LEGACY_CANDIDATE_GENERATION_BLOCK_REASON",
-        "ranking capability is not release-ready",
-    )
-    raise SystemExit(f"RADAR_RANKING_PREFLIGHT_BLOCKED: {reason}")
-PY
+python3 "$RANKER" --capability-check
+python3 "$VALIDATION_SEALER" --capability-check
 echo "RADAR_RANKING_PREFLIGHT_PASS"
 
 PHASE="disk_preflight"
@@ -132,14 +118,15 @@ else
 fi
 
 PHASE="ranking"
-notify running "$PHASE" "يعيد حساب الربح والمصداقية وترتيب كامل الكون المؤهل"
-RUN_BURST=0 RUN_HARVEST=0 VERIFY_LIMIT=0 PURGE_DEAD=0 \
-  bash "$ROOT/run_million_planet_cycle.sh"
-TOP_N=200000 python3 "$ROOT/precompute_top400.py"
+notify running "$PHASE" "يبني مقارنة سعرية مرصودة من لقطة ثابتة للكون المؤهل"
+python3 "$RANKER" \
+  --database "$ROOT/universe_offers.sqlite" \
+  --ranked-output "$ROOT/top_offers.json" \
+  --board-output "$ROOT/mobile_site_local/board.json" \
+  --validation-report "$ROOT/top400_validation.json"
 
 PHASE="validation"
 notify running "$PHASE" "يفحص الروابط الأعلى ويستبعد المؤكد ميتًا"
-python3 "$ROOT/export_schengen_board.py" --top-n 0
 if [[ "$MODE" == "full" ]]; then
   VERIFY_LIMIT="${RADAR_FULL_VERIFY_LIMIT:-0}"
 else
@@ -155,7 +142,14 @@ xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-3000}" \
   --browser-workers "${RADAR_BROWSER_VERIFY_WORKERS:-8}" \
   --browser-timeout-sec "${RADAR_BROWSER_VERIFY_TIMEOUT:-30}"
-python3 "$ROOT/export_schengen_board.py" --top-n 0
+python3 "$VALIDATION_SEALER" \
+  --board "$ROOT/mobile_site_local/board.json" \
+  --validation "$ROOT/top400_validation.json"
+python3 "$RANKER" \
+  --database "$ROOT/universe_offers.sqlite" \
+  --ranked-output "$ROOT/top_offers.json" \
+  --board-output "$ROOT/mobile_site_local/board.json" \
+  --validation-report "$ROOT/top400_validation.json"
 
 PHASE="publication_audit"
 notify running "$PHASE" "يدقق مستقلًا أن المنشور هو الأفضل من كامل الكون المؤهل"
