@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /dz-auto-radar/
+
+Sitemap: https://krt123456.github.io/dz-auto-radar/sitemap.xml
