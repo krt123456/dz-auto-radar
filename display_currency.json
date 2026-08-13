@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-08-13T03:55:31Z",
+  "source": {
+    "name": "ALCES External Portal",
+    "url": "https://alces.douane.gov.dz/api/public/com/main/selectFxrtList",
+    "rate_kind": "external_trade_sell"
+  },
+  "semantic": {
+    "base_currency": "EUR",
+    "display_currency": "DZD",
+    "effective_date": "2026-08-13",
+    "buy_rate": "153.36000",
+    "sell_rate": "153.40390",
+    "rate_scale": 100000,
+    "sell_rate_scaled": 15340390
+  },
+  "semantic_sha256": "efceabdf9f1b5a5a1bd9caf3287771d3c7513e830f59f792b9fab3177bd524ce",
+  "read_count": 2,
+  "evidence": [
+    {
+      "replica": "41.111.157.9",
+      "evidence_file": "evidence/20260813T035531Z-efceabdf9f1b/read-01.json",
+      "bytes": 1992,
+      "raw_sha256": "a0737aea34dc216327083c5698922b8a66f74663b852033f8e15099fb6abab12"
+    },
+    {
+      "replica": "41.111.157.9",
+      "evidence_file": "evidence/20260813T035531Z-efceabdf9f1b/read-02.json",
+      "bytes": 1966,
+      "raw_sha256": "9712ae1567c0b1a1e819d0617a5dca0b2aa9860b69c870cfa3778169389faf8e"
+    }
+  ],
+  "seal": {
+    "algorithm": "sha256",
+    "value": "e86118c2b351761e3926cde3dd50680c7895db578e31639a3aa13b887059a227"
+  }
+}
