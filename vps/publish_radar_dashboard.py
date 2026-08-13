@@ -34,6 +34,10 @@ MAGIC = b"DZAR1"
 PBKDF2_ITERATIONS = 310_000
 ALGORITHM_VERSION = "schengen-observed-peer-value-v7-live-verified"
 CONTRACT_SCHEMA_VERSION = 2
+PUBLICATION_VALIDATION_MAX_AGE_HOURS = 6
+PUBLICATION_VALIDATION_MAX_AGE = timedelta(
+    hours=PUBLICATION_VALIDATION_MAX_AGE_HOURS
+)
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
@@ -159,6 +163,28 @@ def parsed_utc(value: Any) -> datetime | None:
     if canonical is None:
         return None
     return datetime.fromisoformat(canonical)
+
+
+def require_publishable_validation(
+    validation: Any, *, now: datetime | None = None,
+) -> datetime:
+    """Reject evidence the dashboard would already present as stale."""
+    if not isinstance(validation, dict):
+        raise RuntimeError("board validation evidence is invalid or incomplete")
+    generated = parsed_utc(validation.get("generated_at"))
+    if generated is None:
+        raise RuntimeError("board validation evidence is invalid or incomplete")
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        raise ValueError("publication freshness time must be timezone-aware")
+    age = current.astimezone(UTC) - generated
+    if age < timedelta(0):
+        raise RuntimeError("board validation evidence is timestamped in the future")
+    if age >= PUBLICATION_VALIDATION_MAX_AGE:
+        raise RuntimeError(
+            "board validation evidence is stale; re-validate before publishing"
+        )
+    return generated
 
 
 def canonical_id(offer: dict[str, Any]) -> str:
@@ -477,15 +503,7 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         or validation.get("checked") != len(offers)
     ):
         raise RuntimeError("board validation evidence is invalid or incomplete")
-    validation_generated = parsed_utc(validation["generated_at"])
-    now = datetime.now(UTC).replace(microsecond=0)
-    validation_age = now - validation_generated
-    if validation_age < timedelta(0):
-        raise RuntimeError("board validation evidence is timestamped in the future")
-    if validation_age > timedelta(hours=lifecycle.PUBLIC_VALIDITY_HOURS):
-        raise RuntimeError(
-            "board validation evidence is stale; re-validate before publishing"
-        )
+    require_publishable_validation(validation)
     candidates = normalized_candidates(offers)
     if not candidates:
         raise RuntimeError("no eligible offers survived publication checks")
@@ -667,6 +685,10 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
     """Require the independent, same-generation audit before Git mutation."""
     manifest = load_json(args.audit_manifest)
     audit = load_json(args.selection_audit)
+    board = load_json(args.board)
+    if sha256_file(args.board) != manifest.get("source_board_sha256"):
+        raise RuntimeError("publication manifest does not match the current board")
+    require_publishable_validation(board.get("validation"))
     if audit.get("result") != "BEST_SELECTION_AUDIT_PASS":
         raise RuntimeError("selection audit did not pass")
     for key in (

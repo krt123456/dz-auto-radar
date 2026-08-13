@@ -494,7 +494,7 @@ function boot(payload){
   const boardTimestamp=String(payload.board_built_at_utc||"");
   VERIFICATION_AT_MS=timestampMs(payload.validation&&payload.validation.generated_at);
   const validationAge=VERIFICATION_AT_MS===null?null:Date.now()-VERIFICATION_AT_MS;
-  VERIFICATION_RECENT=validationAge!==null&&validationAge>=-5*60*1000&&validationAge<=LIVE_VERIFICATION_MAX_AGE_MS;
+  VERIFICATION_RECENT=validationAge!==null&&validationAge>=-5*60*1000&&validationAge<LIVE_VERIFICATION_MAX_AGE_MS;
   DATA_GENERATED_AT_MS=timestampMs(dataTimestamp);
   const dataAge=DATA_GENERATED_AT_MS===null?null:Date.now()-DATA_GENERATED_AT_MS;
   DATA_FRESH=dataAge!==null&&dataAge>=-5*60*1000&&dataAge<=DATA_MAX_AGE_MS;

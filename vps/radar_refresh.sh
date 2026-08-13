@@ -175,7 +175,7 @@ xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --verified-target "$VERIFIED_TARGET" \
   --checkpoint-batch-size "${RADAR_VALIDATION_CHECKPOINT_BATCH_SIZE:-1000}" \
   --checkpoint-interval-sec "${RADAR_VALIDATION_CHECKPOINT_INTERVAL_SEC:-120}" \
-  --checkpoint-max-age-sec "${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-25200}" \
+  --checkpoint-max-age-sec "${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-21600}" \
   --limit "$VERIFY_LIMIT" --workers "${RADAR_VERIFY_WORKERS:-24}" \
   --timeout-sec "${RADAR_VERIFY_TIMEOUT:-8}" \
   --browser-fallback \

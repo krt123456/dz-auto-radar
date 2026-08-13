@@ -365,7 +365,7 @@ class PipelineTest(unittest.TestCase):
     def test_publisher_rejects_stale_missing_or_future_validation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = self.write_v7_fixture(Path(directory))
-            freshness = lifecycle.PUBLIC_VALIDITY_HOURS
+            freshness = publisher.PUBLICATION_VALIDATION_MAX_AGE_HOURS
 
             def with_generated_at(generated_at):
                 board = copy.deepcopy(fixture["board"])
@@ -402,12 +402,64 @@ class PipelineTest(unittest.TestCase):
                     with_generated_at(generated_at)
                     with self.assertRaises(RuntimeError):
                         publisher.build_payload(fixture["args"])
-            exact = (
-                datetime.now(UTC) - timedelta(hours=freshness)
+            just_under = (
+                datetime.now(UTC) - timedelta(hours=freshness) + timedelta(seconds=1)
             ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-            with_generated_at(exact)
+            with_generated_at(just_under)
             payload, _ = publisher.build_payload(fixture["args"])
             self.assertEqual(payload["published_offer_count"], 10)
+
+    def test_publication_freshness_boundaries_fail_closed(self) -> None:
+        now = datetime(2026, 8, 13, 20, 0, 0, tzinfo=UTC)
+
+        def validation(age: timedelta) -> dict[str, str]:
+            generated = now - age
+            return {
+                "generated_at": generated.isoformat().replace("+00:00", "Z")
+            }
+
+        publisher.require_publishable_validation(
+            validation(publisher.PUBLICATION_VALIDATION_MAX_AGE - timedelta(microseconds=1)),
+            now=now,
+        )
+        for age in (
+            publisher.PUBLICATION_VALIDATION_MAX_AGE,
+            publisher.PUBLICATION_VALIDATION_MAX_AGE + timedelta(microseconds=1),
+        ):
+            with self.subTest(age=age):
+                with self.assertRaisesRegex(RuntimeError, "stale"):
+                    publisher.require_publishable_validation(validation(age), now=now)
+        with self.assertRaisesRegex(RuntimeError, "future"):
+            publisher.require_publishable_validation(
+                validation(timedelta(microseconds=-1)), now=now,
+            )
+
+    def test_push_only_rechecks_board_freshness_before_git_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.write_v7_fixture(Path(directory))
+            board = copy.deepcopy(fixture["board"])
+            board["validation"]["generated_at"] = (
+                datetime.now(UTC)
+                - publisher.PUBLICATION_VALIDATION_MAX_AGE
+                - timedelta(seconds=1)
+            ).isoformat().replace("+00:00", "Z")
+            fixture["board_path"].write_text(json.dumps(board), encoding="utf-8")
+            fixture["manifest"].write_text(
+                json.dumps(
+                    {
+                        "source_board_sha256": publisher.sha256_file(
+                            fixture["board_path"]
+                        )
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fixture["audit"].write_text(
+                json.dumps({"result": "BEST_SELECTION_AUDIT_PASS"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "stale"):
+                publisher.enforce_publication_audit(fixture["args"])
 
     def test_publisher_and_auditor_reject_wrong_board_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -614,12 +666,25 @@ process.stdout.write("DASHBOARD_CONTRACT_PASS");
         self.assertIn('--verified-target "$VERIFIED_TARGET"', refresh)
         self.assertIn('${RADAR_VALIDATION_CHECKPOINT_BATCH_SIZE:-1000}', refresh)
         self.assertIn('${RADAR_VALIDATION_CHECKPOINT_INTERVAL_SEC:-120}', refresh)
-        self.assertIn('${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-25200}', refresh)
+        self.assertIn('${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-21600}', refresh)
         self.assertIn('--prepare-only --top-n "$VERIFIED_TARGET"', refresh)
         self.assertIn('--output "$AUDIT" --top-n "$VERIFIED_TARGET"', refresh)
         self.assertIn("capture_alces_fx.py", refresh)
         self.assertIn("RADAR_FX_CAPTURE_SKIPPED", refresh)
         self.assertIn("sectigo-public-server-authentication-ca-dv-r36.pem", refresh)
+
+        dashboard = (HERE.parent / "index.html").read_text(encoding="utf-8")
+        freshness = re.search(
+            r"LIVE_VERIFICATION_MAX_AGE_MS=(\d+)\*60\*60\*1000", dashboard
+        )
+        self.assertIsNotNone(freshness)
+        self.assertEqual(
+            int(freshness.group(1)),
+            publisher.PUBLICATION_VALIDATION_MAX_AGE_HOURS,
+        )
+        self.assertIn(
+            "validationAge<LIVE_VERIFICATION_MAX_AGE_MS", dashboard
+        )
 
         for legacy in (
             "run_million_planet_cycle.sh",
