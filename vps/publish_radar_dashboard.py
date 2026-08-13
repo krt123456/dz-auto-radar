@@ -38,6 +38,7 @@ DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
 DEFAULT_INDEX = Path("/opt/sonardeals-radar/dashboard/index.html")
+DEFAULT_FX = Path("/var/lib/sonardeals-radar/fx/display_currency.json")
 DEFAULT_AUDIT = Path("/var/lib/sonardeals-radar/latest_selection_manifest.json")
 DEFAULT_SELECTION_AUDIT = Path(
     "/var/lib/sonardeals-radar/latest_selection_audit.json"
@@ -626,6 +627,17 @@ def prepare(args: argparse.Namespace) -> None:
     )
     atomic_write(args.site / "index.html", args.index.read_bytes(), 0o644)
     atomic_write(args.site / "data.enc", encrypt_payload(pin, payload), 0o600)
+    fx_bytes: bytes | None = None
+    try:
+        fx_bytes = args.fx_config.read_bytes() if args.fx_config.is_file() else None
+    except OSError:
+        fx_bytes = None
+    if fx_bytes is not None:
+        if not fx_bytes.strip().startswith(b"{"):
+            raise RuntimeError("fx display-currency config is not a JSON object")
+        atomic_write(args.site / "display_currency.json", fx_bytes, 0o644)
+    else:
+        (args.site / "display_currency.json").unlink(missing_ok=True)
     atomic_write(
         args.audit_manifest,
         (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
@@ -676,13 +688,13 @@ def publish(args: argparse.Namespace) -> None:
         raise RuntimeError(f"publication directory is not a git checkout: {args.site}")
     (args.site / "board.json").unlink(missing_ok=True)
     run_git(args.site, "rm", "--cached", "--ignore-unmatch", "board.json", check=False)
-    run_git(args.site, "add", "--", ".gitignore", "index.html", "data.enc")
+    run_git(args.site, "add", "--", ".gitignore", "index.html", "data.enc", "display_currency.json")
     staged = {
         line.strip()
         for line in run_git(args.site, "diff", "--cached", "--name-only").stdout.splitlines()
         if line.strip()
     }
-    allowed = {".gitignore", "index.html", "data.enc", "board.json"}
+    allowed = {".gitignore", "index.html", "data.enc", "display_currency.json", "board.json"}
     unexpected = staged - allowed
     if unexpected:
         raise RuntimeError(f"refusing to publish unexpected files: {sorted(unexpected)}")
@@ -702,6 +714,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--site", type=Path, default=DEFAULT_SITE)
     parser.add_argument("--pin", type=Path, default=DEFAULT_PIN)
     parser.add_argument("--index", type=Path, default=DEFAULT_INDEX)
+    parser.add_argument("--fx-config", type=Path, default=DEFAULT_FX)
     parser.add_argument("--audit-manifest", type=Path, default=DEFAULT_AUDIT)
     parser.add_argument("--selection-audit", type=Path, default=DEFAULT_SELECTION_AUDIT)
     parser.add_argument("--top-n", type=int, default=10_000)

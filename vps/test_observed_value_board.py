@@ -32,6 +32,10 @@ FORBIDDEN_LONG_ECONOMICS_FIELDS = frozenset(
 
 
 class ObservedValueBoardTest(unittest.TestCase):
+    def test_default_candidate_ceiling_is_ten_thousand(self) -> None:
+        self.assertEqual(observed.DEFAULT_TOP_N, 10_000)
+        self.assertEqual(observed.MAX_TOP_N, 10_000)
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

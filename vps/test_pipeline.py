@@ -542,6 +542,11 @@ process.stdout.write("DASHBOARD_CONTRACT_PASS");
         self.assertLess(builder_calls[1], validation)
         self.assertLess(validation, sealer)
         self.assertLess(sealer, builder_calls[2])
+        self.assertEqual(refresh.count("--top-n 10000"), 2)
+        self.assertIn('${RADAR_BROWSER_VERIFY_LIMIT:-10000}', refresh)
+        self.assertIn("capture_alces_fx.py", refresh)
+        self.assertIn("RADAR_FX_CAPTURE_SKIPPED", refresh)
+        self.assertIn("sectigo-public-server-authentication-ca-dv-r36.pem", refresh)
 
         for legacy in (
             "run_million_planet_cycle.sh",

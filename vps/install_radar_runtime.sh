@@ -43,6 +43,12 @@ install -m 0755 "$SOURCE/build_schengen_lake.py" /opt/sonardeals-radar/build_sch
 install -m 0644 "$SOURCE/listing_availability.py" /opt/sonardeals-radar/listing_availability.py
 install -m 0644 "$SOURCE/listing_availability.py" "$ROOT/listing_availability.py"
 install -m 0755 "$SOURCE/validate_top400.py" "$ROOT/validate_top400.py"
+install -m 0755 "$SOURCE/capture_alces_fx.py" /opt/sonardeals-radar/capture_alces_fx.py
+install -d -m 0755 /opt/sonardeals-radar/certs
+if [[ -f "$SOURCE/certs/sectigo-public-server-authentication-ca-dv-r36.pem" ]]; then
+  install -m 0644 "$SOURCE/certs/sectigo-public-server-authentication-ca-dv-r36.pem" \
+    /opt/sonardeals-radar/certs/sectigo-public-server-authentication-ca-dv-r36.pem
+fi
 install -d -m 0755 /opt/sonardeals-radar/dashboard
 if [[ -f "$SOURCE/dashboard/index.html" ]]; then
   DASHBOARD_INDEX="$SOURCE/dashboard/index.html"

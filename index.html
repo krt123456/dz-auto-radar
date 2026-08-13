@@ -185,18 +185,18 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <select class="f" id="fy" aria-label="السنة"><option value="">كل السنوات</option></select>
       <select class="f" id="fp" aria-label="نطاق سعر الإعلان">
         <option value="">كل الأسعار</option>
-        <option value="0-10000">حتى 10,000 €</option>
-        <option value="10000-15000">10—15 ألف €</option>
-        <option value="15000-20000">15—20 ألف €</option>
-        <option value="20000-30000">20—30 ألف €</option>
-        <option value="30000-999999">فوق 30 ألف €</option>
+        <option value="0-10000">حتى 1.5 مليون دج</option>
+        <option value="10000-15000">1.5 — 2.3 مليون دج</option>
+        <option value="15000-20000">2.3 — 3.1 مليون دج</option>
+        <option value="20000-30000">3.1 — 4.6 مليون دج</option>
+        <option value="30000-999999">فوق 4.6 مليون دج</option>
       </select>
       <select class="f" id="fs" aria-label="ترتيب النتائج">
         <option value="ranked">✨ ترتيب المقارنة الأصلي</option>
         <option value="discount">📉 أكبر خصم محافظ</option>
-        <option value="saving">💶 أكبر فرق باليورو</option>
+        <option value="saving">💰 أكبر فرق بالمبلغ</option>
         <option value="median">📊 أكبر فرق عن الوسيط</option>
-        <option value="price">💶 الأرخص سعراً</option>
+        <option value="price">💰 الأرخص سعراً</option>
         <option value="year">🗓️ الأحدث سنة</option>
         <option value="km">🛣️ الأقل كيلومتراً</option>
         <option value="recent">🕒 الأحدث رصدًا</option>
@@ -215,6 +215,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       </label>
     </div>
     <div class="count" id="count" role="status" aria-live="polite"></div>
+    <div class="count" id="fxnote" role="status" aria-live="polite"></div>
   </section>
 
   <div id="loading" role="status"><div class="spin" aria-hidden="true"></div>جاري تحميل المقارنات…</div>
@@ -251,6 +252,42 @@ const percentBasisPoints=value=>{
   return Number.isFinite(scaled)&&Math.abs(scaled-rounded)<=1e-9?rounded:NaN;
 };
 const fmtEu=v=>nf.format(Math.round(finiteNumber(v)))+" €";
+let FX=null;
+const fmtDzd=v=>nf.format(Math.round(finiteNumber(v)*FX.sell))+" دج";
+const fmtMoney=v=>FX?fmtDzd(v):fmtEu(v);
+const dzdBoundLabel=million=>nf.format(Math.round(million*100)/100)+" مليون دج";
+function applyFxPriceLabels(){
+  const select=$("fp");if(!select)return;
+  if(!FX||!(FX.sell>0)||FX.scale<=0)return;
+  const rate=FX.sell;
+  for(const option of select.options){
+    const value=String(option.value||""),bounds=value.split("-").map(Number);
+    if(value===""||bounds.length!==2||!bounds.every(Number.isFinite))continue;
+    const from=Math.max(0,bounds[0]*rate)/1000000,to=bounds[1]*rate/1000000;
+    option.textContent=from===0?`حتى ${dzdBoundLabel(to)}`:`${dzdBoundLabel(from)} — ${dzdBoundLabel(to)}`;
+  }
+}
+async function loadFx(){
+  try{
+    const response=await fetch("display_currency.json",{cache:"no-cache"});
+    if(!response.ok)throw new Error("http_"+response.status);
+    const config=await response.json();
+    const sell=Number(config&&config.semantic&&config.semantic.sell_rate);
+    const scale=Number(config&&config.semantic&&config.semantic.rate_scale);
+    if(!Number.isFinite(sell)||sell<=0||!Number.isInteger(scale)||scale<=0)throw new Error("rate");
+    FX={sell,scale,effective:String(config.semantic.effective_date||"").trim()};
+  }catch(error){FX=null;}
+  const note=$("fxnote");
+  if(note){
+    if(FX){
+      note.textContent=`سعر الصرف الجمركي: 1 € = ${nf.format(Math.round(FX.sell*100)/100)} دج`+(FX.effective?` — نافذ ${FX.effective}`:" — المصدر: الجمارك الجزائرية ALCES");
+    }else{
+      note.textContent="تعذر جلب سعر الصرف الجمركي؛ تُعرض المبالغ باليورو مؤقتًا.";
+    }
+  }
+  applyFxPriceLabels();
+  if(DATA.length)apply();
+}
 const fmtPct=v=>pctf.format(finiteNumber(v))+"%";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const safeUrl=v=>{try{
@@ -571,16 +608,16 @@ function card(o){
     </div>
     <h2 class="title" title="${esc(o.t)}">${esc(o.t)}</h2>
     <div class="saving">
-      <strong>${fmtEu(o.sv)}</strong><span>أقل من الربع الأدنى لنظرائه</span>
+      <strong>${fmtMoney(o.sv)}</strong><span>أقل من الربع الأدنى لنظرائه</span>
     </div>
     <div class="discounts">
       <div class="metric">الخصم المحافظ عن الربع الأدنى<strong>${fmtPct(o.sp)}</strong></div>
       <div class="metric">الخصم عن وسيط النظراء<strong>${fmtPct(o.dp)}</strong></div>
     </div>
     <div class="meta">
-      <div>💶 سعر الإعلان <b>${fmtEu(o.p)}</b></div>
-      <div>◼ الربع الأدنى للنظراء <b>${fmtEu(o.q1)}</b></div>
-      <div>◉ وسيط النظراء <b>${fmtEu(o.mp)}</b></div>
+      <div>💰 سعر الإعلان <b>${fmtMoney(o.p)}</b></div>
+      <div>◼ الربع الأدنى للنظراء <b>${fmtMoney(o.q1)}</b></div>
+      <div>◉ وسيط النظراء <b>${fmtMoney(o.mp)}</b></div>
       <div>🗓️ السنة <b>${nf.format(o.y)}</b></div>
       <div>🛣️ العداد <b>${nf.format(o.km)} كم</b></div>
       <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
@@ -668,6 +705,7 @@ async function startRefresh(mode){
 }
 $("refreshBtn").onclick=()=>startRefresh("smart");
 $("fullRefreshBtn").onclick=()=>startRefresh("full");
+loadFx();
 readRefreshStatus();
 setInterval(readRefreshStatus,60000);
 </script>

@@ -117,13 +117,21 @@ else
     --input-csv "$ROOT/live_offers.csv" --db "$ROOT/universe_offers.sqlite"
 fi
 
+PHASE="fx"
+notify running "$PHASE" "يجلب سعر الصرف الجمركي لليورو (اختياري، لا يوقف النشر)"
+python3 "/opt/sonardeals-radar/capture_alces_fx.py" \
+  --config "$STATE/fx/display_currency.json" \
+  --intermediate "/opt/sonardeals-radar/certs/sectigo-public-server-authentication-ca-dv-r36.pem" \
+  || echo "RADAR_FX_CAPTURE_SKIPPED keeping the last sealed rate"
+
 PHASE="ranking"
 notify running "$PHASE" "يبني مقارنة سعرية مرصودة من لقطة ثابتة للكون المؤهل"
 python3 "$RANKER" \
   --database "$ROOT/universe_offers.sqlite" \
   --ranked-output "$ROOT/top_offers.json" \
   --board-output "$ROOT/mobile_site_local/board.json" \
-  --validation-report "$ROOT/top400_validation.json"
+  --validation-report "$ROOT/top400_validation.json" \
+  --top-n 10000
 
 PHASE="validation"
 notify running "$PHASE" "يفحص الروابط الأعلى ويستبعد المؤكد ميتًا"
@@ -139,7 +147,7 @@ xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --limit "$VERIFY_LIMIT" --workers "${RADAR_VERIFY_WORKERS:-24}" \
   --timeout-sec "${RADAR_VERIFY_TIMEOUT:-8}" \
   --browser-fallback \
-  --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-3000}" \
+  --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-10000}" \
   --browser-workers "${RADAR_BROWSER_VERIFY_WORKERS:-8}" \
   --browser-timeout-sec "${RADAR_BROWSER_VERIFY_TIMEOUT:-30}"
 python3 "$VALIDATION_SEALER" \
@@ -149,7 +157,8 @@ python3 "$RANKER" \
   --database "$ROOT/universe_offers.sqlite" \
   --ranked-output "$ROOT/top_offers.json" \
   --board-output "$ROOT/mobile_site_local/board.json" \
-  --validation-report "$ROOT/top400_validation.json"
+  --validation-report "$ROOT/top400_validation.json" \
+  --top-n 10000
 
 PHASE="publication_audit"
 notify running "$PHASE" "يدقق مستقلًا أن المنشور هو الأفضل من كامل الكون المؤهل"
