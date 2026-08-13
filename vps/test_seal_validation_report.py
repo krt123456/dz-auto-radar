@@ -27,6 +27,9 @@ class SealValidationReportTests(unittest.TestCase):
             "algorithm": sealer.ALGORITHM,
             "data_generated_at_utc": "2026-08-11T20:00:00+00:00",
             "snapshot_eligible_sha256": "a" * 64,
+            "saved_top_rows": 2,
+            "ranked_candidate_rows": 2,
+            "ranking_complete": True,
             "offers": [
                 {
                     "u": "https://one.example/listing/1?lang=de",
@@ -45,13 +48,28 @@ class SealValidationReportTests(unittest.TestCase):
             "input_updated_at": self.board["data_generated_at_utc"],
             "generated_at": "2026-08-11T20:01:00Z",
             "checked": 2,
+            "ranked_pool_count": 2,
+            "verified_target": 1,
+            "direct_attempted_count": 2,
+            "browser_target_count": 2,
+            "browser_attempted_count": 2,
+            "target_reached": True,
+            "pool_exhausted": True,
+            "ranked_candidate_count": 2,
+            "ranked_universe_exhausted": True,
+            "full_input_coverage": True,
             "counts": {"verified": 1, "dead": 0, "unknown": 1},
             "results": [
-                {"url": "https://two.example/listing/2", "status": "unknown"},
+                {
+                    "url": "https://two.example/listing/2",
+                    "status": "unknown",
+                    "direct_reason": "http_200_listing_identity_unproven",
+                },
                 {
                     "url": "https://one.example/listing/1?lang=de",
                     "status": "verified",
                     "http_status": 200,
+                    "direct_reason": "http_200_listing_identity_unproven",
                 },
             ],
         }

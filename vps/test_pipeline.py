@@ -5,6 +5,7 @@ import copy
 import csv
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -351,6 +352,15 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(report["same_generation_verified_only"])
             self.assertEqual(report["confirmed_dead_or_lease_like_published"], 0)
             self.assertEqual(report["unsupported_economics_published"], 0)
+            payload, _ = publisher.build_payload(fixture["args"])
+            self.assertEqual(
+                payload["displayed_country_count"],
+                len({offer["c"] for offer in payload["offers"]}),
+            )
+            self.assertEqual(
+                payload["displayed_source_count"],
+                len({offer["s"] for offer in payload["offers"]}),
+            )
 
     def test_publisher_rejects_stale_missing_or_future_validation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -460,6 +470,61 @@ class PipelineTest(unittest.TestCase):
 
 
 class RuntimeWiringTest(unittest.TestCase):
+    def test_refresh_resumes_validation_without_rewriting_checkpoint_inputs(self) -> None:
+        refresh = HERE / "radar_refresh.sh"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / "state" / "runtime"
+            board = root / "car" / "mobile_site_local" / "board.json"
+            ranked = root / "car" / "top_offers.json"
+            bin_dir = root / "bin"
+            calls = root / "calls.log"
+            runtime.mkdir(parents=True)
+            board.parent.mkdir(parents=True)
+            bin_dir.mkdir()
+            board.write_text('{"offers":[{"u":"https://example.test/1"}]}', encoding="utf-8")
+            ranked.write_text('{"offers":[{"u":"https://example.test/1"}]}', encoding="utf-8")
+            (runtime / "top400_validation.checkpoint.json").write_text(
+                '{"checkpoint":"fixture"}', encoding="utf-8"
+            )
+            python_stub = bin_dir / "python3"
+            python_stub.write_text(
+                '#!/bin/sh\nprintf "python3 %s\\n" "$*" >> "$RADAR_TEST_CALLS"\n',
+                encoding="utf-8",
+            )
+            xvfb_stub = bin_dir / "xvfb-run"
+            xvfb_stub.write_text(
+                '#!/bin/sh\nprintf "xvfb-run %s\\n" "$*" >> "$RADAR_TEST_CALLS"\nexit 42\n',
+                encoding="utf-8",
+            )
+            python_stub.chmod(0o755)
+            xvfb_stub.chmod(0o755)
+            environment = {
+                **os.environ,
+                "PATH": f"{bin_dir}:{os.environ['PATH']}",
+                "RADAR_TEST_CALLS": str(calls),
+                "RADAR_CAR_ROOT": str(root / "car"),
+                "RADAR_STATE_DIR": str(root / "state"),
+                "RADAR_REFRESH_LOCK_FILE": str(root / "refresh.lock"),
+                "RADAR_RANKER": str(root / "ranker.py"),
+                "RADAR_VALIDATION_SEALER": str(root / "sealer.py"),
+            }
+            result = subprocess.run(
+                ["bash", str(refresh), "smart", "scheduled-resume-test"],
+                text=True,
+                capture_output=True,
+                check=False,
+                env=environment,
+            )
+            invoked = calls.read_text(encoding="utf-8")
+            self.assertEqual(result.returncode, 42, result.stdout + result.stderr)
+            self.assertIn("RADAR_VALIDATION_RESUME", result.stdout)
+            self.assertIn("--capability-check", invoked)
+            self.assertIn("xvfb-run -a python3", invoked)
+            self.assertNotIn("--database", invoked)
+            self.assertNotIn("run_parallel_smart_harvest", invoked)
+            self.assertNotIn("capture_alces_fx", invoked)
+
     def test_real_dashboard_accepts_python_half_even_basis_points(self) -> None:
         html = (HERE.parent / "index.html").read_text(encoding="utf-8")
         match = re.search(
@@ -542,8 +607,16 @@ process.stdout.write("DASHBOARD_CONTRACT_PASS");
         self.assertLess(builder_calls[1], validation)
         self.assertLess(validation, sealer)
         self.assertLess(sealer, builder_calls[2])
-        self.assertEqual(refresh.count("--top-n 10000"), 2)
-        self.assertIn('${RADAR_BROWSER_VERIFY_LIMIT:-10000}', refresh)
+        self.assertEqual(refresh.count('--top-n "$RANKED_POOL_LIMIT"'), 2)
+        self.assertIn('${RADAR_RANKED_POOL_LIMIT:-60000}', refresh)
+        self.assertIn('${RADAR_VERIFIED_TARGET:-10000}', refresh)
+        self.assertIn('${RADAR_BROWSER_VERIFY_LIMIT:-$RANKED_POOL_LIMIT}', refresh)
+        self.assertIn('--verified-target "$VERIFIED_TARGET"', refresh)
+        self.assertIn('${RADAR_VALIDATION_CHECKPOINT_BATCH_SIZE:-1000}', refresh)
+        self.assertIn('${RADAR_VALIDATION_CHECKPOINT_INTERVAL_SEC:-120}', refresh)
+        self.assertIn('${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-25200}', refresh)
+        self.assertIn('--prepare-only --top-n "$VERIFIED_TARGET"', refresh)
+        self.assertIn('--output "$AUDIT" --top-n "$VERIFIED_TARGET"', refresh)
         self.assertIn("capture_alces_fx.py", refresh)
         self.assertIn("RADAR_FX_CAPTURE_SKIPPED", refresh)
         self.assertIn("sectigo-public-server-authentication-ca-dv-r36.pem", refresh)

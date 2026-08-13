@@ -49,8 +49,11 @@ DEFAULT_MIN_PEER_COUNTRIES = 2
 DEFAULT_SOURCE_SAMPLE_CAP = 25
 DEFAULT_MAX_DISPERSION = 0.35
 DEFAULT_MIN_MEDIAN_RATIO = 0.60
-DEFAULT_TOP_N = 10_000
-MAX_TOP_N = 10_000
+# The ranked pool is deliberately larger than the public 10,000-offer target.
+# Liveness is established after ranking, so dead or indeterminate rows near the
+# top must not prevent lower-ranked live offers from filling the public board.
+DEFAULT_TOP_N = 60_000
+MAX_TOP_N = 100_000
 MAX_CSV_FIELD_BYTES = 64 * 1024 * 1024
 csv.field_size_limit(min(MAX_CSV_FIELD_BYTES, os.sys.maxsize))
 
@@ -579,6 +582,7 @@ def load_validation(
     expected_snapshot_sha256: str,
     expected_offer_fields_sha256: str,
     expected_urls: list[str],
+    expected_ranked_candidate_rows: int,
 ) -> tuple[dict[str, int], dict[str, Any]]:
     if not path.exists():
         return {}, {}
@@ -625,11 +629,54 @@ def load_validation(
         status_counts[status] += 1
     if seen_urls != expected_url_set:
         return {}, {}
+    verified_target = payload.get("verified_target")
+    target_reached = payload.get("target_reached")
+    pool_exhausted = payload.get("pool_exhausted")
+    ranked_pool_count = payload.get("ranked_pool_count")
+    direct_attempted_count = payload.get("direct_attempted_count")
+    browser_target_count = payload.get("browser_target_count")
+    browser_attempted_count = payload.get("browser_attempted_count")
+    ranked_candidate_count = payload.get("ranked_candidate_count")
+    ranked_universe_exhausted = payload.get("ranked_universe_exhausted")
+    full_input_coverage = payload.get("full_input_coverage")
+    expected_universe_exhausted = expected_ranked_candidate_rows <= len(results)
+    if (
+        type(ranked_pool_count) is not int
+        or ranked_pool_count != len(results)
+        or type(verified_target) is not int
+        or verified_target < 1
+        or type(direct_attempted_count) is not int
+        or direct_attempted_count != len(results)
+        or type(browser_target_count) is not int
+        or type(browser_attempted_count) is not int
+        or not (0 <= browser_attempted_count == browser_target_count <= len(results))
+        or type(target_reached) is not bool
+        or type(pool_exhausted) is not bool
+        or target_reached != (status_counts["verified"] >= verified_target)
+        or not (target_reached or pool_exhausted)
+        or type(ranked_candidate_count) is not int
+        or ranked_candidate_count != expected_ranked_candidate_rows
+        or type(ranked_universe_exhausted) is not bool
+        or ranked_universe_exhausted != expected_universe_exhausted
+        or full_input_coverage is not True
+        or (pool_exhausted and not ranked_universe_exhausted)
+    ):
+        return {}, {}
     return verification, {
         "schema_version": 1,
         "generated_at": payload.get("generated_at"),
         "checked": len(results),
         "counts": {status: status_counts[status] for status in states},
+        "ranked_pool_count": ranked_pool_count,
+        "verified_target": verified_target,
+        "direct_attempted_count": direct_attempted_count,
+        "browser_target_count": browser_target_count,
+        "browser_attempted_count": browser_attempted_count,
+        "target_reached": target_reached,
+        "pool_exhausted": pool_exhausted,
+        "ranked_candidate_count": ranked_candidate_count,
+        "ranked_universe_exhausted": ranked_universe_exhausted,
+        "full_input_coverage": full_input_coverage,
         "input_updated_at": expected_timestamp,
         "input_algorithm": expected_algorithm,
         "input_snapshot_sha256": expected_snapshot_sha256,
@@ -750,6 +797,7 @@ def build(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
             expected_snapshot_sha256=snapshot_eligible_sha256,
             expected_offer_fields_sha256=offer_fields_sha256,
             expected_urls=[offer["u"] for offer in provisional_compacted],
+            expected_ranked_candidate_rows=ranked_count,
         )
         compacted = [compact_offer(offer, verification) for offer in top]
         validate_compact_offers(compacted)

@@ -11,6 +11,10 @@ AUDITOR="${RADAR_AUDITOR:-/opt/sonardeals-radar/audit_best_selection.py}"
 LIVE_CONVERGENCE="${RADAR_LIVE_CONVERGENCE:-/opt/sonardeals-radar/audit_live_convergence.py}"
 RANKER="${RADAR_RANKER:-/opt/sonardeals-radar/build_observed_value_board.py}"
 VALIDATION_SEALER="${RADAR_VALIDATION_SEALER:-/opt/sonardeals-radar/seal_validation_report.py}"
+VALIDATION_CHECKPOINT="$STATE/runtime/top400_validation.checkpoint.json"
+REFRESH_LOCK_FILE="${RADAR_REFRESH_LOCK_FILE:-/run/lock/sonardeals-radar-refresh.lock}"
+RANKED_POOL_LIMIT="${RADAR_RANKED_POOL_LIMIT:-60000}"
+VERIFIED_TARGET="${RADAR_VERIFIED_TARGET:-10000}"
 SITE="${RADAR_SITE:-/srv/sonardeals-radar/site}"
 AUDIT="$STATE/latest_selection_audit.json"
 LIVE_AUDIT="$STATE/latest_live_selection_audit.json"
@@ -23,12 +27,20 @@ if [[ "$MODE" != "smart" && "$MODE" != "full" ]]; then
   echo "unsupported refresh mode: $MODE" >&2
   exit 2
 fi
+if [[ ! "$RANKED_POOL_LIMIT" =~ ^[0-9]+$ ]] || (( RANKED_POOL_LIMIT < 1 || RANKED_POOL_LIMIT > 100000 )); then
+  echo "invalid ranked-pool limit: $RANKED_POOL_LIMIT" >&2
+  exit 64
+fi
+if [[ ! "$VERIFIED_TARGET" =~ ^[0-9]+$ ]] || (( VERIFIED_TARGET < 1 || VERIFIED_TARGET > RANKED_POOL_LIMIT )); then
+  echo "invalid verified target: $VERIFIED_TARGET" >&2
+  exit 64
+fi
 if [[ "$JOB_ID" == scheduled* ]]; then
   NOTIFY=0
 fi
 
 mkdir -p "$STATE" "$LOG_DIR"
-exec 9>/run/lock/sonardeals-radar-refresh.lock
+exec 9>"$REFRESH_LOCK_FILE"
 if [[ "$JOB_ID" == scheduled* ]]; then
   if ! flock -n 9; then
     echo "RADAR_REFRESH_SKIPPED_BUSY mode=$MODE job=$JOB_ID" >&2
@@ -86,6 +98,17 @@ if [[ ! "$AVAILABLE_FREE_BYTES" =~ ^[0-9]+$ ]] || (( AVAILABLE_FREE_BYTES < REQU
 fi
 echo "RADAR_DISK_PREFLIGHT_PASS available=$AVAILABLE_FREE_BYTES required=$REQUIRED_FREE_BYTES"
 
+RESUME_VALIDATION=0
+if [[ -e "$VALIDATION_CHECKPOINT" ]]; then
+  if [[ ! -s "$ROOT/mobile_site_local/board.json" || ! -s "$ROOT/top_offers.json" ]]; then
+    echo "validation checkpoint exists but its immutable board inputs are missing" >&2
+    (exit 66)
+  fi
+  RESUME_VALIDATION=1
+  echo "RADAR_VALIDATION_RESUME checkpoint=$VALIDATION_CHECKPOINT; preserving board inputs"
+fi
+
+if (( RESUME_VALIDATION == 0 )); then
 PHASE="harvest"
 notify running "$PHASE" "يجلب الخادم أحدث العروض من المصادر"
 if [[ "${RADAR_SKIP_HARVEST:-0}" == "1" ]]; then
@@ -131,7 +154,11 @@ python3 "$RANKER" \
   --ranked-output "$ROOT/top_offers.json" \
   --board-output "$ROOT/mobile_site_local/board.json" \
   --validation-report "$ROOT/top400_validation.json" \
-  --top-n 10000
+  --top-n "$RANKED_POOL_LIMIT"
+else
+  PHASE="validation_resume"
+  notify running "$PHASE" "يستأنف فحص الروابط من نقطة التحقق المحفوظة"
+fi
 
 PHASE="validation"
 notify running "$PHASE" "يفحص الروابط الأعلى ويستبعد المؤكد ميتًا"
@@ -144,10 +171,15 @@ xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --input "$ROOT/mobile_site_local/board.json" \
   --id-index "$ROOT/top_offers.json" \
   --output-json "$ROOT/top400_validation.json" \
+  --checkpoint "$VALIDATION_CHECKPOINT" \
+  --verified-target "$VERIFIED_TARGET" \
+  --checkpoint-batch-size "${RADAR_VALIDATION_CHECKPOINT_BATCH_SIZE:-1000}" \
+  --checkpoint-interval-sec "${RADAR_VALIDATION_CHECKPOINT_INTERVAL_SEC:-120}" \
+  --checkpoint-max-age-sec "${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-25200}" \
   --limit "$VERIFY_LIMIT" --workers "${RADAR_VERIFY_WORKERS:-24}" \
   --timeout-sec "${RADAR_VERIFY_TIMEOUT:-8}" \
   --browser-fallback \
-  --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-10000}" \
+  --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-$RANKED_POOL_LIMIT}" \
   --browser-workers "${RADAR_BROWSER_VERIFY_WORKERS:-8}" \
   --browser-timeout-sec "${RADAR_BROWSER_VERIFY_TIMEOUT:-30}"
 python3 "$VALIDATION_SEALER" \
@@ -158,12 +190,12 @@ python3 "$RANKER" \
   --ranked-output "$ROOT/top_offers.json" \
   --board-output "$ROOT/mobile_site_local/board.json" \
   --validation-report "$ROOT/top400_validation.json" \
-  --top-n 10000
+  --top-n "$RANKED_POOL_LIMIT"
 
 PHASE="publication_audit"
 notify running "$PHASE" "يدقق مستقلًا أن المنشور هو الأفضل من كامل الكون المؤهل"
-python3 "$PUBLISHER" --root "$ROOT" --site "$SITE" --prepare-only
-python3 "$AUDITOR" --root "$ROOT" --site "$SITE" --output "$AUDIT"
+python3 "$PUBLISHER" --root "$ROOT" --site "$SITE" --prepare-only --top-n "$VERIFIED_TARGET"
+python3 "$AUDITOR" --root "$ROOT" --site "$SITE" --output "$AUDIT" --top-n "$VERIFIED_TARGET"
 
 PHASE="publish"
 notify running "$PHASE" "ينشر النسخة المشفرة بعد اجتياز تدقيق الاختيار"

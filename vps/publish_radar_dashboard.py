@@ -558,6 +558,8 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
             "qualified_universe_offers": len(candidates),
             "published_offer_count": len(selected),
             "verified_live_count": sum(integer(offer.get("v")) == 1 for offer in selected),
+            "displayed_country_count": len({str(offer.get("c") or "") for offer in selected}),
+            "displayed_source_count": len({str(offer.get("s") or "") for offer in selected}),
             "selection_universe_count": len(candidates),
             "selection_algorithm": ALGORITHM_VERSION,
             "selection_candidate_sha256": candidate_hash,

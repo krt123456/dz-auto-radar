@@ -32,9 +32,10 @@ FORBIDDEN_LONG_ECONOMICS_FIELDS = frozenset(
 
 
 class ObservedValueBoardTest(unittest.TestCase):
-    def test_default_candidate_ceiling_is_ten_thousand(self) -> None:
-        self.assertEqual(observed.DEFAULT_TOP_N, 10_000)
-        self.assertEqual(observed.MAX_TOP_N, 10_000)
+    def test_validation_pool_is_larger_than_publication_target(self) -> None:
+        self.assertEqual(observed.DEFAULT_TOP_N, 60_000)
+        self.assertEqual(observed.MAX_TOP_N, 100_000)
+        self.assertGreater(observed.DEFAULT_TOP_N, 10_000)
 
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
@@ -200,6 +201,18 @@ class ObservedValueBoardTest(unittest.TestCase):
             "input_offer_fields_sha256": board["offer_fields_sha256"],
             "generated_at": datetime.now(UTC).isoformat(),
             "checked": len(results),
+            "ranked_pool_count": len(results),
+            "verified_target": 1,
+            "direct_attempted_count": len(results),
+            "browser_target_count": 0,
+            "browser_attempted_count": 0,
+            "target_reached": True,
+            "pool_exhausted": False,
+            "ranked_candidate_count": board["ranked_candidate_rows"],
+            "ranked_universe_exhausted": (
+                board["ranked_candidate_rows"] <= len(results)
+            ),
+            "full_input_coverage": True,
             "counts": {
                 "verified": 1,
                 "dead": 0,

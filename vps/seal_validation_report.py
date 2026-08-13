@@ -180,6 +180,70 @@ def validate_contract(
             f"validation URLs do not exactly cover the board (missing={missing}, extra={extra})"
         )
 
+    counts = validation.get("counts")
+    statuses = ("verified", "dead", "unknown")
+    if (
+        not isinstance(counts, dict)
+        or set(counts) != set(statuses)
+        or any(type(counts.get(status)) is not int or counts[status] < 0 for status in statuses)
+        or sum(counts.values()) != len(results)
+        or any(
+            counts[status] != sum(result.get("status") == status for result in results)
+            for status in statuses
+        )
+    ):
+        raise ContractError("validation status counts do not match results")
+    target = validation.get("verified_target")
+    target_reached = validation.get("target_reached")
+    pool_exhausted = validation.get("pool_exhausted")
+    ranked_candidate_count = validation.get("ranked_candidate_count")
+    ranked_universe_exhausted = validation.get("ranked_universe_exhausted")
+    full_input_coverage = validation.get("full_input_coverage")
+    direct_attempted = validation.get("direct_attempted_count")
+    browser_targets = validation.get("browser_target_count")
+    browser_attempted = validation.get("browser_attempted_count")
+    if (
+        type(validation.get("ranked_pool_count")) is not int
+        or validation["ranked_pool_count"] != len(results)
+        or type(target) is not int
+        or target < 1
+        or type(direct_attempted) is not int
+        or direct_attempted != len(results)
+        or type(browser_targets) is not int
+        or type(browser_attempted) is not int
+        or not (0 <= browser_attempted == browser_targets <= len(results))
+        or type(target_reached) is not bool
+        or type(pool_exhausted) is not bool
+        or target_reached != (counts["verified"] >= target)
+        or not (target_reached or pool_exhausted)
+        or browser_attempted
+        != sum("direct_reason" in result for result in results)
+    ):
+        raise ContractError("validation target/exhaustion evidence is invalid")
+    saved_top_rows = board.get("saved_top_rows")
+    board_ranked_count = board.get("ranked_candidate_rows")
+    expected_universe_exhausted = (
+        board.get("ranking_complete") is True
+        and type(saved_top_rows) is int
+        and saved_top_rows == len(results)
+        and type(board_ranked_count) is int
+        and board_ranked_count <= saved_top_rows
+    )
+    if (
+        full_input_coverage is not True
+        or type(ranked_candidate_count) is not int
+        or ranked_candidate_count != board_ranked_count
+        or type(ranked_universe_exhausted) is not bool
+        or ranked_universe_exhausted != expected_universe_exhausted
+        or (pool_exhausted and not ranked_universe_exhausted)
+    ):
+        raise ContractError("validation does not prove full ranked-universe coverage")
+    if pool_exhausted and any(
+        result.get("status") == "unknown" and "direct_reason" not in result
+        for result in results
+    ):
+        raise ContractError("pool exhaustion leaves browser-eligible unknowns unattempted")
+
     return snapshot, canonical_offer_fields_sha256(offers)
 
 
