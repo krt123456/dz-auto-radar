@@ -18,12 +18,16 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import unicodedata
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import listing_availability as lifecycle
 
 
 MAGIC = b"DZAR1"
@@ -147,6 +151,13 @@ def canonical_timestamp(value: Any) -> str | None:
 
 def valid_timestamp(value: Any) -> bool:
     return canonical_timestamp(value) is not None
+
+
+def parsed_utc(value: Any) -> datetime | None:
+    canonical = canonical_timestamp(value)
+    if canonical is None:
+        return None
+    return datetime.fromisoformat(canonical)
 
 
 def canonical_id(offer: dict[str, Any]) -> str:
@@ -456,6 +467,24 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
     offers = board.get("offers")
     if not isinstance(offers, list) or not offers:
         raise RuntimeError("refusing to publish an empty board")
+    validation = board.get("validation")
+    if (
+        not isinstance(validation, dict)
+        or validation.get("schema_version") != 1
+        or validation.get("input_updated_at") != data_generated_at
+        or not valid_timestamp(validation.get("generated_at"))
+        or validation.get("checked") != len(offers)
+    ):
+        raise RuntimeError("board validation evidence is invalid or incomplete")
+    validation_generated = parsed_utc(validation["generated_at"])
+    now = datetime.now(UTC).replace(microsecond=0)
+    validation_age = now - validation_generated
+    if validation_age < timedelta(0):
+        raise RuntimeError("board validation evidence is timestamped in the future")
+    if validation_age > timedelta(hours=lifecycle.PUBLIC_VALIDITY_HOURS):
+        raise RuntimeError(
+            "board validation evidence is stale; re-validate before publishing"
+        )
     candidates = normalized_candidates(offers)
     if not candidates:
         raise RuntimeError("no eligible offers survived publication checks")

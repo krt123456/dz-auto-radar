@@ -40,6 +40,9 @@ install -m 0755 "$SOURCE/seal_validation_report.py" /opt/sonardeals-radar/seal_v
 install -m 0755 "$SOURCE/radar_control_client.py" /opt/sonardeals-radar/radar_control_client.py
 install -m 0755 "$SOURCE/radar_poller.py" /opt/sonardeals-radar/radar_poller.py
 install -m 0755 "$SOURCE/build_schengen_lake.py" /opt/sonardeals-radar/build_schengen_lake.py
+install -m 0644 "$SOURCE/listing_availability.py" /opt/sonardeals-radar/listing_availability.py
+install -m 0644 "$SOURCE/listing_availability.py" "$ROOT/listing_availability.py"
+install -m 0755 "$SOURCE/validate_top400.py" "$ROOT/validate_top400.py"
 install -d -m 0755 /opt/sonardeals-radar/dashboard
 if [[ -f "$SOURCE/dashboard/index.html" ]]; then
   DASHBOARD_INDEX="$SOURCE/dashboard/index.html"

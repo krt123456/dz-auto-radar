@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -21,6 +22,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import audit_best_selection as selection_audit
+import listing_availability as lifecycle
 import publish_radar_dashboard as publisher
 
 
@@ -187,6 +189,18 @@ class PipelineTest(unittest.TestCase):
             "updated_utc": timestamp,
             "count": len(offers),
             "scope": "schengen_observed_peer_market",
+            "validation": {
+                "schema_version": 1,
+                "input_updated_at": timestamp,
+                "input_algorithm": V7_ALGORITHM,
+                "input_snapshot_sha256": snapshot_digest,
+                "input_offer_fields_sha256": offer_fields_digest,
+                "generated_at": (
+                    datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                ),
+                "checked": len(offers),
+                "counts": {"verified": 29, "dead": 0, "unknown": 1},
+            },
             "offers": offers,
         }
         ranked = {
@@ -337,6 +351,53 @@ class PipelineTest(unittest.TestCase):
             self.assertTrue(report["same_generation_verified_only"])
             self.assertEqual(report["confirmed_dead_or_lease_like_published"], 0)
             self.assertEqual(report["unsupported_economics_published"], 0)
+
+    def test_publisher_rejects_stale_missing_or_future_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.write_v7_fixture(Path(directory))
+            freshness = lifecycle.PUBLIC_VALIDITY_HOURS
+
+            def with_generated_at(generated_at):
+                board = copy.deepcopy(fixture["board"])
+                board["validation"] = {
+                    **board["validation"],
+                    "generated_at": generated_at,
+                }
+                fixture["board_path"].write_text(json.dumps(board), encoding="utf-8")
+                return board
+
+            for label, generated_at in (
+                ("missing", None),
+                (
+                    "stale",
+                    (
+                        datetime.now(UTC)
+                        - timedelta(hours=freshness, seconds=1)
+                    )
+                    .replace(microsecond=0)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                ),
+                (
+                    "future",
+                    (
+                        datetime.now(UTC) + timedelta(hours=1)
+                    )
+                    .replace(microsecond=0)
+                    .isoformat()
+                    .replace("+00:00", "Z"),
+                ),
+            ):
+                with self.subTest(component="publisher", case=label):
+                    with_generated_at(generated_at)
+                    with self.assertRaises(RuntimeError):
+                        publisher.build_payload(fixture["args"])
+            exact = (
+                datetime.now(UTC) - timedelta(hours=freshness)
+            ).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+            with_generated_at(exact)
+            payload, _ = publisher.build_payload(fixture["args"])
+            self.assertEqual(payload["published_offer_count"], 10)
 
     def test_publisher_and_auditor_reject_wrong_board_contract(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
