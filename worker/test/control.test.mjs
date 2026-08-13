@@ -81,3 +81,48 @@ test("bad signature cannot start a refresh", async () => {
   const response = await worker.fetch(request, env);
   assert.equal(response.status, 401);
 });
+
+test("authenticated updates adopt a new job only after the old job is terminal", async () => {
+  const env = {
+    RADAR_STATE: new MemoryKV(), ALLOWED_ORIGIN: "https://krt123456.github.io",
+    RADAR_CONTROL_KEY_B64: Buffer.alloc(32).toString("base64"),
+    RADAR_INTERNAL_TOKEN: "internal-test-token"
+  };
+  const update = body => worker.fetch(new Request(
+    "https://radar-control.sonardeals.com/internal/update",
+    {
+      method: "POST",
+      headers: {Authorization: "Bearer internal-test-token", "Content-Type": "application/json"},
+      body: JSON.stringify(body)
+    }
+  ), env);
+
+  await env.RADAR_STATE.put("radar:state:v1", JSON.stringify({
+    status: "ok", running: false, job_id: "completed-job",
+    generation_id: "stale-generation", published_offer_count: 9056
+  }));
+  let response = await update({
+    job_id: "executive-job", status: "running", running: true,
+    phase: "validation", mode: "smart", message: "validating"
+  });
+  assert.equal(response.status, 200);
+  let state = await response.json();
+  assert.equal(state.job_id, "executive-job");
+  assert.equal(state.phase, "validation");
+  assert.equal(state.running, true);
+  assert.equal(state.generation_id, undefined);
+  assert.equal(state.published_offer_count, undefined);
+
+  response = await update({
+    job_id: "competing-job", status: "running", running: true,
+    phase: "starting", message: "competing"
+  });
+  assert.equal(response.status, 409);
+  state = await response.json();
+  assert.equal(state.error, "job_mismatch");
+  assert.equal(state.current_job_id, "executive-job");
+
+  const stored = await env.RADAR_STATE.get("radar:state:v1", "json");
+  assert.equal(stored.job_id, "executive-job");
+  assert.equal(stored.phase, "validation");
+});

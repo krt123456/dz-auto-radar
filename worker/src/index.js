@@ -52,6 +52,13 @@ function safePublicState(raw) {
   return state;
 }
 
+function stateIsActive(state) {
+  return Boolean(
+    state &&
+    (state.running || ["pending", "queued", "running"].includes(state.status))
+  );
+}
+
 async function readJson(request, maxBytes = 8192) {
   const length = Number(request.headers.get("Content-Length") || "0");
   if (!Number.isFinite(length) || length < 0 || length > maxBytes) {
@@ -143,7 +150,7 @@ async function handleRefresh(request, env) {
   if (!verification.ok) return responseJson({ok: false, error: verification.error}, 401, env, request);
 
   const state = await getState(env);
-  if (["pending", "queued", "running"].includes(state.status) || state.running) {
+  if (stateIsActive(state)) {
     return responseJson({ok: true, coalesced: true, ...safePublicState(state)}, 202, env, request);
   }
   const completed = Date.parse(state.completed_at || "");
@@ -191,10 +198,19 @@ async function handleInternalUpdate(request, env) {
     return responseJson({ok: false, error: String(error.message || error)}, 400, env, request);
   }
   const previous = await getState(env);
-  if (body.job_id && previous.job_id && body.job_id !== previous.job_id) {
+  const jobMismatch = Boolean(
+    body.job_id && previous.job_id && body.job_id !== previous.job_id
+  );
+  if (jobMismatch && stateIsActive(previous)) {
     return responseJson({ok: false, error: "job_mismatch", current_job_id: previous.job_id}, 409, env, request);
   }
-  const next = {...previous};
+  if (jobMismatch && !["pending", "queued", "running", "ok", "failed", "skipped"].includes(body.status)) {
+    return responseJson({ok: false, error: "job_adoption_requires_status"}, 400, env, request);
+  }
+  // A terminal job must not permanently fence authenticated executive or
+  // scheduled runs. Start clean when adopting a different ID so stale metrics
+  // from its prior generation cannot leak into the new job.
+  const next = jobMismatch ? {} : {...previous};
   for (const key of PUBLIC_STATE_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body, key)) next[key] = body[key];
   }
