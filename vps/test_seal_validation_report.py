@@ -53,6 +53,12 @@ class SealValidationReportTests(unittest.TestCase):
             "direct_attempted_count": 2,
             "browser_target_count": 2,
             "browser_attempted_count": 2,
+            "browser_target_ranks": [1, 2],
+            "browser_attempted_ranks": [1, 2],
+            "selection_frontier_rank": 1,
+            "browser_frontier_target_count": 1,
+            "browser_frontier_attempted_count": 1,
+            "browser_frontier_complete": True,
             "target_reached": True,
             "pool_exhausted": True,
             "ranked_candidate_count": 2,
@@ -61,14 +67,15 @@ class SealValidationReportTests(unittest.TestCase):
             "counts": {"verified": 1, "dead": 0, "unknown": 1},
             "results": [
                 {
-                    "url": "https://two.example/listing/2",
-                    "status": "unknown",
+                    "board_rank": 1,
+                    "url": "https://one.example/listing/1?lang=de",
+                    "status": "verified",
                     "direct_reason": "http_200_listing_identity_unproven",
                 },
                 {
-                    "url": "https://one.example/listing/1?lang=de",
-                    "status": "verified",
-                    "http_status": 200,
+                    "board_rank": 2,
+                    "url": "https://two.example/listing/2",
+                    "status": "unknown",
                     "direct_reason": "http_200_listing_identity_unproven",
                 },
             ],
@@ -132,6 +139,55 @@ class SealValidationReportTests(unittest.TestCase):
             expected_digest.hexdigest(),
         )
         self.assertEqual(stat.S_IMODE(self.validation_path.stat().st_mode), 0o600)
+
+    def test_target_reached_accepts_partial_lower_priority_tail(self) -> None:
+        self.validation["browser_attempted_count"] = 1
+        self.validation["browser_attempted_ranks"] = [1]
+        self.validation["pool_exhausted"] = False
+        del self.validation["results"][1]["direct_reason"]
+        self.write_inputs()
+
+        self.assertEqual(
+            sealer.main(
+                [
+                    "--board",
+                    str(self.board_path),
+                    "--validation",
+                    str(self.validation_path),
+                ]
+            ),
+            0,
+        )
+
+    def test_partial_browser_attempts_below_target_fail_closed(self) -> None:
+        self.validation["browser_attempted_count"] = 1
+        self.validation["browser_attempted_ranks"] = [2]
+        self.validation["target_reached"] = False
+        self.validation["pool_exhausted"] = True
+        self.validation["selection_frontier_rank"] = None
+        self.validation["browser_frontier_target_count"] = 0
+        self.validation["browser_frontier_attempted_count"] = 0
+        self.validation["browser_frontier_complete"] = False
+        self.validation["counts"] = {"verified": 0, "dead": 0, "unknown": 2}
+        self.validation["results"][0]["status"] = "unknown"
+        del self.validation["results"][0]["direct_reason"]
+        self.write_inputs()
+        self.assert_rejected_without_rewrite()
+
+    def test_target_frontier_rejects_unattempted_higher_rank(self) -> None:
+        self.validation["pool_exhausted"] = False
+        self.validation["browser_attempted_count"] = 1
+        self.validation["browser_attempted_ranks"] = [2]
+        self.validation["selection_frontier_rank"] = 2
+        self.validation["browser_frontier_target_count"] = 2
+        self.validation["browser_frontier_attempted_count"] = 1
+        self.validation["browser_frontier_complete"] = False
+        self.validation["results"][0]["status"] = "unknown"
+        self.validation["results"][0].pop("direct_reason")
+        self.validation["results"][1]["status"] = "verified"
+        self.validation["counts"] = {"verified": 1, "dead": 0, "unknown": 1}
+        self.write_inputs()
+        self.assert_rejected_without_rewrite()
 
     def test_retry_normalizes_existing_verification_verdicts(self) -> None:
         self.board["offers"][0]["v"] = 1

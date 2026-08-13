@@ -122,6 +122,16 @@ def canonical_offer_fields_sha256(offers: list[dict[str, Any]]) -> str:
     return digest.hexdigest()
 
 
+def strict_rank_list(value: Any, *, label: str, maximum: int) -> list[int]:
+    if (
+        not isinstance(value, list)
+        or any(type(rank) is not int or not (1 <= rank <= maximum) for rank in value)
+        or value != sorted(set(value))
+    ):
+        raise ContractError(f"{label} must be unique ordered board ranks")
+    return value
+
+
 def validate_contract(
     board: dict[str, Any], validation: dict[str, Any]
 ) -> tuple[str, str]:
@@ -170,6 +180,21 @@ def validate_contract(
         url = result.get("url")
         if not isinstance(url, str):
             raise ContractError(f"validation result {position} has no string URL")
+        if (
+            type(result.get("board_rank")) is not int
+            or result["board_rank"] != position + 1
+            or url != urls[position]
+            or (
+                "direct_reason" in result
+                and (
+                    not isinstance(result["direct_reason"], str)
+                    or not url.startswith("http")
+                )
+            )
+        ):
+            raise ContractError(
+                f"validation result {position} does not match its board rank"
+            )
         result_urls.append(url)
     if len(set(result_urls)) != len(result_urls):
         raise ContractError("validation result URLs must be unique")
@@ -202,6 +227,70 @@ def validate_contract(
     direct_attempted = validation.get("direct_attempted_count")
     browser_targets = validation.get("browser_target_count")
     browser_attempted = validation.get("browser_attempted_count")
+    target_ranks = strict_rank_list(
+        validation.get("browser_target_ranks"),
+        label="browser_target_ranks",
+        maximum=len(results),
+    )
+    attempted_ranks = strict_rank_list(
+        validation.get("browser_attempted_ranks"),
+        label="browser_attempted_ranks",
+        maximum=len(results),
+    )
+    frontier_rank = validation.get("selection_frontier_rank")
+    frontier_targets = validation.get("browser_frontier_target_count")
+    frontier_attempted = validation.get("browser_frontier_attempted_count")
+    frontier_complete = validation.get("browser_frontier_complete")
+    target_rank_set = set(target_ranks)
+    attempted_rank_set = set(attempted_ranks)
+    result_attempted_ranks = {
+        position
+        for position, result in enumerate(results, start=1)
+        if "direct_reason" in result
+    }
+    evidenced_target_ranks = [
+        position
+        for position, result in enumerate(results, start=1)
+        if "direct_reason" in result
+        or (
+            result.get("status") == "unknown"
+            and str(result.get("url") or "").startswith("http")
+        )
+    ]
+    expected_target_ranks = (
+        evidenced_target_ranks[:browser_targets]
+        if type(browser_targets) is int and browser_targets >= 0
+        else []
+    )
+    verified_ranks = [
+        position
+        for position, result in enumerate(results, start=1)
+        if result.get("status") == "verified"
+    ]
+    expected_frontier = (
+        verified_ranks[target - 1]
+        if type(target) is int and target > 0 and len(verified_ranks) >= target
+        else None
+    )
+    expected_frontier_target_ranks = (
+        [rank for rank in target_ranks if rank <= expected_frontier]
+        if expected_frontier is not None
+        else []
+    )
+    expected_frontier_attempted = sum(
+        rank in attempted_rank_set for rank in expected_frontier_target_ranks
+    )
+    expected_frontier_complete = (
+        expected_frontier is not None
+        and expected_frontier_attempted == len(expected_frontier_target_ranks)
+        and all(
+            "direct_reason" in result
+            for position, result in enumerate(results, start=1)
+            if position <= expected_frontier
+            and result.get("status") == "unknown"
+            and str(result.get("url") or "").startswith("http")
+        )
+    )
     if (
         type(validation.get("ranked_pool_count")) is not int
         or validation["ranked_pool_count"] != len(results)
@@ -211,13 +300,24 @@ def validate_contract(
         or direct_attempted != len(results)
         or type(browser_targets) is not int
         or type(browser_attempted) is not int
-        or not (0 <= browser_attempted == browser_targets <= len(results))
+        or browser_targets != len(target_ranks)
+        or browser_attempted != len(attempted_ranks)
+        or not attempted_rank_set.issubset(target_rank_set)
+        or target_ranks != expected_target_ranks
+        or attempted_rank_set != result_attempted_ranks
         or type(target_reached) is not bool
         or type(pool_exhausted) is not bool
         or target_reached != (counts["verified"] >= target)
         or not (target_reached or pool_exhausted)
-        or browser_attempted
-        != sum("direct_reason" in result for result in results)
+        or (target_reached and not expected_frontier_complete)
+        or (expected_frontier is not None and type(frontier_rank) is not int)
+        or frontier_rank != expected_frontier
+        or type(frontier_targets) is not int
+        or frontier_targets != len(expected_frontier_target_ranks)
+        or type(frontier_attempted) is not int
+        or frontier_attempted != expected_frontier_attempted
+        or type(frontier_complete) is not bool
+        or frontier_complete != expected_frontier_complete
     ):
         raise ContractError("validation target/exhaustion evidence is invalid")
     saved_top_rows = board.get("saved_top_rows")
@@ -238,9 +338,15 @@ def validate_contract(
         or (pool_exhausted and not ranked_universe_exhausted)
     ):
         raise ContractError("validation does not prove full ranked-universe coverage")
-    if pool_exhausted and any(
-        result.get("status") == "unknown" and "direct_reason" not in result
-        for result in results
+    if pool_exhausted and (
+        attempted_ranks != target_ranks
+        or target_rank_set != set(evidenced_target_ranks)
+        or any(
+            result.get("status") == "unknown"
+            and str(result.get("url") or "").startswith("http")
+            and "direct_reason" not in result
+            for result in results
+        )
     ):
         raise ContractError("pool exhaustion leaves browser-eligible unknowns unattempted")
 

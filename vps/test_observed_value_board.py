@@ -188,11 +188,16 @@ class ObservedValueBoardTest(unittest.TestCase):
         assert isinstance(offers, list)
         results = [
             {
+                "board_rank": index,
                 "url": offer["u"],
                 "status": "verified" if offer["u"] == verified_url else "unknown",
             }
-            for offer in offers
+            for index, offer in enumerate(offers, start=1)
         ]
+        frontier_rank = next(
+            result["board_rank"] for result in results
+            if result["status"] == "verified"
+        )
         return {
             "schema_version": 1,
             "input_updated_at": board["data_generated_at_utc"],
@@ -206,6 +211,12 @@ class ObservedValueBoardTest(unittest.TestCase):
             "direct_attempted_count": len(results),
             "browser_target_count": 0,
             "browser_attempted_count": 0,
+            "browser_target_ranks": [],
+            "browser_attempted_ranks": [],
+            "selection_frontier_rank": frontier_rank,
+            "browser_frontier_target_count": 0,
+            "browser_frontier_attempted_count": 0,
+            "browser_frontier_complete": True,
             "target_reached": True,
             "pool_exhausted": False,
             "ranked_candidate_count": board["ranked_candidate_rows"],
@@ -220,6 +231,35 @@ class ObservedValueBoardTest(unittest.TestCase):
             },
             "results": results,
         }
+
+    def test_validation_payload_accepts_target_reached_partial_browser_attempts(self) -> None:
+        _, board = observed.build(self.arguments())
+        offers = board["offers"]
+        assert isinstance(offers, list)
+        validation = self.validation_payload(board, offers[0]["u"])
+        validation["browser_target_count"] = 2
+        validation["browser_attempted_count"] = 1
+        validation["browser_target_ranks"] = [1, 2]
+        validation["browser_attempted_ranks"] = [1]
+        validation["browser_frontier_target_count"] = 1
+        validation["browser_frontier_attempted_count"] = 1
+        validation["results"][0]["direct_reason"] = "http_200_listing_identity_unproven"
+        validation["results"][1]["status"] = "unknown"
+        self.validation.write_text(json.dumps(validation), encoding="utf-8")
+
+        verification, summary = observed.load_validation(
+            self.validation,
+            expected_timestamp=board["data_generated_at_utc"],
+            expected_algorithm=board["algorithm"],
+            expected_snapshot_sha256=board["snapshot_eligible_sha256"],
+            expected_offer_fields_sha256=board["offer_fields_sha256"],
+            expected_urls=[offer["u"] for offer in offers],
+            expected_ranked_candidate_rows=board["ranked_candidate_rows"],
+        )
+        self.assertEqual(verification[offers[0]["u"]], 1)
+        self.assertTrue(summary["target_reached"])
+        self.assertEqual(summary["browser_attempted_count"], 1)
+        self.assertEqual(summary["browser_target_count"], 2)
 
     def test_source_excluded_peer_math_and_no_invented_economics(self) -> None:
         ranked, board = observed.build(self.arguments())

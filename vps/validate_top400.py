@@ -419,26 +419,39 @@ async def _browser_verify_unknowns(
     limit: int,
     workers: int,
     timeout_sec: int,
+    verified_target: int = 0,
     target_ranks: list[int] | None = None,
     completed_ranks: set[int] | None = None,
     on_result: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
-    from patchright.async_api import async_playwright
-
-    frozen_targets = set(target_ranks) if target_ranks is not None else None
-    already_completed = completed_ranks or set()
+    if target_ranks is None:
+        effective_target_ranks = [
+            int(item["board_rank"])
+            for item in results
+            if browser_eligible(item)
+        ]
+        if limit > 0:
+            effective_target_ranks = effective_target_ranks[:limit]
+    else:
+        effective_target_ranks = list(target_ranks)
+    frozen_targets = set(effective_target_ranks)
+    attempted_ranks = set(completed_ranks or set())
     targets = [
         (index, item)
         for index, item in enumerate(results)
-        if item.get("status") == "unknown"
-        and str(item.get("url") or "").startswith("http")
-        and (frozen_targets is None or item.get("board_rank") in frozen_targets)
-        and item.get("board_rank") not in already_completed
+        if browser_eligible(item)
+        and item.get("board_rank") in frozen_targets
+        and item.get("board_rank") not in attempted_ranks
     ]
-    if frozen_targets is None and limit > 0:
-        targets = targets[:limit]
-    if not targets:
+    if target_finalization_ready(
+        results=results,
+        verified_target=verified_target,
+        browser_target_ranks=effective_target_ranks,
+        browser_attempted_ranks=attempted_ranks,
+    ) or not targets:
         return results
+
+    from patchright.async_api import async_playwright
 
     executable = browser_executable()
     if not executable:
@@ -454,47 +467,55 @@ async def _browser_verify_unknowns(
             viewport={"width": 1280, "height": 900},
             locale="en-US",
         )
-        semaphore = asyncio.Semaphore(max(1, workers))
-
         async def verify_one(index: int, offer: dict[str, Any]) -> None:
-            async with semaphore:
-                page = await context.new_page()
+            page = await context.new_page()
+            try:
+                response = await page.goto(
+                    offer["url"],
+                    wait_until="domcontentloaded",
+                    timeout=max(1, timeout_sec) * 1000,
+                )
+                await page.wait_for_timeout(750)
                 try:
-                    response = await page.goto(
-                        offer["url"],
-                        wait_until="domcontentloaded",
-                        timeout=max(1, timeout_sec) * 1000,
-                    )
-                    await page.wait_for_timeout(750)
-                    try:
-                        body = await page.locator("body").inner_text(timeout=5_000)
-                    except Exception:
-                        body = ""
-                    classification = classify_browser_page(
-                        offer,
-                        http_status=response.status if response else None,
-                        final_url=page.url,
-                        page_title=await page.title(),
-                        body_text=body[:MAX_BODY_BYTES],
-                    )
-                except Exception as exc:
-                    classification = {
-                        "status": "unknown",
-                        "http_status": None,
-                        "final_url": "",
-                        "reason": f"browser_error:{type(exc).__name__}",
-                    }
-                finally:
-                    await page.close()
-                results[index] = {
-                    **offer,
-                    "direct_reason": offer.get("reason", ""),
-                    **classification,
+                    body = await page.locator("body").inner_text(timeout=5_000)
+                except Exception:
+                    body = ""
+                classification = classify_browser_page(
+                    offer,
+                    http_status=response.status if response else None,
+                    final_url=page.url,
+                    page_title=await page.title(),
+                    body_text=body[:MAX_BODY_BYTES],
+                )
+            except Exception as exc:
+                classification = {
+                    "status": "unknown",
+                    "http_status": None,
+                    "final_url": "",
+                    "reason": f"browser_error:{type(exc).__name__}",
                 }
-                if on_result is not None:
-                    on_result(results[index])
+            finally:
+                await page.close()
+            results[index] = {
+                **offer,
+                "direct_reason": offer.get("reason", ""),
+                **classification,
+            }
+            attempted_ranks.add(int(offer["board_rank"]))
+            if on_result is not None:
+                on_result(results[index])
 
-        await asyncio.gather(*(verify_one(index, offer) for index, offer in targets))
+        batch_size = max(1, workers)
+        for offset in range(0, len(targets), batch_size):
+            batch = targets[offset : offset + batch_size]
+            await asyncio.gather(*(verify_one(index, offer) for index, offer in batch))
+            if target_finalization_ready(
+                results=results,
+                verified_target=verified_target,
+                browser_target_ranks=effective_target_ranks,
+                browser_attempted_ranks=attempted_ranks,
+            ):
+                break
         await context.close()
         await browser.close()
     return results
@@ -506,6 +527,7 @@ def browser_verify_unknowns(
     limit: int,
     workers: int,
     timeout_sec: int,
+    verified_target: int = 0,
     target_ranks: list[int] | None = None,
     completed_ranks: set[int] | None = None,
     on_result: Callable[[dict[str, Any]], None] | None = None,
@@ -516,6 +538,7 @@ def browser_verify_unknowns(
             limit=limit,
             workers=workers,
             timeout_sec=timeout_sec,
+            verified_target=verified_target,
             target_ranks=target_ranks,
             completed_ranks=completed_ranks,
             on_result=on_result,
@@ -660,10 +683,70 @@ def select_browser_target_ranks(
     ranks = [
         int(item["board_rank"])
         for item in direct_results
-        if item.get("status") == "unknown"
-        and str(item.get("url") or "").startswith("http")
+        if browser_eligible(item)
     ]
     return ranks[:limit] if limit > 0 else ranks
+
+
+def browser_eligible(item: dict[str, Any]) -> bool:
+    return (
+        item.get("status") == "unknown"
+        and str(item.get("url") or "").startswith("http")
+    )
+
+
+def selection_frontier_rank(
+    results: list[dict[str, Any]], verified_target: int
+) -> int | None:
+    """Return the rank of the target-th highest-ranked verified offer."""
+    if verified_target < 1:
+        return None
+    verified_ranks = sorted(
+        int(item["board_rank"])
+        for item in results
+        if item.get("status") == "verified"
+    )
+    if len(verified_ranks) < verified_target:
+        return None
+    return verified_ranks[verified_target - 1]
+
+
+def browser_frontier_evidence(
+    *,
+    results: list[dict[str, Any]],
+    verified_target: int,
+    browser_target_ranks: list[int],
+    browser_attempted_ranks: set[int],
+) -> tuple[int | None, int, int, bool]:
+    """Prove every browser candidate through the selection cutoff was attempted."""
+    frontier = selection_frontier_rank(results, verified_target)
+    if frontier is None:
+        return None, 0, 0, False
+    frontier_targets = [rank for rank in browser_target_ranks if rank <= frontier]
+    attempted = sum(rank in browser_attempted_ranks for rank in frontier_targets)
+    unresolved_high_rank = any(
+        int(item["board_rank"]) <= frontier
+        and browser_eligible(item)
+        and "direct_reason" not in item
+        for item in results
+    )
+    complete = attempted == len(frontier_targets) and not unresolved_high_rank
+    return frontier, len(frontier_targets), attempted, complete
+
+
+def target_finalization_ready(
+    *,
+    results: list[dict[str, Any]],
+    verified_target: int,
+    browser_target_ranks: list[int],
+    browser_attempted_ranks: set[int],
+) -> bool:
+    return browser_frontier_evidence(
+        results=results,
+        verified_target=verified_target,
+        browser_target_ranks=browser_target_ranks,
+        browser_attempted_ranks=browser_attempted_ranks,
+    )[3]
 
 
 class CheckpointError(RuntimeError):
@@ -843,8 +926,28 @@ class CheckpointStore:
             )
             if targets != expected_targets:
                 raise CheckpointError("checkpoint browser targets do not match direct results")
-            if stage == "complete" and set(browser_by_rank) != set(targets):
-                raise CheckpointError("complete checkpoint has incomplete browser coverage")
+            if stage == "complete":
+                merged_results = [
+                    browser_by_rank.get(rank, direct_by_rank[rank])
+                    for rank in sorted(direct_by_rank)
+                ]
+                verified_target = self.identity["config"].get("verified_target")
+                if (
+                    type(verified_target) is not int
+                    or verified_target < 1
+                    or (
+                        set(browser_by_rank) != set(targets)
+                        and not target_finalization_ready(
+                            results=merged_results,
+                            verified_target=verified_target,
+                            browser_target_ranks=targets,
+                            browser_attempted_ranks=set(browser_by_rank),
+                        )
+                    )
+                ):
+                    raise CheckpointError(
+                        "complete checkpoint lacks full browser coverage or target frontier"
+                    )
         return {
             "stage": stage,
             "run_started_at": payload["run_started_at"],
@@ -979,6 +1082,8 @@ def build_report(
     direct_attempted_count: int | None = None,
     browser_target_count: int = 0,
     browser_attempted_count: int = 0,
+    browser_target_ranks: list[int] | None = None,
+    browser_attempted_ranks: set[int] | None = None,
     target_reached: bool = False,
     pool_exhausted: bool = False,
     ranked_candidate_count: int | None = None,
@@ -987,6 +1092,23 @@ def build_report(
 ) -> dict[str, Any]:
     statuses = ("verified", "dead", "unknown")
     counts = {status: sum(item["status"] == status for item in results) for status in statuses}
+    frozen_target_ranks = list(browser_target_ranks or [])
+    attempted_ranks = set(browser_attempted_ranks or set())
+    if browser_target_ranks is not None:
+        browser_target_count = len(frozen_target_ranks)
+    if browser_attempted_ranks is not None:
+        browser_attempted_count = len(attempted_ranks)
+    (
+        frontier_rank,
+        frontier_target_count,
+        frontier_attempted_count,
+        frontier_complete,
+    ) = browser_frontier_evidence(
+        results=results,
+        verified_target=verified_target,
+        browser_target_ranks=frozen_target_ranks,
+        browser_attempted_ranks=attempted_ranks,
+    )
     reason_counts = Counter(str(item.get("reason") or "unspecified") for item in results)
     source_status: dict[str, Counter[str]] = defaultdict(Counter)
     for item in results:
@@ -1005,6 +1127,12 @@ def build_report(
         ),
         "browser_target_count": browser_target_count,
         "browser_attempted_count": browser_attempted_count,
+        "browser_target_ranks": frozen_target_ranks,
+        "browser_attempted_ranks": sorted(attempted_ranks),
+        "selection_frontier_rank": frontier_rank,
+        "browser_frontier_target_count": frontier_target_count,
+        "browser_frontier_attempted_count": frontier_attempted_count,
+        "browser_frontier_complete": frontier_complete,
         "target_reached": target_reached,
         "pool_exhausted": pool_exhausted,
         "ranked_candidate_count": (
@@ -1233,6 +1361,7 @@ def main() -> int:
                 limit=args.browser_limit,
                 workers=args.browser_workers,
                 timeout_sec=args.browser_timeout_sec,
+                verified_target=args.verified_target,
                 target_ranks=state["browser_target_ranks"],
                 completed_ranks=set(state["browser_by_rank"]),
                 on_result=browser_completed,
@@ -1256,6 +1385,12 @@ def main() -> int:
         state["browser_target_ranks"]
     )
     target_reached = sum(item["status"] == "verified" for item in results) >= args.verified_target
+    target_ready = target_finalization_ready(
+        results=results,
+        verified_target=args.verified_target,
+        browser_target_ranks=state["browser_target_ranks"],
+        browser_attempted_ranks=set(state["browser_by_rank"]),
+    )
     saved_top_rows = input_payload.get("saved_top_rows")
     ranked_candidate_count = input_payload.get("ranked_candidate_rows")
     full_input_coverage = (
@@ -1282,6 +1417,11 @@ def main() -> int:
         raise CheckpointError(
             "verified target was not reached and the ranked pool was not exhausted"
         )
+    if target_reached and not target_ready:
+        cadence.flush()
+        raise CheckpointError(
+            "verified target was reached without complete high-rank browser frontier"
+        )
     state["stage"] = "complete"
     save_state()
     report = build_report(
@@ -1294,6 +1434,8 @@ def main() -> int:
         direct_attempted_count=len(state["direct_by_rank"]),
         browser_target_count=len(state["browser_target_ranks"]),
         browser_attempted_count=len(state["browser_by_rank"]),
+        browser_target_ranks=state["browser_target_ranks"],
+        browser_attempted_ranks=set(state["browser_by_rank"]),
         target_reached=target_reached,
         pool_exhausted=pool_exhausted,
         ranked_candidate_count=(

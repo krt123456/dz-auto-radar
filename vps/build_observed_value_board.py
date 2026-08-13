@@ -607,19 +607,27 @@ def load_validation(
         return {}, {}
     if len(set(expected_urls)) != len(expected_urls):
         raise RuntimeError("provisional board contains duplicate URLs")
-    expected_url_set = set(expected_urls)
     seen_urls: set[str] = set()
     verification: dict[str, int] = {}
     status_counts: Counter[str] = Counter()
-    for result in results:
+    for position, result in enumerate(results):
         if not isinstance(result, dict):
             return {}, {}
         url = result.get("url")
         status = result.get("status")
         if (
             type(url) is not str
-            or url not in expected_url_set
+            or url != expected_urls[position]
             or url in seen_urls
+            or type(result.get("board_rank")) is not int
+            or result["board_rank"] != position + 1
+            or (
+                "direct_reason" in result
+                and (
+                    not isinstance(result["direct_reason"], str)
+                    or not url.startswith("http")
+                )
+            )
             or type(status) is not str
             or status not in states
         ):
@@ -627,7 +635,7 @@ def load_validation(
         seen_urls.add(url)
         verification[url] = states[status]
         status_counts[status] += 1
-    if seen_urls != expected_url_set:
+    if seen_urls != set(expected_urls):
         return {}, {}
     verified_target = payload.get("verified_target")
     target_reached = payload.get("target_reached")
@@ -636,10 +644,84 @@ def load_validation(
     direct_attempted_count = payload.get("direct_attempted_count")
     browser_target_count = payload.get("browser_target_count")
     browser_attempted_count = payload.get("browser_attempted_count")
+    browser_target_ranks = payload.get("browser_target_ranks")
+    browser_attempted_ranks = payload.get("browser_attempted_ranks")
+    selection_frontier_rank = payload.get("selection_frontier_rank")
+    browser_frontier_target_count = payload.get("browser_frontier_target_count")
+    browser_frontier_attempted_count = payload.get("browser_frontier_attempted_count")
+    browser_frontier_complete = payload.get("browser_frontier_complete")
     ranked_candidate_count = payload.get("ranked_candidate_count")
     ranked_universe_exhausted = payload.get("ranked_universe_exhausted")
     full_input_coverage = payload.get("full_input_coverage")
     expected_universe_exhausted = expected_ranked_candidate_rows <= len(results)
+    rank_lists_valid = (
+        isinstance(browser_target_ranks, list)
+        and isinstance(browser_attempted_ranks, list)
+        and all(type(rank) is int for rank in browser_target_ranks)
+        and all(type(rank) is int for rank in browser_attempted_ranks)
+        and browser_target_ranks == sorted(set(browser_target_ranks))
+        and browser_attempted_ranks == sorted(set(browser_attempted_ranks))
+        and all(1 <= rank <= len(results) for rank in browser_target_ranks)
+        and all(1 <= rank <= len(results) for rank in browser_attempted_ranks)
+    )
+    if not rank_lists_valid:
+        return {}, {}
+    target_rank_set = set(browser_target_ranks)
+    attempted_rank_set = set(browser_attempted_ranks)
+    evidenced_target_ranks = [
+        position
+        for position, result in enumerate(results, start=1)
+        if isinstance(result, dict)
+        and (
+            "direct_reason" in result
+            or (
+                result.get("status") == "unknown"
+                and str(result.get("url") or "").startswith("http")
+            )
+        )
+    ]
+    result_attempted_ranks = {
+        position
+        for position, result in enumerate(results, start=1)
+        if isinstance(result, dict) and "direct_reason" in result
+    }
+    expected_target_ranks = (
+        evidenced_target_ranks[:browser_target_count]
+        if type(browser_target_count) is int and browser_target_count >= 0
+        else []
+    )
+    verified_ranks = [
+        position
+        for position, result in enumerate(results, start=1)
+        if isinstance(result, dict) and result.get("status") == "verified"
+    ]
+    expected_frontier = (
+        verified_ranks[verified_target - 1]
+        if type(verified_target) is int
+        and verified_target > 0
+        and len(verified_ranks) >= verified_target
+        else None
+    )
+    expected_frontier_target_ranks = (
+        [rank for rank in browser_target_ranks if rank <= expected_frontier]
+        if isinstance(browser_target_ranks, list) and expected_frontier is not None
+        else []
+    )
+    expected_frontier_attempted = sum(
+        rank in attempted_rank_set for rank in expected_frontier_target_ranks
+    )
+    expected_frontier_complete = (
+        expected_frontier is not None
+        and expected_frontier_attempted == len(expected_frontier_target_ranks)
+        and all(
+            "direct_reason" in result
+            for position, result in enumerate(results, start=1)
+            if isinstance(result, dict)
+            and position <= expected_frontier
+            and result.get("status") == "unknown"
+            and str(result.get("url") or "").startswith("http")
+        )
+    )
     if (
         type(ranked_pool_count) is not int
         or ranked_pool_count != len(results)
@@ -649,11 +731,34 @@ def load_validation(
         or direct_attempted_count != len(results)
         or type(browser_target_count) is not int
         or type(browser_attempted_count) is not int
-        or not (0 <= browser_attempted_count == browser_target_count <= len(results))
+        or browser_target_count != len(browser_target_ranks)
+        or browser_attempted_count != len(browser_attempted_ranks)
+        or not attempted_rank_set.issubset(target_rank_set)
+        or browser_target_ranks != expected_target_ranks
+        or attempted_rank_set != result_attempted_ranks
         or type(target_reached) is not bool
         or type(pool_exhausted) is not bool
         or target_reached != (status_counts["verified"] >= verified_target)
         or not (target_reached or pool_exhausted)
+        or type(browser_frontier_complete) is not bool
+        or (target_reached and browser_frontier_complete is not True)
+        or (
+            expected_frontier is not None
+            and type(selection_frontier_rank) is not int
+        )
+        or selection_frontier_rank != expected_frontier
+        or type(browser_frontier_target_count) is not int
+        or browser_frontier_target_count != len(expected_frontier_target_ranks)
+        or type(browser_frontier_attempted_count) is not int
+        or browser_frontier_attempted_count != expected_frontier_attempted
+        or browser_frontier_complete != expected_frontier_complete
+        or (
+            pool_exhausted
+            and (
+                browser_attempted_count != browser_target_count
+                or target_rank_set != set(evidenced_target_ranks)
+            )
+        )
         or type(ranked_candidate_count) is not int
         or ranked_candidate_count != expected_ranked_candidate_rows
         or type(ranked_universe_exhausted) is not bool
@@ -672,6 +777,12 @@ def load_validation(
         "direct_attempted_count": direct_attempted_count,
         "browser_target_count": browser_target_count,
         "browser_attempted_count": browser_attempted_count,
+        "browser_target_ranks": browser_target_ranks,
+        "browser_attempted_ranks": browser_attempted_ranks,
+        "selection_frontier_rank": selection_frontier_rank,
+        "browser_frontier_target_count": browser_frontier_target_count,
+        "browser_frontier_attempted_count": browser_frontier_attempted_count,
+        "browser_frontier_complete": browser_frontier_complete,
         "target_reached": target_reached,
         "pool_exhausted": pool_exhausted,
         "ranked_candidate_count": ranked_candidate_count,

@@ -206,6 +206,7 @@ class CheckpointTests(unittest.TestCase):
                 "browser_fallback": True,
                 "browser_limit": 2,
                 "checkpoint_max_age_sec": 21_600,
+                "verified_target": 1,
             },
         }
 
@@ -340,6 +341,109 @@ class CheckpointTests(unittest.TestCase):
             resumed = store.load()
             self.assertEqual(resumed["browser_target_ranks"], [1, 2])
             self.assertEqual(resumed["browser_by_rank"][1], browser_one)
+
+    def test_complete_checkpoint_may_stop_when_verified_target_is_reached(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            store = validator.CheckpointStore(
+                Path(directory) / "checkpoint.json",
+                identity=self.identity,
+                normalized=self.normalized,
+            )
+            store.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            resumed = store.load()
+            self.assertEqual(resumed["stage"], "complete")
+            self.assertEqual(set(resumed["browser_by_rank"]), {1})
+
+    def test_target_frontier_rejects_unattempted_higher_rank(self):
+        results = [
+            {"board_rank": 1, "url": "https://cars.example/1", "status": "unknown"},
+            {"board_rank": 2, "url": "https://cars.example/2", "status": "verified"},
+            {"board_rank": 3, "url": "https://cars.example/3", "status": "unknown"},
+        ]
+        self.assertFalse(
+            validator.target_finalization_ready(
+                results=results,
+                verified_target=1,
+                browser_target_ranks=[1, 2, 3],
+                browser_attempted_ranks={2},
+            )
+        )
+
+    def test_target_frontier_allows_only_lower_priority_pending_tail(self):
+        results = [
+            {"board_rank": 1, "url": "https://cars.example/1", "status": "verified"},
+            {
+                "board_rank": 2,
+                "url": "https://cars.example/2",
+                "status": "unknown",
+                "direct_reason": "http_429",
+            },
+            {"board_rank": 3, "url": "https://cars.example/3", "status": "unknown"},
+        ]
+        self.assertTrue(
+            validator.target_finalization_ready(
+                results=results,
+                verified_target=1,
+                browser_target_ranks=[1, 2, 3],
+                browser_attempted_ranks={1, 2},
+            )
+        )
+
+    def test_non_http_unknown_is_not_a_browser_frontier_hole(self):
+        results = [
+            {"board_rank": 1, "url": "", "status": "unknown"},
+            {"board_rank": 2, "url": "https://cars.example/2", "status": "verified"},
+        ]
+        self.assertTrue(
+            validator.target_finalization_ready(
+                results=results,
+                verified_target=1,
+                browser_target_ranks=[2],
+                browser_attempted_ranks={2},
+            )
+        )
+
+    def test_complete_checkpoint_rejects_verified_rank_below_pending_hole(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_two = {
+            **direct[1],
+            "direct_reason": direct[1]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized,
+            )
+            store.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={2: browser_two},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.load()
+            self.assertFalse(path.exists())
 
     def test_corrupt_mismatched_and_expired_checkpoints_are_quarantined(self):
         direct = {1: self.classification(self.normalized[0])}
