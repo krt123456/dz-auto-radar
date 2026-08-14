@@ -355,7 +355,7 @@ let DATA=[],VIEW=[],page=1,VERIFICATION_RECENT=false,VERIFICATION_AT_MS=null,ACT
 let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
 let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
-const DATA_MAX_AGE_MS=36*60*60*1000;
+const DATA_MAX_AGE_MS=6*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
 const NAV_KEY="dzr-navigation-v2";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
@@ -497,7 +497,7 @@ function boot(payload){
   VERIFICATION_RECENT=validationAge!==null&&validationAge>=-5*60*1000&&validationAge<LIVE_VERIFICATION_MAX_AGE_MS;
   DATA_GENERATED_AT_MS=timestampMs(dataTimestamp);
   const dataAge=DATA_GENERATED_AT_MS===null?null:Date.now()-DATA_GENERATED_AT_MS;
-  DATA_FRESH=dataAge!==null&&dataAge>=-5*60*1000&&dataAge<=DATA_MAX_AGE_MS;
+  DATA_FRESH=dataAge!==null&&dataAge>=-5*60*1000&&dataAge<DATA_MAX_AGE_MS;
   DATA_AGE_HOURS=dataAge===null?null:Math.max(0,dataAge/3600000);
   const freshnessAlert=$("freshnessAlert");
   freshnessAlert.classList.toggle("hidden",DATA_FRESH);

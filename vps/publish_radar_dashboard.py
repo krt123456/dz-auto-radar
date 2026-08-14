@@ -38,6 +38,9 @@ PUBLICATION_VALIDATION_MAX_AGE_HOURS = 6
 PUBLICATION_VALIDATION_MAX_AGE = timedelta(
     hours=PUBLICATION_VALIDATION_MAX_AGE_HOURS
 )
+PUBLICATION_DATA_MAX_AGE_HOURS = 6
+PUBLICATION_DATA_MAX_AGE = timedelta(hours=PUBLICATION_DATA_MAX_AGE_HOURS)
+PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE = timedelta(minutes=5)
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
 DEFAULT_SITE = Path("/srv/sonardeals-radar/site")
 DEFAULT_PIN = Path("/etc/sonardeals-radar/pin")
@@ -184,6 +187,24 @@ def require_publishable_validation(
         raise RuntimeError(
             "board validation evidence is stale; re-validate before publishing"
         )
+    return generated
+
+
+def require_publishable_data_timestamp(
+    value: Any, *, now: datetime | None = None,
+) -> datetime:
+    """Reject board data the dashboard would present as stale or future-skewed."""
+    generated = parsed_utc(value)
+    if generated is None:
+        raise RuntimeError("board data timestamp is invalid or incomplete")
+    current = now or datetime.now(UTC)
+    if current.tzinfo is None:
+        raise ValueError("publication freshness time must be timezone-aware")
+    age = current.astimezone(UTC) - generated
+    if age < -PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE:
+        raise RuntimeError("board data timestamp is too far in the future")
+    if age >= PUBLICATION_DATA_MAX_AGE:
+        raise RuntimeError("board data is stale; refresh before publishing")
     return generated
 
 
@@ -491,6 +512,7 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         or board.get("updated_utc") != data_generated_at
     ):
         raise RuntimeError("board data timestamp is invalid or inconsistent")
+    require_publishable_data_timestamp(data_generated_at)
     offers = board.get("offers")
     if not isinstance(offers, list) or not offers:
         raise RuntimeError("refusing to publish an empty board")
@@ -688,6 +710,7 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
     board = load_json(args.board)
     if sha256_file(args.board) != manifest.get("source_board_sha256"):
         raise RuntimeError("publication manifest does not match the current board")
+    require_publishable_data_timestamp(board.get("data_generated_at_utc"))
     require_publishable_validation(board.get("validation"))
     if audit.get("result") != "BEST_SELECTION_AUDIT_PASS":
         raise RuntimeError("selection audit did not pass")

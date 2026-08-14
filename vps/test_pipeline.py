@@ -149,7 +149,9 @@ class PipelineTest(unittest.TestCase):
         ranked_offers = [long_offer(offer) for offer in offers]
         snapshot_digest = hashlib.sha256(b"stable-v7-snapshot").hexdigest()
         offer_fields_digest = provisional_offer_digest(offers)
-        timestamp = "2026-08-11T00:00:00+00:00"
+        timestamp = (
+            datetime.now(UTC).replace(microsecond=0).isoformat()
+        )
         blocked_sources: list[str] = []
         shared = {
             "schema_version": 2,
@@ -434,15 +436,61 @@ class PipelineTest(unittest.TestCase):
                 validation(timedelta(microseconds=-1)), now=now,
             )
 
+    def test_board_data_freshness_boundaries_match_dashboard(self) -> None:
+        now = datetime(2026, 8, 13, 20, 0, 0, tzinfo=UTC)
+
+        def timestamp(age: timedelta) -> str:
+            return (now - age).isoformat().replace("+00:00", "Z")
+
+        for age in (
+            timedelta(hours=5, minutes=59, seconds=59),
+            -publisher.PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE,
+        ):
+            with self.subTest(accepted_age=age):
+                publisher.require_publishable_data_timestamp(
+                    timestamp(age), now=now,
+                )
+        with self.assertRaisesRegex(RuntimeError, "stale"):
+            publisher.require_publishable_data_timestamp(
+                timestamp(timedelta(hours=6)), now=now,
+            )
+        with self.assertRaisesRegex(RuntimeError, "future"):
+            publisher.require_publishable_data_timestamp(
+                timestamp(
+                    -publisher.PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE
+                    - timedelta(seconds=1)
+                ),
+                now=now,
+            )
+
+        dashboard = (HERE.parent / "index.html").read_text(encoding="utf-8")
+        max_age = re.search(
+            r"const DATA_MAX_AGE_MS=(\d+)\*60\*60\*1000;", dashboard,
+        )
+        freshness_check = re.search(
+            r"dataAge>=-(\d+)\*60\*1000&&dataAge<DATA_MAX_AGE_MS", dashboard,
+        )
+        self.assertIsNotNone(max_age)
+        self.assertIsNotNone(freshness_check)
+        assert max_age is not None and freshness_check is not None
+        self.assertEqual(
+            int(max_age.group(1)), publisher.PUBLICATION_DATA_MAX_AGE_HOURS,
+        )
+        self.assertEqual(
+            timedelta(minutes=int(freshness_check.group(1))),
+            publisher.PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE,
+        )
+
     def test_push_only_rechecks_board_freshness_before_git_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = self.write_v7_fixture(Path(directory))
             board = copy.deepcopy(fixture["board"])
-            board["validation"]["generated_at"] = (
-                datetime.now(UTC)
-                - publisher.PUBLICATION_VALIDATION_MAX_AGE
-                - timedelta(seconds=1)
+            stale_data_timestamp = (
+                datetime.now(UTC) - publisher.PUBLICATION_DATA_MAX_AGE
             ).isoformat().replace("+00:00", "Z")
+            for key in ("generated_at", "data_generated_at_utc", "updated_utc"):
+                board[key] = stale_data_timestamp
+            board["validation"]["input_updated_at"] = stale_data_timestamp
             fixture["board_path"].write_text(json.dumps(board), encoding="utf-8")
             fixture["manifest"].write_text(
                 json.dumps(
