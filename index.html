@@ -235,6 +235,16 @@ const CONTRACT_SCHEMA_VERSION=2;
 const CONTRACT_ALGORITHM="schengen-observed-peer-value-v7-live-verified";
 const FLAGS={DE:"🇩🇪",FR:"🇫🇷",ES:"🇪🇸",IT:"🇮🇹",AT:"🇦🇹",PL:"🇵🇱",CZ:"🇨🇿",BG:"🇧🇬",PT:"🇵🇹",BE:"🇧🇪",NL:"🇳🇱",RO:"🇷🇴",FI:"🇫🇮",SE:"🇸🇪",DK:"🇩🇰",SK:"🇸🇰",NO:"🇳🇴",LV:"🇱🇻",LU:"🇱🇺",SI:"🇸🇮",HR:"🇭🇷",CH:"🇨🇭",HU:"🇭🇺",GR:"🇬🇷",EE:"🇪🇪",LT:"🇱🇹",IS:"🇮🇸",LI:"🇱🇮",MT:"🇲🇹"};
 const CN={DE:"ألمانيا",FR:"فرنسا",ES:"إسبانيا",IT:"إيطاليا",AT:"النمسا",PL:"بولندا",CZ:"التشيك",BG:"بلغاريا",PT:"البرتغال",BE:"بلجيكا",NL:"هولندا",RO:"رومانيا",FI:"فنلندا",SE:"السويد",DK:"الدانمارك",SK:"سلوفاكيا",NO:"النرويج",LV:"لاتفيا",LU:"لوكسمبورغ",SI:"سلوفينيا",HR:"كرواتيا",CH:"سويسرا",HU:"المجر",GR:"اليونان",EE:"إستونيا",LT:"ليتوانيا",IS:"آيسلندا",LI:"ليختنشتاين",MT:"مالطا"};
+const COUNTRY_SEARCH_ALIASES={
+  DE:"Germany Deutschland Allemagne",FR:"France",ES:"Spain España Espagne",IT:"Italy Italia Italie",
+  AT:"Austria Österreich Autriche",PL:"Poland Polska Pologne",CZ:"Czechia Czech Republic Česko Tchéquie",
+  BG:"Bulgaria България Bulgarie",PT:"Portugal",BE:"Belgium België Belgique",NL:"Netherlands Nederland Holland Pays-Bas",
+  RO:"Romania România Roumanie",FI:"Finland Suomi Finlande",SE:"Sweden Sverige Suède",DK:"Denmark Danmark Danemark",
+  SK:"Slovakia Slovensko Slovaquie",NO:"Norway Norge Norvège",LV:"Latvia Latvija Lettonie",LU:"Luxembourg",
+  SI:"Slovenia Slovenija Slovénie",HR:"Croatia Hrvatska Croatie",CH:"Switzerland Schweiz Suisse Svizzera",
+  HU:"Hungary Magyarország Hongrie",GR:"Greece Ελλάδα Grèce",EE:"Estonia Eesti Estonie",LT:"Lithuania Lietuva Lituanie",
+  IS:"Iceland Ísland Islande",LI:"Liechtenstein",MT:"Malta Malte"
+};
 const FUEL_AR=f=>({petrol:"بنزين",hybrid:"هجين"}[String(f||"").trim().toLowerCase()]||"غير محدد");
 const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
 const pctf=new Intl.NumberFormat("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2});
@@ -398,6 +408,14 @@ function normalizeSearchText(value){
     .replace(/\s+/g," ")
     .trim()
     .toLowerCase();
+}
+
+function matchesSearch(offer,tokens){
+  if(!tokens.length)return true;
+  const vehicle=normalizeSearchText([offer.t,offer.m].join(" "));
+  const vehicleTokens=vehicle.split(" ");
+  const country=normalizeSearchText([CN[offer.c]||"",COUNTRY_SEARCH_ALIASES[offer.c]||""].join(" "));
+  return tokens.every(token=>token.length<=2?vehicleTokens.includes(token):vehicle.includes(token)||country.includes(token));
 }
 
 function readIdSet(key){
@@ -577,9 +595,10 @@ function apply(){
   const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
         p=$("fp").value,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
         unseenOnly=$("funseen").checked,s=$("fs").value;
+  const searchTokens=q?q.split(" "):[];
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
   VIEW=DATA.filter(o=>
-    (!q||normalizeSearchText(o.t+" "+o.m).includes(q))&&
+    matchesSearch(o,searchTokens)&&
     (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&(!y||String(o.y)===y)&&
     o.p>=pmin&&o.p<=pmax&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&
