@@ -47,6 +47,16 @@ class CheckUrlTests(unittest.TestCase):
                 self.assertEqual(result["status"], "dead")
                 self.assertEqual(result["reason"], f"http_{status}")
 
+    def test_404_and_410_protection_redirects_are_unknown(self):
+        final_url = (
+            "https://cars.example/communfo/antiaspiration/default/getCaptcha"
+        )
+        for status in (404, 410):
+            with self.subTest(status=status):
+                result = self.check(FakeResponse(status, url=final_url))
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "protection_redirect")
+
     def test_403_and_429_are_unknown(self):
         for status in (403, 429):
             with self.subTest(status=status):
@@ -59,6 +69,33 @@ class CheckUrlTests(unittest.TestCase):
         result = self.check(FakeResponse(200, html))
         self.assertEqual(result["status"], "unknown")
         self.assertEqual(result["reason"], "cloudflare_challenge")
+
+    def test_http_200_protection_redirect_paths_are_unknown(self):
+        html = "<html><body>ordinary response content</body></html>" * 20
+        paths = (
+            "/communfo/antiaspiration/default/getCaptcha",
+            "/security/CAPTCHA",
+            "/communfo/ANTIASPIRATION/default/check",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                result = self.check(
+                    FakeResponse(200, html, url=f"https://cars.example{path}")
+                )
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "protection_redirect")
+
+    def test_http_200_ordinary_changed_paths_remain_fail_closed_unknown(self):
+        html = "<html><body>ordinary vehicle details</body></html>" * 20
+        for path in ("/search", "/"):
+            with self.subTest(path=path):
+                result = self.check(
+                    FakeResponse(200, html, url=f"https://cars.example{path}")
+                )
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(
+                    result["reason"], "http_200_listing_identity_unproven"
+                )
 
     def test_http_200_expired_marker_is_dead(self):
         html = "<html><body>This listing has been removed.</body></html>" * 10
@@ -165,24 +202,55 @@ class BrowserPageTests(unittest.TestCase):
         }
         self.body = "Toyota Corolla Hybrid vehicle details " * 20
 
-    def classify(self, final_url):
+    def classify(self, final_url, http_status=200):
         return validator.classify_browser_page(
             self.offer,
-            http_status=200,
+            http_status=http_status,
             final_url=final_url,
             page_title="Toyota Corolla Hybrid",
             body_text=self.body,
         )
+
+    def test_ordinary_404_and_410_are_dead(self):
+        for status in (404, 410):
+            with self.subTest(status=status):
+                result = self.classify(self.offer["url"], http_status=status)
+                self.assertEqual(result["status"], "dead")
+                self.assertEqual(result["reason"], f"browser_http_{status}")
+
+    def test_404_and_410_protection_redirects_are_unknown(self):
+        final_url = (
+            "https://cars.example/communfo/antiaspiration/default/getCaptcha"
+        )
+        for status in (404, 410):
+            with self.subTest(status=status):
+                result = self.classify(final_url, http_status=status)
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "browser_protection_redirect")
 
     def test_cross_host_redirect_never_verifies_matching_content(self):
         result = self.classify("https://search.example/listing/123")
         self.assertEqual(result["status"], "unknown")
         self.assertEqual(result["reason"], "browser_cross_host_redirect")
 
-    def test_same_host_changed_path_never_verifies_matching_content(self):
-        result = self.classify("https://cars.example/search")
-        self.assertEqual(result["status"], "unknown")
-        self.assertEqual(result["reason"], "browser_detail_path_changed")
+    def test_protection_redirect_paths_are_unknown(self):
+        paths = (
+            "/communfo/antiaspiration/default/getCaptcha",
+            "/security/CAPTCHA",
+            "/communfo/ANTIASPIRATION/default/check",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                result = self.classify(f"https://cars.example{path}")
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "browser_protection_redirect")
+
+    def test_same_host_ordinary_changed_paths_never_verify_matching_content(self):
+        for path in ("/search", "/"):
+            with self.subTest(path=path):
+                result = self.classify(f"https://cars.example{path}")
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "browser_detail_path_changed")
 
     def test_same_detail_path_with_matching_identity_verifies(self):
         result = self.classify("https://www.cars.example/listing/123")

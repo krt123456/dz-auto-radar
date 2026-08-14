@@ -158,15 +158,28 @@ def normalize_text(value: str) -> str:
     return " ".join(value.lower().split())
 
 
+def protection_path_reason(final_url: str) -> str | None:
+    path = normalized_path(final_url)
+    if any(
+        part in path
+        for part in (
+            "captcha",
+            "antiaspiration",
+            "/challenge",
+            "/access-denied",
+            "/blocked",
+        )
+    ):
+        return "protection_redirect"
+    return None
+
+
 def protection_reason(text: str, final_url: str) -> str | None:
     lowered = text.lower()
     for reason, marker in PROTECTION_MARKERS:
         if marker in lowered:
             return reason
-    path = urlparse(final_url).path.lower()
-    if any(part in path for part in ("/captcha", "/challenge", "/access-denied", "/blocked")):
-        return "protection_redirect"
-    return None
+    return protection_path_reason(final_url)
 
 
 def dead_marker(text: str) -> str | None:
@@ -221,6 +234,14 @@ def check_url(
         status = int(response.status_code)
         final_url = str(getattr(response, "url", "") or url)
 
+        path_protection = protection_path_reason(final_url)
+        if path_protection:
+            return {
+                "status": "unknown",
+                "http_status": status,
+                "final_url": final_url,
+                "reason": path_protection,
+            }
         if status in {404, 410}:
             return {
                 "status": "dead",
@@ -342,6 +363,12 @@ def classify_browser_page(
     """Classify a rendered page without promoting a search/error page as live."""
     original_url = str(offer.get("url") or "")
     combined = f"{page_title}\n{body_text}"
+    path_protection = protection_path_reason(final_url)
+    if path_protection:
+        return {
+            "status": "unknown", "http_status": http_status,
+            "final_url": final_url, "reason": f"browser_{path_protection}",
+        }
     if http_status in {404, 410}:
         return {
             "status": "dead", "http_status": http_status,
