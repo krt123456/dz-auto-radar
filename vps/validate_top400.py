@@ -718,9 +718,15 @@ def select_browser_target_ranks(
 
 
 def browser_eligible(item: dict[str, Any]) -> bool:
+    paruvendu_protection_redirect = (
+        item.get("reason") == "protection_redirect"
+        and normalized_host(str(item.get("url") or "")) == "paruvendu.fr"
+        and normalized_host(str(item.get("final_url") or "")) == "paruvendu.fr"
+    )
     return (
         item.get("status") == "unknown"
         and str(item.get("url") or "").startswith("http")
+        and not paruvendu_protection_redirect
     )
 
 

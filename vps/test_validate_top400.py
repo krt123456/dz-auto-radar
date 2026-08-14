@@ -258,6 +258,70 @@ class BrowserPageTests(unittest.TestCase):
         self.assertEqual(result["reason"], "browser_rendered_detail_identity")
 
 
+class BrowserEligibilityTests(unittest.TestCase):
+    @staticmethod
+    def result(**overrides):
+        result = {
+            "board_rank": 1,
+            "status": "unknown",
+            "url": "https://www.paruvendu.fr/a/voiture-occasion/123",
+            "final_url": (
+                "https://paruvendu.fr/communfo/antiaspiration/default/getCaptcha"
+            ),
+            "reason": "protection_redirect",
+        }
+        result.update(overrides)
+        return result
+
+    def test_paruvendu_direct_protection_redirect_is_not_browser_eligible(self):
+        item = self.result()
+        self.assertFalse(validator.browser_eligible(item))
+        self.assertEqual(validator.select_browser_target_ranks([item], 0), [])
+
+    def test_other_paruvendu_unknowns_remain_browser_eligible(self):
+        for reason in ("http_429", "cloudflare_challenge", "browser_protection_redirect"):
+            with self.subTest(reason=reason):
+                self.assertTrue(validator.browser_eligible(self.result(reason=reason)))
+
+    def test_other_source_protection_redirect_remains_browser_eligible(self):
+        self.assertTrue(
+            validator.browser_eligible(
+                self.result(
+                    url="https://cars.example/listing/123",
+                    final_url="https://cars.example/security/captcha",
+                )
+            )
+        )
+
+    def test_both_normalized_hosts_must_be_exactly_paruvendu(self):
+        cases = (
+            {
+                "url": "https://www.paruvendu.fr/a/voiture-occasion/123",
+                "final_url": "https://captcha.example/security/captcha",
+            },
+            {
+                "url": "https://cars.example/listing/123",
+                "final_url": "https://www.paruvendu.fr/security/captcha",
+            },
+            {
+                "url": "https://autos.paruvendu.fr/listing/123",
+                "final_url": "https://autos.paruvendu.fr/security/captcha",
+            },
+        )
+        for overrides in cases:
+            with self.subTest(**overrides):
+                self.assertTrue(validator.browser_eligible(self.result(**overrides)))
+
+    def test_verified_and_dead_results_remain_ineligible(self):
+        for status in ("verified", "dead"):
+            with self.subTest(status=status):
+                self.assertFalse(
+                    validator.browser_eligible(
+                        self.result(status=status, reason="http_200")
+                    )
+                )
+
+
 class CheckpointTests(unittest.TestCase):
     def setUp(self):
         self.offers = [
