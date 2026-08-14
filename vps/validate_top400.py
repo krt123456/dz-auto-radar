@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import fcntl
 import hashlib
 import hmac
 import importlib.metadata
@@ -24,9 +25,10 @@ import time
 import unicodedata
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 from urllib.parse import parse_qs, urlparse
 
 import requests
@@ -776,12 +778,30 @@ class CheckpointStore:
         source_diagnostics: dict[str, Any] | None = None,
     ) -> None:
         self.path = path
+        self.lock_path = path.with_name(f"{path.name}.lock")
         self.identity = identity
         self.identity_sha256 = sha256_bytes(canonical_json_bytes(identity))
         self.normalized_by_rank = {
             int(item["board_rank"]): item for item in normalized
         }
         self.source_diagnostics = source_diagnostics or {}
+
+    @contextmanager
+    def _exclusive_lock(self) -> Iterator[None]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        flags = (
+            os.O_CREAT
+            | os.O_RDWR
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        descriptor = os.open(self.lock_path, flags, 0o600)
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            os.close(descriptor)
 
     def quarantine(self, reason: str) -> Path:
         safe_reason = re.sub(r"[^a-z0-9_-]+", "-", reason.casefold()).strip("-") or "invalid"
@@ -835,7 +855,9 @@ class CheckpointStore:
         canonical_json_bytes(raw)
         return raw
 
-    def _validate(self, payload: Any) -> dict[str, Any]:
+    def _validate(
+        self, payload: Any, *, enforce_resume_expiry: bool = True
+    ) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise CheckpointError("checkpoint root is not an object")
         supplied_checksum = payload.get("checkpoint_sha256")
@@ -867,7 +889,7 @@ class CheckpointStore:
             raise CheckpointError("checkpoint run timestamp is invalid")
         age = (datetime.now(UTC) - started_at).total_seconds()
         max_age = int(self.identity["config"]["checkpoint_max_age_sec"])
-        if age < -300 or age > max_age:
+        if age < -300 or (enforce_resume_expiry and age > max_age):
             raise CheckpointError("checkpoint has expired or is future-dated")
 
         direct_by_rank: dict[int, dict[str, Any]] = {}
@@ -956,6 +978,25 @@ class CheckpointStore:
             "browser_by_rank": browser_by_rank,
         }
 
+    def _validate_for_removal(
+        self, payload: Any, *, expected_checkpoint_sha256: str
+    ) -> dict[str, Any]:
+        if not isinstance(expected_checkpoint_sha256, str) or re.fullmatch(
+            r"[0-9a-f]{64}", expected_checkpoint_sha256
+        ) is None:
+            raise CheckpointError("expected checkpoint checksum is invalid")
+        supplied_checksum = payload.get("checkpoint_sha256") if isinstance(payload, dict) else None
+        if not isinstance(supplied_checksum, str) or not hmac.compare_digest(
+            supplied_checksum, expected_checkpoint_sha256
+        ):
+            raise CheckpointError("checkpoint changed before removal")
+        if payload.get("stage") != "complete":
+            raise CheckpointError("refusing to remove a non-complete checkpoint")
+        # Final report publication can cross the resume-expiry boundary.  The exact
+        # completion checkpoint written by this run may still be removed, but all
+        # checksum, schema, identity, result, frontier, and future-date checks remain.
+        return self._validate(payload, enforce_resume_expiry=False)
+
     def load(self) -> dict[str, Any] | None:
         if not self.path.exists():
             return None
@@ -980,7 +1021,7 @@ class CheckpointStore:
         direct_by_rank: dict[int, dict[str, Any]],
         browser_target_ranks: list[int],
         browser_by_rank: dict[int, dict[str, Any]],
-    ) -> None:
+    ) -> str:
         unsigned = {
             "schema_version": CHECKPOINT_SCHEMA_VERSION,
             "contract": CHECKPOINT_CONTRACT,
@@ -998,14 +1039,32 @@ class CheckpointStore:
             **unsigned,
             "checkpoint_sha256": sha256_bytes(canonical_json_bytes(unsigned)),
         }
-        atomic_json_write(self.path, payload)
+        with self._exclusive_lock():
+            atomic_json_write(self.path, payload)
+        return payload["checkpoint_sha256"]
 
-    def remove_completed(self) -> None:
-        state = self.load()
-        if state is None or state["stage"] != "complete":
-            raise CheckpointError("refusing to remove a non-complete checkpoint")
-        self.path.unlink()
-        fsync_parent(self.path)
+    def remove_completed(self, *, expected_checkpoint_sha256: str) -> None:
+        with self._exclusive_lock():
+            if not self.path.exists():
+                raise CheckpointError("completed checkpoint is missing")
+            if self.path.stat().st_size > 128 * 1024 * 1024:
+                raise CheckpointError("checkpoint is too large")
+            try:
+                payload = json.loads(
+                    self.path.read_text(encoding="utf-8"),
+                    object_pairs_hook=unique_json_object,
+                    parse_constant=reject_non_finite_json,
+                )
+                self._validate_for_removal(
+                    payload,
+                    expected_checkpoint_sha256=expected_checkpoint_sha256,
+                )
+            except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
+                raise CheckpointError(
+                    f"completed checkpoint cannot be removed: {exc}"
+                ) from exc
+            self.path.unlink()
+            fsync_parent(self.path)
 
 
 class CheckpointCadence:
@@ -1300,8 +1359,8 @@ def main() -> int:
             "browser_by_rank": {},
         }
 
-    def save_state() -> None:
-        store.save(**state)
+    def save_state() -> str:
+        return store.save(**state)
 
     save_state()
     cadence = CheckpointCadence(
@@ -1423,7 +1482,7 @@ def main() -> int:
             "verified target was reached without complete high-rank browser frontier"
         )
     state["stage"] = "complete"
-    save_state()
+    complete_checkpoint_sha256 = save_state()
     report = build_report(
         input_path=args.input,
         input_payload=input_payload,
@@ -1445,7 +1504,9 @@ def main() -> int:
         full_input_coverage=full_input_coverage,
     )
     atomic_json_write(args.output_json, report)
-    store.remove_completed()
+    store.remove_completed(
+        expected_checkpoint_sha256=complete_checkpoint_sha256,
+    )
     counts = report["counts"]
     print(
         f"VERIFIED={counts['verified']} DEAD={counts['dead']} "

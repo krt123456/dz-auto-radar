@@ -1,5 +1,6 @@
 import json
 import tempfile
+import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -368,6 +369,275 @@ class CheckpointTests(unittest.TestCase):
             resumed = store.load()
             self.assertEqual(resumed["stage"], "complete")
             self.assertEqual(set(resumed["browser_by_rank"]), {1})
+
+    def test_exact_complete_checkpoint_can_be_removed_after_resume_expiry(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        expired = (datetime.now(UTC) - timedelta(hours=7)).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        complete = {
+            "stage": "complete",
+            "run_started_at": expired,
+            "direct_by_rank": {item["board_rank"]: item for item in direct},
+            "browser_target_ranks": targets,
+            "browser_by_rank": {1: browser_one},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "remove.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = store.save(**complete)
+            store.remove_completed(
+                expected_checkpoint_sha256=expected_checksum,
+            )
+            self.assertFalse(path.exists())
+
+            resume_path = root / "resume.json"
+            resume_store = validator.CheckpointStore(
+                resume_path, identity=self.identity, normalized=self.normalized
+            )
+            resume_store.save(**complete)
+            with self.assertRaises(validator.CheckpointError):
+                resume_store.load()
+            self.assertFalse(resume_path.exists())
+            self.assertEqual(len(list(root.glob("resume.json.*.quarantine"))), 1)
+
+    def test_completed_removal_rejects_stale_digest_and_wrong_identity(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            stale_checksum = store.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["checkpointed_at"] = "2026-08-14T19:00:00Z"
+            unsigned = {
+                key: value for key, value in payload.items()
+                if key != "checkpoint_sha256"
+            }
+            current_checksum = validator.sha256_bytes(
+                validator.canonical_json_bytes(unsigned)
+            )
+            payload["checkpoint_sha256"] = current_checksum
+            validator.atomic_json_write(path, payload)
+
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=stale_checksum,
+                )
+            self.assertTrue(path.exists())
+
+            wrong_identity = json.loads(json.dumps(self.identity))
+            wrong_identity["input"]["full_content_sha256"] = "c" * 64
+            wrong_store = validator.CheckpointStore(
+                path, identity=wrong_identity, normalized=self.normalized
+            )
+            with self.assertRaises(validator.CheckpointError):
+                wrong_store.remove_completed(
+                    expected_checkpoint_sha256=current_checksum,
+                )
+            self.assertTrue(path.exists())
+
+            store.remove_completed(
+                expected_checkpoint_sha256=current_checksum,
+            )
+            self.assertFalse(path.exists())
+
+    def test_completed_removal_preserves_tampered_or_non_complete_checkpoint(self):
+        direct = {1: self.classification(self.normalized[0])}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            direct_checksum = store.save(
+                stage="direct",
+                run_started_at=validator.utc_now(),
+                direct_by_rank=direct,
+                browser_target_ranks=[],
+                browser_by_rank={},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=direct_checksum,
+                )
+            self.assertTrue(path.exists())
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage"] = "complete"
+            validator.atomic_json_write(path, payload)
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=direct_checksum,
+                )
+            self.assertTrue(path.exists())
+
+    def test_completed_removal_serializes_a_competing_store_save(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        validated = threading.Event()
+        release_removal = threading.Event()
+
+        class PausingStore(validator.CheckpointStore):
+            def _validate_for_removal(self, payload, *, expected_checkpoint_sha256):
+                state = super()._validate_for_removal(
+                    payload,
+                    expected_checkpoint_sha256=expected_checkpoint_sha256,
+                )
+                validated.set()
+                if not release_removal.wait(2):
+                    raise RuntimeError("test timed out waiting to release removal")
+                return state
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            remover = PausingStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            writer = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = remover.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            errors = []
+            writer_started = threading.Event()
+            writer_finished = threading.Event()
+
+            def remove_checkpoint():
+                try:
+                    remover.remove_completed(
+                        expected_checkpoint_sha256=expected_checksum,
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            def replace_checkpoint():
+                writer_started.set()
+                try:
+                    writer.save(
+                        stage="direct",
+                        run_started_at=validator.utc_now(),
+                        direct_by_rank={1: direct[0]},
+                        browser_target_ranks=[],
+                        browser_by_rank={},
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+                finally:
+                    writer_finished.set()
+
+            remove_thread = threading.Thread(target=remove_checkpoint)
+            remove_thread.start()
+            self.assertTrue(validated.wait(1))
+            writer_thread = threading.Thread(target=replace_checkpoint)
+            writer_thread.start()
+            self.assertTrue(writer_started.wait(1))
+            self.assertFalse(writer_finished.wait(0.1))
+            release_removal.set()
+            remove_thread.join(2)
+            writer_thread.join(2)
+
+            self.assertFalse(remove_thread.is_alive())
+            self.assertFalse(writer_thread.is_alive())
+            self.assertEqual(errors, [])
+            self.assertTrue(path.exists())
+            self.assertEqual(writer.load()["stage"], "direct")
+
+    def test_completed_removal_preserves_future_dated_checkpoint(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        future = (datetime.now(UTC) + timedelta(minutes=10)).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = store.save(
+                stage="complete",
+                run_started_at=future,
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=expected_checksum,
+                )
+            self.assertTrue(path.exists())
+
+    def test_completed_removal_rejects_resigned_invalid_frontier(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_two = {
+            **direct[1],
+            "direct_reason": direct[1]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = store.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={2: browser_two},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=expected_checksum,
+                )
+            self.assertTrue(path.exists())
 
     def test_target_frontier_rejects_unattempted_higher_rank(self):
         results = [
