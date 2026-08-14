@@ -378,6 +378,8 @@ def sanitized_pass_report(
     """Construct the complete PASS receipt from a strict allowlist."""
     if not isinstance(report, dict):
         raise ValueError("pass report invalid")
+    if report.get("schema_version") != 1:
+        raise ValueError("pass schema invalid")
     if report.get("result") != "BEST_SELECTION_AUDIT_PASS":
         raise ValueError("pass result invalid")
     if report.get("generation_id") != expected_generation:
@@ -393,6 +395,7 @@ def sanitized_pass_report(
         if not isinstance(value, str) or not HEX_64.fullmatch(value):
             raise ValueError("pass digest invalid")
     safe: dict[str, Any] = {
+        "schema_version": 1,
         "result": "LIVE_GENERATION_AUDIT_PASS",
         "generation_id": expected_generation,
         "algorithm": selection_audit.ALGORITHM,

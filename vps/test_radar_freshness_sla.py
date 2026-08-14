@@ -64,6 +64,7 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             "published_offer_count": 10_000,
             "verified_live_count": 10_000,
             "count": 10_000,
+            "offers": [0] * 10_000,
             "selection_candidate_sha256": self.hashes["candidate_ids"],
             "selected_ids_sha256": self.hashes["selected_ids"],
             "selection_candidate_fields_sha256": self.hashes["candidate_fields"],
@@ -79,6 +80,13 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             "input_snapshot_sha256": self.hashes["snapshot"],
             "input_offer_fields_sha256": self.hashes["offer_fields"],
             "checked": 60_000,
+            "ranked_pool_count": 60_000,
+            "direct_attempted_count": 60_000,
+            "verified_target": 10_000,
+            "target_reached": True,
+            "browser_frontier_complete": True,
+            "full_input_coverage": True,
+            "counts": {"verified": 10_000, "dead": 1_000, "unknown": 49_000},
         }
         shared = {
             "schema_version": 1,
@@ -97,6 +105,22 @@ class RadarFreshnessSlaTests(unittest.TestCase):
         self.convergence = {
             **shared,
             "result": "LIVE_GENERATION_AUDIT_PASS",
+            "expected_generation": generation,
+            "observed_generation": generation,
+            "universe_unique_offers": 60_000,
+            "qualified_universe_offers": 10_000,
+            "full_ranked_input_offers": 60_000,
+            "ranking_qualified_offers": 37_897,
+            "ranking_saved_offers": 60_000,
+            "ranking_saved_observed_offers": 60_000,
+            "connected_country_count": 28,
+            "connected_source_count": 103,
+            "attempts": 1,
+            "network_errors": 0,
+            "deadline_sec": 600.0,
+            "elapsed_sec": 2.5,
+            **{field: True for field in sla.CONVERGENCE_TRUE_FIELDS},
+            **{field: 0 for field in sla.CONVERGENCE_ZERO_FIELDS},
         }
 
     def write_evidence(self) -> list[str]:
@@ -110,7 +134,7 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             path = self.root / f"{label}.json"
             path.write_text(json.dumps(value), encoding="utf-8")
             arguments.extend((f"--{label}", str(path)))
-        arguments.extend(("--now", self.timestamp(self.now)))
+        arguments.extend(("--allow-test-now", "--now", self.timestamp(self.now)))
         return arguments
 
     def run_cli(self) -> tuple[int, dict[str, object]]:
@@ -165,6 +189,8 @@ class RadarFreshnessSlaTests(unittest.TestCase):
         self.payload = replacement
         self.publication["generation_id"] = "a" * 16
         self.convergence["generation_id"] = "a" * 16
+        self.convergence["expected_generation"] = "a" * 16
+        self.convergence["observed_generation"] = "a" * 16
         code, report = self.run_cli()
         self.assertEqual(code, sla.EXIT_INVALID)
         self.assertIn("generation_id is not bound", report["error"])
@@ -186,7 +212,6 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             ("payload", "count"),
             ("publication", "published_offer_count"),
             ("convergence", "verified_live_count"),
-            ("validation", "published_offer_count"),
         ):
             with self.subTest(artifact=artifact, field=field):
                 self.refresh_evidence()
@@ -194,6 +219,75 @@ class RadarFreshnessSlaTests(unittest.TestCase):
                 code, report = self.run_cli()
                 self.assertEqual(code, sla.EXIT_INVALID)
                 self.assertIn("must equal 10000", report["error"])
+
+    def test_validation_may_legitimately_overshoot_verified_target(self) -> None:
+        self.validation["counts"] = {
+            "verified": 10_045,
+            "dead": 1_000,
+            "unknown": 48_955,
+        }
+        code, report = self.run_cli()
+        self.assertEqual(code, sla.EXIT_OK)
+        self.assertEqual(report["status"], "healthy")
+
+    def test_required_proof_fields_fail_closed_when_missing(self) -> None:
+        mutants = (
+            ("payload", ("offers",)),
+            ("payload", ("count",)),
+            ("payload", ("published_offer_count",)),
+            ("payload", ("verified_live_count",)),
+            ("publication", ("published_offer_count",)),
+            ("publication", ("verified_live_count",)),
+            ("validation", ("checked",)),
+            ("validation", ("counts",)),
+            ("validation", ("counts", "verified")),
+            ("validation", ("verified_target",)),
+            ("validation", ("target_reached",)),
+            ("validation", ("browser_frontier_complete",)),
+            ("validation", ("full_input_coverage",)),
+            ("validation", ("ranked_pool_count",)),
+            ("validation", ("direct_attempted_count",)),
+            ("validation", ("input_algorithm",)),
+            ("validation", ("input_snapshot_sha256",)),
+            ("validation", ("input_offer_fields_sha256",)),
+            ("convergence", ("result",)),
+            ("convergence", ("schema_version",)),
+            ("convergence", ("expected_generation",)),
+            ("convergence", ("observed_generation",)),
+            ("convergence", ("published_offer_count",)),
+            ("convergence", ("verified_live_count",)),
+            ("convergence", ("attempts",)),
+            ("convergence", ("deadline_sec",)),
+            ("convergence", (sla.CONVERGENCE_TRUE_FIELDS[0],)),
+            ("convergence", (sla.CONVERGENCE_ZERO_FIELDS[0],)),
+        )
+        for artifact, path in mutants:
+            with self.subTest(artifact=artifact, path=".".join(path)):
+                self.refresh_evidence()
+                owner = getattr(self, artifact)
+                for key in path[:-1]:
+                    owner = owner[key]
+                del owner[path[-1]]
+                code, report = self.run_cli()
+                self.assertEqual(code, sla.EXIT_INVALID)
+                self.assertEqual(report["status"], "invalid")
+
+    def test_every_convergence_pass_invariant_is_mandatory(self) -> None:
+        for field in (*sla.CONVERGENCE_TRUE_FIELDS, *sla.CONVERGENCE_ZERO_FIELDS):
+            with self.subTest(field=field):
+                self.refresh_evidence()
+                del self.convergence[field]
+                code, report = self.run_cli()
+                self.assertEqual(code, sla.EXIT_INVALID)
+                self.assertIn(f"convergence.{field}", report["error"])
+
+    def test_now_override_requires_explicit_test_only_gate(self) -> None:
+        arguments = self.write_evidence()
+        arguments.remove("--allow-test-now")
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as failure:
+                sla.parse_args(arguments)
+        self.assertEqual(failure.exception.code, 2)
 
     def test_nonpassing_convergence_is_invalid(self) -> None:
         self.convergence["result"] = "DEPLOYMENT_PENDING_TIMEOUT"

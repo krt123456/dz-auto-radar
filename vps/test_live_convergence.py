@@ -281,6 +281,10 @@ class SameGenerationEvidenceTest(unittest.TestCase):
     def test_fixture_uses_exact_v7_board_and_ranked_contract(self) -> None:
         self.assertEqual(self.board["schema_version"], 2)
         self.assertEqual(self.board["algorithm"], V7_ALGORITHM)
+        self.assertEqual(
+            json.loads(self.audit_path.read_text(encoding="utf-8"))["schema_version"],
+            1,
+        )
         self.assertEqual(set(self.offer), COMPACT_FIELDS)
         self.assertEqual(set(self.ranked_offer), LONG_FIELDS)
         self.assertEqual(
@@ -374,6 +378,7 @@ class SameGenerationEvidenceTest(unittest.TestCase):
         )
 
         self.assertEqual(exit_code, 0)
+        self.assertEqual(report["schema_version"], 1)
         self.assertEqual(report["result"], "LIVE_GENERATION_AUDIT_PASS")
         self.assertEqual(report["attempts"], 2)
 

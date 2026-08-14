@@ -390,6 +390,16 @@ function restoreNavigationState(state){
   return true;
 }
 
+function normalizeSearchText(value){
+  return String(value??"")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu,"")
+    .replace(/[\p{P}\p{S}_]+/gu," ")
+    .replace(/\s+/g," ")
+    .trim()
+    .toLowerCase();
+}
+
 function readIdSet(key){
   try{
     const value=JSON.parse(localStorage.getItem(key)||"[]");
@@ -538,7 +548,7 @@ function boot(payload){
   $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
   ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
   ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
-  if(!restoreNavigationState(navigationState))$("fnew").checked=NEW_IDS.size>0;
+  restoreNavigationState(navigationState);
   if(!$("fs").value)$("fs").value="ranked";
   $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
@@ -564,12 +574,12 @@ function boot(payload){
   }
 }
 function apply(){
-  const q=$("q").value.trim().toLowerCase(),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
+  const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
         p=$("fp").value,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
         unseenOnly=$("funseen").checked,s=$("fs").value;
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
   VIEW=DATA.filter(o=>
-    (!q||(o.t+" "+o.m).toLowerCase().includes(q))&&
+    (!q||normalizeSearchText(o.t+" "+o.m).includes(q))&&
     (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&(!y||String(o.y)===y)&&
     o.p>=pmin&&o.p<=pmax&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&

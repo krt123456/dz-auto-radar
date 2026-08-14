@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
@@ -47,6 +48,30 @@ HASH_FIELDS = {
     ),
     "snapshot": ("snapshot_eligible_sha256", "snapshot_eligible_sha256"),
 }
+
+CONVERGENCE_TRUE_FIELDS = (
+    "exact_order_match",
+    "exact_source_fields_match",
+    "strict_global_top_n",
+    "ranking_observed_partition_complete",
+    "unique_ids",
+    "unique_urls",
+    "negative_control_pass",
+    "risk_negative_control_pass",
+    "positive_control_pass",
+    "same_generation_verified_only",
+)
+
+CONVERGENCE_ZERO_FIELDS = (
+    "coverage_quota_substitutions",
+    "cesja_count",
+    "lease_like_count",
+    "risk_listing_count",
+    "confirmed_dead_count",
+    "outside_better_than_cutoff",
+    "confirmed_dead_or_lease_like_published",
+    "unsupported_economics_published",
+)
 
 
 class ContractError(ValueError):
@@ -128,34 +153,129 @@ def require_schema(value: dict[str, Any], expected: int, label: str) -> None:
         raise ContractError(f"{label} schema_version must be {expected}")
 
 
-def require_exact_count(value: dict[str, Any], label: str) -> None:
-    if "published_offer_count" not in value:
-        raise ContractError(f"{label}.published_offer_count is required")
-    for field in ("published_offer_count", "verified_live_count", "count"):
+def require_exact_counts(
+    value: dict[str, Any], label: str, fields: tuple[str, ...]
+) -> None:
+    for field in fields:
         if field not in value:
-            continue
+            raise ContractError(f"{label}.{field} is required")
         count = value[field]
         if type(count) is not int or count != EXPECTED_PUBLISHED_OFFERS:
             raise ContractError(
                 f"{label}.{field} must equal {EXPECTED_PUBLISHED_OFFERS}"
             )
-    if "offers" in value:
-        offers = value["offers"]
-        if not isinstance(offers, list) or len(offers) != EXPECTED_PUBLISHED_OFFERS:
-            raise ContractError(
-                f"{label}.offers must contain exactly {EXPECTED_PUBLISHED_OFFERS} entries"
-            )
 
 
-def require_optional_exact_counts(value: dict[str, Any], label: str) -> None:
-    for field in ("published_offer_count", "verified_live_count", "count"):
-        if field in value and (
-            type(value[field]) is not int
-            or value[field] != EXPECTED_PUBLISHED_OFFERS
-        ):
-            raise ContractError(
-                f"{label}.{field} must equal {EXPECTED_PUBLISHED_OFFERS}"
-            )
+def require_payload_shape(payload: dict[str, Any]) -> None:
+    require_exact_counts(
+        payload,
+        "payload",
+        ("count", "published_offer_count", "verified_live_count"),
+    )
+    offers = payload.get("offers")
+    if not isinstance(offers, list) or len(offers) != EXPECTED_PUBLISHED_OFFERS:
+        raise ContractError(
+            f"payload.offers must contain exactly {EXPECTED_PUBLISHED_OFFERS} entries"
+        )
+
+
+def require_validation_success(validation: dict[str, Any]) -> None:
+    checked = validation.get("checked")
+    counts = validation.get("counts")
+    if type(checked) is not int or checked < EXPECTED_PUBLISHED_OFFERS:
+        raise ContractError(
+            f"validation.checked must be at least {EXPECTED_PUBLISHED_OFFERS}"
+        )
+    if (
+        not isinstance(counts, dict)
+        or set(counts) != {"verified", "dead", "unknown"}
+        or any(type(counts.get(state)) is not int or counts[state] < 0
+               for state in ("verified", "dead", "unknown"))
+        or sum(counts.values()) != checked
+    ):
+        raise ContractError("validation.counts must exactly account for validation.checked")
+    if counts["verified"] < EXPECTED_PUBLISHED_OFFERS:
+        raise ContractError(
+            f"validation.counts.verified must be at least {EXPECTED_PUBLISHED_OFFERS}"
+        )
+    if validation.get("verified_target") != EXPECTED_PUBLISHED_OFFERS:
+        raise ContractError(
+            f"validation.verified_target must equal {EXPECTED_PUBLISHED_OFFERS}"
+        )
+    if validation.get("target_reached") is not True:
+        raise ContractError("validation.target_reached must be true")
+    if validation.get("browser_frontier_complete") is not True:
+        raise ContractError("validation.browser_frontier_complete must be true")
+    if validation.get("full_input_coverage") is not True:
+        raise ContractError("validation.full_input_coverage must be true")
+    for field in ("ranked_pool_count", "direct_attempted_count"):
+        if validation.get(field) != checked:
+            raise ContractError(f"validation.{field} must equal validation.checked")
+
+
+def require_convergence_pass(convergence: dict[str, Any], generation: str) -> None:
+    if convergence.get("result") != "LIVE_GENERATION_AUDIT_PASS":
+        raise ContractError("convergence did not record LIVE_GENERATION_AUDIT_PASS")
+    for field in ("expected_generation", "observed_generation"):
+        if required_hex(convergence.get(field), 16, f"convergence.{field}") != generation:
+            raise ContractError(f"convergence.{field} does not match the public payload")
+    for field in CONVERGENCE_TRUE_FIELDS:
+        if convergence.get(field) is not True:
+            raise ContractError(f"convergence.{field} must be true")
+    for field in CONVERGENCE_ZERO_FIELDS:
+        if type(convergence.get(field)) is not int or convergence[field] != 0:
+            raise ContractError(f"convergence.{field} must be zero")
+
+    for field in (
+        "universe_unique_offers",
+        "qualified_universe_offers",
+        "full_ranked_input_offers",
+        "ranking_qualified_offers",
+        "ranking_saved_offers",
+        "ranking_saved_observed_offers",
+        "connected_country_count",
+        "connected_source_count",
+    ):
+        if type(convergence.get(field)) is not int or convergence[field] < 0:
+            raise ContractError(f"convergence.{field} must be a nonnegative integer")
+    if (
+        convergence["universe_unique_offers"]
+        != convergence["full_ranked_input_offers"]
+        or convergence["ranking_saved_offers"]
+        != convergence["ranking_saved_observed_offers"]
+        or not EXPECTED_PUBLISHED_OFFERS <= convergence["qualified_universe_offers"]
+        or convergence["qualified_universe_offers"]
+        > convergence["ranking_qualified_offers"]
+        or convergence["qualified_universe_offers"]
+        > convergence["ranking_saved_offers"]
+        or convergence["ranking_qualified_offers"]
+        > convergence["full_ranked_input_offers"]
+        or convergence["ranking_saved_offers"]
+        > convergence["full_ranked_input_offers"]
+        or convergence["connected_country_count"] < 1
+        or convergence["connected_source_count"] < 1
+    ):
+        raise ContractError("convergence counters violate the PASS invariants")
+
+    attempts = convergence.get("attempts")
+    network_errors = convergence.get("network_errors")
+    deadline = convergence.get("deadline_sec")
+    elapsed = convergence.get("elapsed_sec")
+    if (
+        type(attempts) is not int
+        or attempts < 1
+        or type(network_errors) is not int
+        or not 0 <= network_errors <= attempts
+        or isinstance(deadline, bool)
+        or not isinstance(deadline, (int, float))
+        or not math.isfinite(float(deadline))
+        or float(deadline) <= 0
+        or isinstance(elapsed, bool)
+        or not isinstance(elapsed, (int, float))
+        or not math.isfinite(float(elapsed))
+        or not 0 <= float(elapsed) <= float(deadline)
+    ):
+        raise ContractError("convergence wait metadata is invalid")
 
 
 def classify_age(age_seconds: int) -> str:
@@ -206,15 +326,22 @@ def evaluate(
     require_schema(payload, 2, "payload")
     require_schema(validation, 1, "validation")
     require_schema(publication, 1, "publication")
-    require_exact_count(payload, "payload")
-    require_exact_count(publication, "publication")
-    require_exact_count(convergence, "convergence")
-    require_optional_exact_counts(validation, "validation")
-
-    if convergence.get("result") != "LIVE_GENERATION_AUDIT_PASS":
-        raise ContractError("convergence did not record LIVE_GENERATION_AUDIT_PASS")
+    require_schema(convergence, 1, "convergence")
+    require_payload_shape(payload)
+    require_exact_counts(
+        publication,
+        "publication",
+        ("published_offer_count", "verified_live_count"),
+    )
+    require_exact_counts(
+        convergence,
+        "convergence",
+        ("published_offer_count", "verified_live_count"),
+    )
+    require_validation_success(validation)
 
     generation = required_hex(payload.get("generation_id"), 16, "payload.generation_id")
+    require_convergence_pass(convergence, generation)
     for label, value in (("publication", publication), ("convergence", convergence)):
         if required_hex(value.get("generation_id"), 16, f"{label}.generation_id") != generation:
             raise ContractError(f"{label} generation does not match the public payload")
@@ -350,7 +477,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--now",
         help="timezone-aware ISO-8601 assessment time (defaults to the current UTC time)",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--allow-test-now",
+        action="store_true",
+        help="allow --now injection for deterministic tests only",
+    )
+    args = parser.parse_args(argv)
+    if args.now is not None and not args.allow_test_now:
+        parser.error("--now requires --allow-test-now")
+    if args.allow_test_now and args.now is None:
+        parser.error("--allow-test-now requires --now")
+    return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:

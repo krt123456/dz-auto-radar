@@ -909,6 +909,7 @@ def audit_payload(
     )
 
     return {
+        "schema_version": 1,
         "result": "BEST_SELECTION_AUDIT_PASS",
         "generation_id": payload.get("generation_id"),
         "algorithm": ALGORITHM,

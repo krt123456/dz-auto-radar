@@ -481,7 +481,7 @@ class PipelineTest(unittest.TestCase):
             publisher.PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE,
         )
 
-    def test_push_only_rechecks_board_freshness_before_git_mutation(self) -> None:
+    def test_push_only_rechecks_board_data_freshness_before_git_mutation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = self.write_v7_fixture(Path(directory))
             board = copy.deepcopy(fixture["board"])
@@ -507,6 +507,31 @@ class PipelineTest(unittest.TestCase):
                 encoding="utf-8",
             )
             with self.assertRaisesRegex(RuntimeError, "stale"):
+                publisher.enforce_publication_audit(fixture["args"])
+
+    def test_push_only_rechecks_validation_freshness_before_git_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.write_v7_fixture(Path(directory))
+            board = copy.deepcopy(fixture["board"])
+            board["validation"]["generated_at"] = (
+                datetime.now(UTC) - publisher.PUBLICATION_VALIDATION_MAX_AGE
+            ).isoformat().replace("+00:00", "Z")
+            fixture["board_path"].write_text(json.dumps(board), encoding="utf-8")
+            fixture["manifest"].write_text(
+                json.dumps(
+                    {
+                        "source_board_sha256": publisher.sha256_file(
+                            fixture["board_path"]
+                        )
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fixture["audit"].write_text(
+                json.dumps({"result": "BEST_SELECTION_AUDIT_PASS"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "validation evidence is stale"):
                 publisher.enforce_publication_audit(fixture["args"])
 
     def test_publisher_and_auditor_reject_wrong_board_contract(self) -> None:
