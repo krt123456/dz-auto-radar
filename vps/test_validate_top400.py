@@ -1,5 +1,6 @@
 import json
 import tempfile
+import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -46,6 +47,16 @@ class CheckUrlTests(unittest.TestCase):
                 self.assertEqual(result["status"], "dead")
                 self.assertEqual(result["reason"], f"http_{status}")
 
+    def test_404_and_410_protection_redirects_are_unknown(self):
+        final_url = (
+            "https://cars.example/communfo/antiaspiration/default/getCaptcha"
+        )
+        for status in (404, 410):
+            with self.subTest(status=status):
+                result = self.check(FakeResponse(status, url=final_url))
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "protection_redirect")
+
     def test_403_and_429_are_unknown(self):
         for status in (403, 429):
             with self.subTest(status=status):
@@ -58,6 +69,33 @@ class CheckUrlTests(unittest.TestCase):
         result = self.check(FakeResponse(200, html))
         self.assertEqual(result["status"], "unknown")
         self.assertEqual(result["reason"], "cloudflare_challenge")
+
+    def test_http_200_protection_redirect_paths_are_unknown(self):
+        html = "<html><body>ordinary response content</body></html>" * 20
+        paths = (
+            "/communfo/antiaspiration/default/getCaptcha",
+            "/security/CAPTCHA",
+            "/communfo/ANTIASPIRATION/default/check",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                result = self.check(
+                    FakeResponse(200, html, url=f"https://cars.example{path}")
+                )
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "protection_redirect")
+
+    def test_http_200_ordinary_changed_paths_remain_fail_closed_unknown(self):
+        html = "<html><body>ordinary vehicle details</body></html>" * 20
+        for path in ("/search", "/"):
+            with self.subTest(path=path):
+                result = self.check(
+                    FakeResponse(200, html, url=f"https://cars.example{path}")
+                )
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(
+                    result["reason"], "http_200_listing_identity_unproven"
+                )
 
     def test_http_200_expired_marker_is_dead(self):
         html = "<html><body>This listing has been removed.</body></html>" * 10
@@ -164,29 +202,124 @@ class BrowserPageTests(unittest.TestCase):
         }
         self.body = "Toyota Corolla Hybrid vehicle details " * 20
 
-    def classify(self, final_url):
+    def classify(self, final_url, http_status=200):
         return validator.classify_browser_page(
             self.offer,
-            http_status=200,
+            http_status=http_status,
             final_url=final_url,
             page_title="Toyota Corolla Hybrid",
             body_text=self.body,
         )
+
+    def test_ordinary_404_and_410_are_dead(self):
+        for status in (404, 410):
+            with self.subTest(status=status):
+                result = self.classify(self.offer["url"], http_status=status)
+                self.assertEqual(result["status"], "dead")
+                self.assertEqual(result["reason"], f"browser_http_{status}")
+
+    def test_404_and_410_protection_redirects_are_unknown(self):
+        final_url = (
+            "https://cars.example/communfo/antiaspiration/default/getCaptcha"
+        )
+        for status in (404, 410):
+            with self.subTest(status=status):
+                result = self.classify(final_url, http_status=status)
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "browser_protection_redirect")
 
     def test_cross_host_redirect_never_verifies_matching_content(self):
         result = self.classify("https://search.example/listing/123")
         self.assertEqual(result["status"], "unknown")
         self.assertEqual(result["reason"], "browser_cross_host_redirect")
 
-    def test_same_host_changed_path_never_verifies_matching_content(self):
-        result = self.classify("https://cars.example/search")
-        self.assertEqual(result["status"], "unknown")
-        self.assertEqual(result["reason"], "browser_detail_path_changed")
+    def test_protection_redirect_paths_are_unknown(self):
+        paths = (
+            "/communfo/antiaspiration/default/getCaptcha",
+            "/security/CAPTCHA",
+            "/communfo/ANTIASPIRATION/default/check",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                result = self.classify(f"https://cars.example{path}")
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "browser_protection_redirect")
+
+    def test_same_host_ordinary_changed_paths_never_verify_matching_content(self):
+        for path in ("/search", "/"):
+            with self.subTest(path=path):
+                result = self.classify(f"https://cars.example{path}")
+                self.assertEqual(result["status"], "unknown")
+                self.assertEqual(result["reason"], "browser_detail_path_changed")
 
     def test_same_detail_path_with_matching_identity_verifies(self):
         result = self.classify("https://www.cars.example/listing/123")
         self.assertEqual(result["status"], "verified")
         self.assertEqual(result["reason"], "browser_rendered_detail_identity")
+
+
+class BrowserEligibilityTests(unittest.TestCase):
+    @staticmethod
+    def result(**overrides):
+        result = {
+            "board_rank": 1,
+            "status": "unknown",
+            "url": "https://www.paruvendu.fr/a/voiture-occasion/123",
+            "final_url": (
+                "https://paruvendu.fr/communfo/antiaspiration/default/getCaptcha"
+            ),
+            "reason": "protection_redirect",
+        }
+        result.update(overrides)
+        return result
+
+    def test_paruvendu_direct_protection_redirect_is_not_browser_eligible(self):
+        item = self.result()
+        self.assertFalse(validator.browser_eligible(item))
+        self.assertEqual(validator.select_browser_target_ranks([item], 0), [])
+
+    def test_other_paruvendu_unknowns_remain_browser_eligible(self):
+        for reason in ("http_429", "cloudflare_challenge", "browser_protection_redirect"):
+            with self.subTest(reason=reason):
+                self.assertTrue(validator.browser_eligible(self.result(reason=reason)))
+
+    def test_other_source_protection_redirect_remains_browser_eligible(self):
+        self.assertTrue(
+            validator.browser_eligible(
+                self.result(
+                    url="https://cars.example/listing/123",
+                    final_url="https://cars.example/security/captcha",
+                )
+            )
+        )
+
+    def test_both_normalized_hosts_must_be_exactly_paruvendu(self):
+        cases = (
+            {
+                "url": "https://www.paruvendu.fr/a/voiture-occasion/123",
+                "final_url": "https://captcha.example/security/captcha",
+            },
+            {
+                "url": "https://cars.example/listing/123",
+                "final_url": "https://www.paruvendu.fr/security/captcha",
+            },
+            {
+                "url": "https://autos.paruvendu.fr/listing/123",
+                "final_url": "https://autos.paruvendu.fr/security/captcha",
+            },
+        )
+        for overrides in cases:
+            with self.subTest(**overrides):
+                self.assertTrue(validator.browser_eligible(self.result(**overrides)))
+
+    def test_verified_and_dead_results_remain_ineligible(self):
+        for status in ("verified", "dead"):
+            with self.subTest(status=status):
+                self.assertFalse(
+                    validator.browser_eligible(
+                        self.result(status=status, reason="http_200")
+                    )
+                )
 
 
 class CheckpointTests(unittest.TestCase):
@@ -368,6 +501,377 @@ class CheckpointTests(unittest.TestCase):
             resumed = store.load()
             self.assertEqual(resumed["stage"], "complete")
             self.assertEqual(set(resumed["browser_by_rank"]), {1})
+
+    def test_exact_complete_checkpoint_can_be_removed_after_resume_expiry(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        expired = (datetime.now(UTC) - timedelta(hours=7)).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        complete = {
+            "stage": "complete",
+            "run_started_at": expired,
+            "direct_by_rank": {item["board_rank"]: item for item in direct},
+            "browser_target_ranks": targets,
+            "browser_by_rank": {1: browser_one},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "remove.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = store.save(**complete)
+            store.remove_completed(
+                expected_checkpoint_sha256=expected_checksum,
+            )
+            self.assertFalse(path.exists())
+
+            resume_path = root / "resume.json"
+            resume_store = validator.CheckpointStore(
+                resume_path, identity=self.identity, normalized=self.normalized
+            )
+            resume_store.save(**complete)
+            with self.assertRaises(validator.CheckpointError):
+                resume_store.load()
+            self.assertFalse(resume_path.exists())
+            self.assertEqual(len(list(root.glob("resume.json.*.quarantine"))), 1)
+
+    def test_expired_browser_checkpoint_accepts_only_bounded_explicit_grace(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        expired = (datetime.now(UTC) - timedelta(hours=7)).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "browser.json"
+            store = validator.CheckpointStore(
+                path,
+                identity=self.identity,
+                normalized=self.normalized,
+                resume_grace_sec=2 * 60 * 60,
+            )
+            store.save(
+                stage="browser",
+                run_started_at=expired,
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=validator.select_browser_target_ranks(direct, 2),
+                browser_by_rank={},
+            )
+            resumed = store.load()
+            self.assertEqual(resumed["run_started_at"], expired)
+
+            direct_path = root / "direct.json"
+            direct_store = validator.CheckpointStore(
+                direct_path,
+                identity=self.identity,
+                normalized=self.normalized,
+                resume_grace_sec=2 * 60 * 60,
+            )
+            direct_store.save(
+                stage="direct",
+                run_started_at=expired,
+                direct_by_rank={1: direct[0]},
+                browser_target_ranks=[],
+                browser_by_rank={},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                direct_store.load()
+
+        with self.assertRaises(ValueError):
+            validator.CheckpointStore(
+                Path("unused.json"),
+                identity=self.identity,
+                normalized=self.normalized,
+                resume_grace_sec=validator.MAX_CHECKPOINT_RESUME_GRACE_SEC + 1,
+            )
+
+    def test_compatibility_pins_allow_only_validator_source_hash_migration(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        old_identity = json.loads(json.dumps(self.identity))
+        old_identity["validator"] = {"source_sha256": "c" * 64}
+        current_identity = json.loads(json.dumps(old_identity))
+        current_identity["validator"]["source_sha256"] = "d" * 64
+        old_identity_sha = validator.sha256_bytes(
+            validator.canonical_json_bytes(old_identity)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            old_store = validator.CheckpointStore(
+                path, identity=old_identity, normalized=self.normalized
+            )
+            checkpoint_sha = old_store.save(
+                stage="browser",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=validator.select_browser_target_ranks(direct, 2),
+                browser_by_rank={},
+            )
+            rescue_store = validator.CheckpointStore(
+                path,
+                identity=current_identity,
+                normalized=self.normalized,
+                compatible_identity_sha256=old_identity_sha,
+                compatible_checkpoint_sha256=checkpoint_sha,
+            )
+            self.assertEqual(rescue_store.load()["stage"], "browser")
+
+            wrong_path = Path(directory) / "wrong.json"
+            wrong_store = validator.CheckpointStore(
+                wrong_path,
+                identity=old_identity,
+                normalized=self.normalized,
+            )
+            wrong_store.save(
+                stage="browser",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=validator.select_browser_target_ranks(direct, 2),
+                browser_by_rank={},
+            )
+            rejected = validator.CheckpointStore(
+                wrong_path,
+                identity=current_identity,
+                normalized=self.normalized,
+                compatible_identity_sha256=old_identity_sha,
+                compatible_checkpoint_sha256="e" * 64,
+            )
+            with self.assertRaises(validator.CheckpointError):
+                rejected.load()
+
+    def test_completed_removal_rejects_stale_digest_and_wrong_identity(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            stale_checksum = store.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["checkpointed_at"] = "2026-08-14T19:00:00Z"
+            unsigned = {
+                key: value for key, value in payload.items()
+                if key != "checkpoint_sha256"
+            }
+            current_checksum = validator.sha256_bytes(
+                validator.canonical_json_bytes(unsigned)
+            )
+            payload["checkpoint_sha256"] = current_checksum
+            validator.atomic_json_write(path, payload)
+
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=stale_checksum,
+                )
+            self.assertTrue(path.exists())
+
+            wrong_identity = json.loads(json.dumps(self.identity))
+            wrong_identity["input"]["full_content_sha256"] = "c" * 64
+            wrong_store = validator.CheckpointStore(
+                path, identity=wrong_identity, normalized=self.normalized
+            )
+            with self.assertRaises(validator.CheckpointError):
+                wrong_store.remove_completed(
+                    expected_checkpoint_sha256=current_checksum,
+                )
+            self.assertTrue(path.exists())
+
+            store.remove_completed(
+                expected_checkpoint_sha256=current_checksum,
+            )
+            self.assertFalse(path.exists())
+
+    def test_completed_removal_preserves_tampered_or_non_complete_checkpoint(self):
+        direct = {1: self.classification(self.normalized[0])}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            direct_checksum = store.save(
+                stage="direct",
+                run_started_at=validator.utc_now(),
+                direct_by_rank=direct,
+                browser_target_ranks=[],
+                browser_by_rank={},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=direct_checksum,
+                )
+            self.assertTrue(path.exists())
+
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["stage"] = "complete"
+            validator.atomic_json_write(path, payload)
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=direct_checksum,
+                )
+            self.assertTrue(path.exists())
+
+    def test_completed_removal_serializes_a_competing_store_save(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        validated = threading.Event()
+        release_removal = threading.Event()
+
+        class PausingStore(validator.CheckpointStore):
+            def _validate_for_removal(self, payload, *, expected_checkpoint_sha256):
+                state = super()._validate_for_removal(
+                    payload,
+                    expected_checkpoint_sha256=expected_checkpoint_sha256,
+                )
+                validated.set()
+                if not release_removal.wait(2):
+                    raise RuntimeError("test timed out waiting to release removal")
+                return state
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            remover = PausingStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            writer = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = remover.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            errors = []
+            writer_started = threading.Event()
+            writer_finished = threading.Event()
+
+            def remove_checkpoint():
+                try:
+                    remover.remove_completed(
+                        expected_checkpoint_sha256=expected_checksum,
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+
+            def replace_checkpoint():
+                writer_started.set()
+                try:
+                    writer.save(
+                        stage="direct",
+                        run_started_at=validator.utc_now(),
+                        direct_by_rank={1: direct[0]},
+                        browser_target_ranks=[],
+                        browser_by_rank={},
+                    )
+                except BaseException as exc:
+                    errors.append(exc)
+                finally:
+                    writer_finished.set()
+
+            remove_thread = threading.Thread(target=remove_checkpoint)
+            remove_thread.start()
+            self.assertTrue(validated.wait(1))
+            writer_thread = threading.Thread(target=replace_checkpoint)
+            writer_thread.start()
+            self.assertTrue(writer_started.wait(1))
+            self.assertFalse(writer_finished.wait(0.1))
+            release_removal.set()
+            remove_thread.join(2)
+            writer_thread.join(2)
+
+            self.assertFalse(remove_thread.is_alive())
+            self.assertFalse(writer_thread.is_alive())
+            self.assertEqual(errors, [])
+            self.assertTrue(path.exists())
+            self.assertEqual(writer.load()["stage"], "direct")
+
+    def test_completed_removal_preserves_future_dated_checkpoint(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_one = {
+            **direct[0],
+            "direct_reason": direct[0]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        future = (datetime.now(UTC) + timedelta(minutes=10)).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = store.save(
+                stage="complete",
+                run_started_at=future,
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={1: browser_one},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=expected_checksum,
+                )
+            self.assertTrue(path.exists())
+
+    def test_completed_removal_rejects_resigned_invalid_frontier(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        targets = validator.select_browser_target_ranks(direct, 2)
+        browser_two = {
+            **direct[1],
+            "direct_reason": direct[1]["reason"],
+            "status": "verified",
+            "http_status": 200,
+            "reason": "browser_rendered_detail_identity",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            store = validator.CheckpointStore(
+                path, identity=self.identity, normalized=self.normalized
+            )
+            expected_checksum = store.save(
+                stage="complete",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=targets,
+                browser_by_rank={2: browser_two},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                store.remove_completed(
+                    expected_checkpoint_sha256=expected_checksum,
+                )
+            self.assertTrue(path.exists())
 
     def test_target_frontier_rejects_unattempted_higher_rank(self):
         results = [

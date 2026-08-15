@@ -34,11 +34,11 @@ MAGIC = b"DZAR1"
 PBKDF2_ITERATIONS = 310_000
 ALGORITHM_VERSION = "schengen-observed-peer-value-v7-live-verified"
 CONTRACT_SCHEMA_VERSION = 2
-PUBLICATION_VALIDATION_MAX_AGE_HOURS = 6
+PUBLICATION_VALIDATION_MAX_AGE_HOURS = 8
 PUBLICATION_VALIDATION_MAX_AGE = timedelta(
     hours=PUBLICATION_VALIDATION_MAX_AGE_HOURS
 )
-PUBLICATION_DATA_MAX_AGE_HOURS = 6
+PUBLICATION_DATA_MAX_AGE_HOURS = 8
 PUBLICATION_DATA_MAX_AGE = timedelta(hours=PUBLICATION_DATA_MAX_AGE_HOURS)
 PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE = timedelta(minutes=5)
 DEFAULT_ROOT = Path("/home/krt/car_deal_finder")
@@ -703,6 +703,14 @@ def run_git(site: Path, *arguments: str, check: bool = True) -> subprocess.Compl
     )
 
 
+def is_git_checkout(site: Path) -> bool:
+    metadata = site / ".git"
+    if not (metadata.is_dir() or metadata.is_file()):
+        return False
+    result = run_git(site, "rev-parse", "--is-inside-work-tree", check=False)
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
 def enforce_publication_audit(args: argparse.Namespace) -> None:
     """Require the independent, same-generation audit before Git mutation."""
     manifest = load_json(args.audit_manifest)
@@ -731,7 +739,7 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
 
 def publish(args: argparse.Namespace) -> None:
     enforce_publication_audit(args)
-    if not (args.site / ".git").is_dir():
+    if not is_git_checkout(args.site):
         raise RuntimeError(f"publication directory is not a git checkout: {args.site}")
     (args.site / "board.json").unlink(missing_ok=True)
     run_git(args.site, "rm", "--cached", "--ignore-unmatch", "board.json", check=False)

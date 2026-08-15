@@ -261,6 +261,28 @@ class ObservedValueBoardTest(unittest.TestCase):
         self.assertEqual(summary["browser_attempted_count"], 1)
         self.assertEqual(summary["browser_target_count"], 2)
 
+    def test_terminal_paruvendu_protection_redirect_is_not_browser_evidence(self) -> None:
+        result = {
+            "status": "unknown",
+            "reason": "protection_redirect",
+            "url": "https://www.paruvendu.fr/a/voiture-occasion/example",
+            "final_url": (
+                "https://www.paruvendu.fr/communfo/antiaspiration/default/"
+                "getCaptcha"
+            ),
+        }
+        self.assertFalse(observed.browser_evidence_expected(result))
+        self.assertTrue(
+            observed.browser_evidence_expected(
+                {**result, "url": "https://cars.example/listing/1"}
+            )
+        )
+        self.assertTrue(
+            observed.browser_evidence_expected(
+                {**result, "direct_reason": "protection_redirect"}
+            )
+        )
+
     def test_source_excluded_peer_math_and_no_invented_economics(self) -> None:
         ranked, board = observed.build(self.arguments())
         candidate = next(

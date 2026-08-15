@@ -83,7 +83,7 @@ function makeSandbox({ local = {}, session = {} } = {}) {
   return sandbox;
 }
 
-function offer(id, title, model) {
+function offer(id, title, model, country = "FR") {
   return {
     id,
     m: model,
@@ -100,7 +100,7 @@ function offer(id, title, model) {
     y: 2025,
     km: 10_000,
     f: "petrol",
-    c: "FR",
+    c: country,
     s: "Source A",
     u: `https://example.test/${id}`,
     ls: "2026-08-14T12:00:00Z",
@@ -110,8 +110,12 @@ function offer(id, title, model) {
 
 const offers = [
   offer("mercedes", "Mercedes-Benz GLA 200", "gla_200"),
+  offer("mercedes-de", "Mercedes-Benz C 200", "c_200", "DE"),
   offer("citroen", "Citroën C3 PureTech", "c3_puretech"),
   offer("skoda", "Škoda Octavia", "octavia_1.5-tsi"),
+  offer("seat-fr-de", "Seat Ibiza FR LED", "ibiza", "DE"),
+  offer("lexus-is-bg", "Lexus IS 300", "is_300", "BG"),
+  offer("bmw-at-sk", "BMW 320d AT M-Sport", "320d", "SK"),
 ];
 const payload = {
   schema_version: 2,
@@ -136,14 +140,17 @@ function evaluate(sandbox, source) {
   return vm.runInContext(source, sandbox, { filename: "dashboard-search-exercise.js" });
 }
 
-function matchingIds(sandbox, query) {
+function matchingIds(sandbox, query, country = "") {
   sandbox.document.getElementById("q").value = query;
+  sandbox.document.getElementById("fc").value = country;
   return Array.from(evaluate(sandbox, "apply(); VIEW.map(offer=>offer.id)"));
 }
 
 try {
   const local = {
-    "dzr-known-offers-v1": JSON.stringify(["mercedes", "citroen"]),
+    "dzr-known-offers-v1": JSON.stringify([
+      "mercedes", "mercedes-de", "citroen", "seat-fr-de", "lexus-is-bg", "bmw-at-sk",
+    ]),
     "dzr-new-offers-v1": "[]",
     "dzr-visited-offers-v1": "[]",
   };
@@ -156,7 +163,7 @@ try {
     "normalization must decompose case and map punctuation, symbols, underscores, and whitespace",
   );
   check(
-    JSON.stringify(matchingIds(fresh, "Mercedes Benz")) === JSON.stringify(["mercedes"]),
+    JSON.stringify(matchingIds(fresh, "Mercedes Benz")) === JSON.stringify(["mercedes", "mercedes-de"]),
     "Mercedes Benz must match Mercedes-Benz",
   );
   check(
@@ -166,6 +173,42 @@ try {
   check(
     JSON.stringify(matchingIds(fresh, "Skoda")) === JSON.stringify(["skoda"]),
     "Skoda must match Škoda",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "Mercedes France")) === JSON.stringify(["mercedes"]),
+    "combined brand-country search must match the localized country document",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "Mercedes/France")) === JSON.stringify(["mercedes"]),
+    "slash-separated brand-country search must normalize into AND-matched tokens",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "Mercedes GLA")) === JSON.stringify(["mercedes"]),
+    "non-contiguous brand and model tokens must match the same offer",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "Mercedes", "FR")) === JSON.stringify(["mercedes"]),
+    "text search and the explicit country filter must compose",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "Citroen France")) === JSON.stringify(["citroen"]),
+    "diacritic folding and country aliases must compose",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "Skoda فرنسا")) === JSON.stringify(["skoda"]),
+    "Arabic country labels must participate in combined search",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "FR")) === JSON.stringify(["seat-fr-de"]),
+    "FR must remain a trim search rather than silently becoming France",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "IS")) === JSON.stringify(["lexus-is-bg"]),
+    "IS must remain a model search rather than silently becoming Iceland",
+  );
+  check(
+    JSON.stringify(matchingIds(fresh, "AT")) === JSON.stringify(["bmw-at-sk"]),
+    "AT must remain a transmission search rather than silently becoming Austria",
   );
   fresh.document.getElementById("q").value = "";
   evaluate(fresh, "apply()");

@@ -174,6 +174,37 @@ class SealValidationReportTests(unittest.TestCase):
         self.write_inputs()
         self.assert_rejected_without_rewrite()
 
+    def test_pool_exhaustion_accepts_terminal_paruvendu_protection_redirect(self) -> None:
+        url = "https://www.paruvendu.fr/a/voiture-occasion/example"
+        self.board["offers"][1]["url"] = url
+        self.validation["browser_target_count"] = 1
+        self.validation["browser_attempted_count"] = 1
+        self.validation["browser_target_ranks"] = [1]
+        self.validation["browser_attempted_ranks"] = [1]
+        self.validation["results"][1] = {
+            "board_rank": 2,
+            "url": url,
+            "status": "unknown",
+            "reason": "protection_redirect",
+            "final_url": (
+                "https://www.paruvendu.fr/communfo/antiaspiration/default/"
+                "getCaptcha"
+            ),
+        }
+        self.write_inputs()
+
+        self.assertEqual(
+            sealer.main(
+                [
+                    "--board",
+                    str(self.board_path),
+                    "--validation",
+                    str(self.validation_path),
+                ]
+            ),
+            0,
+        )
+
     def test_target_frontier_rejects_unattempted_higher_rank(self) -> None:
         self.validation["pool_exhausted"] = False
         self.validation["browser_attempted_count"] = 1
