@@ -443,7 +443,7 @@ class PipelineTest(unittest.TestCase):
             return (now - age).isoformat().replace("+00:00", "Z")
 
         for age in (
-            timedelta(hours=5, minutes=59, seconds=59),
+            publisher.PUBLICATION_DATA_MAX_AGE - timedelta(seconds=1),
             -publisher.PUBLICATION_DATA_FUTURE_SKEW_ALLOWANCE,
         ):
             with self.subTest(accepted_age=age):
@@ -452,7 +452,7 @@ class PipelineTest(unittest.TestCase):
                 )
         with self.assertRaisesRegex(RuntimeError, "stale"):
             publisher.require_publishable_data_timestamp(
-                timestamp(timedelta(hours=6)), now=now,
+                timestamp(publisher.PUBLICATION_DATA_MAX_AGE), now=now,
             )
         with self.assertRaisesRegex(RuntimeError, "future"):
             publisher.require_publishable_data_timestamp(
