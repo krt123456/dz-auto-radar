@@ -66,6 +66,9 @@ header{padding:22px 0 12px}
 .stat b{color:var(--txt);font-size:.95rem;margin-inline-start:6px}
 .freshness-alert{margin-top:10px;padding:11px 13px;border:1px solid rgba(251,191,36,.48);border-radius:12px;
   background:rgba(251,191,36,.1);color:#fde68a;font-size:.82rem;line-height:1.55}
+.fx-note{margin-top:10px;padding:11px 13px;border:1px solid rgba(56,189,248,.38);border-radius:12px;
+  background:rgba(56,189,248,.08);color:#bae6fd;font-size:.8rem;line-height:1.55}
+.fx-note.warn{border-color:rgba(251,191,36,.48);background:rgba(251,191,36,.1);color:#fde68a}
 
 /* ---------- filters ---------- */
 #filters{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.88);backdrop-filter:blur(12px);
@@ -80,6 +83,7 @@ header{padding:22px 0 12px}
 #reset{background:var(--chip);border:1px solid var(--line);border-radius:12px;color:var(--mut);padding:11px 16px;cursor:pointer;white-space:nowrap}
 .count{color:var(--mut);font-size:.85rem;margin-top:10px}
 .count b{color:var(--acc)}
+.sort-help{color:#b9c9e6;font-size:.78rem;line-height:1.55;margin-top:9px;padding-inline:4px}
 .secondary-filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px}
 @media(min-width:760px){.secondary-filters{grid-template-columns:repeat(3,max-content);justify-content:start}}
 .check{display:flex;gap:8px;align-items:center;cursor:pointer}
@@ -115,6 +119,14 @@ header{padding:22px 0 12px}
 .meta div b{color:var(--txt);font-weight:500}
 .evidence{padding:9px 11px;border:1px solid rgba(34,211,165,.25);border-radius:11px;background:rgba(34,211,165,.07);
   color:#b9e9dc;font-size:.78rem;line-height:1.55}
+.cost-estimator{border:1px solid var(--line);border-radius:11px;background:#0a1120;padding:9px 11px;color:var(--mut);font-size:.77rem}
+.cost-estimator summary{cursor:pointer;color:#c9d7ef;font-weight:700;line-height:1.5}
+.cost-note,.vat-note{line-height:1.55;margin-top:8px}
+.vat-note{color:#fde68a}
+.cost-fields{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}
+.cost-fields label{display:flex;flex-direction:column;gap:4px;color:var(--mut)}
+.cost-input{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--card2);color:var(--txt);direction:ltr;text-align:left}
+.cost-total{margin-top:9px;padding:8px;border-radius:8px;background:rgba(56,189,248,.08);color:#bae6fd;line-height:1.55}
 .recency{font-size:.76rem;color:var(--mut);line-height:1.5}
 .foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto}
 .verification{font-size:.75rem;color:var(--mut);line-height:1.45;max-width:65%}
@@ -173,6 +185,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     </div>
     <div class="stats" id="stats" aria-label="ملخص بيانات اللوحة"></div>
     <div class="freshness-alert hidden" id="freshnessAlert" role="alert"></div>
+    <div class="fx-note" id="fxnote" role="status" aria-live="polite">جاري التحقق من سعر عرض الدينار…</div>
   </header>
 
   <section id="filters" aria-label="تصفية وترتيب العروض">
@@ -196,6 +209,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="price">💶 الأقل سعراً باليورو</option>
         <option value="saving">💰 أكبر فرق مرصود باليورو</option>
         <option value="recent">🕒 الأحدث رصدًا</option>
+        <option value="km">🛣️ الأقل كيلومترات</option>
       </select>
       <button id="reset" type="button">↺ مسح</button>
     </div>
@@ -210,6 +224,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <input type="checkbox" id="funseen"> لم أفتحها فقط
       </label>
     </div>
+    <div class="sort-help" id="sortHelp">أفضل قيمة: مقارنة سعر الإعلان بعروض مشابهة؛ لا تعني ربحًا مضمونًا.</div>
     <div class="count" id="count" role="status" aria-live="polite"></div>
   </section>
 
@@ -257,7 +272,66 @@ const percentBasisPoints=value=>{
   return Number.isFinite(scaled)&&Math.abs(scaled-rounded)<=1e-9?rounded:NaN;
 };
 const fmtEu=v=>nf.format(Math.round(finiteNumber(v)))+" €";
-const fmtMoney=fmtEu;
+const FX_MAX_AGE_MS=72*60*60*1000;
+const FX_EFFECTIVE_MAX_AGE_MS=10*24*60*60*1000;
+const FX_FUTURE_TOLERANCE_MS=5*60*1000;
+let FX=null,FX_STATE="loading",FX_REASON="",FX_LOAD_PROMISE=null;
+const own=(value,key)=>Object.prototype.hasOwnProperty.call(value,key);
+const exactKeys=(value,expected)=>value&&typeof value==="object"&&!Array.isArray(value)&&
+  Object.keys(value).length===expected.length&&expected.every(key=>own(value,key));
+function canonicalJson(value){
+  if(value===null||typeof value==="boolean"||typeof value==="string")return JSON.stringify(value);
+  if(typeof value==="number"&&Number.isFinite(value))return JSON.stringify(value);
+  if(Array.isArray(value))return `[${value.map(canonicalJson).join(",")}]`;
+  if(value&&typeof value==="object")return `{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  throw new Error("invalid");
+}
+async function sha256Hex(value){
+  if(!crypto||!crypto.subtle)throw new Error("invalid");
+  const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map(byte=>byte.toString(16).padStart(2,"0")).join("");
+}
+async function validateFxConfig(value,nowMs=Date.now()){
+  const topFields=["schema_version","captured_at_utc","source","semantic","semantic_sha256","read_count","evidence","seal"];
+  if(!exactKeys(value,topFields)||value.schema_version!==1)throw new Error("invalid");
+  if(!exactKeys(value.source,["name","url","rate_kind"])||
+     value.source.name!=="ALCES External Portal"||
+     value.source.url!=="https://alces.douane.gov.dz/api/public/com/main/selectFxrtList"||
+     value.source.rate_kind!=="external_trade_sell")throw new Error("invalid");
+  const semantic=value.semantic;
+  if(!exactKeys(semantic,["base_currency","display_currency","effective_date","buy_rate","sell_rate","rate_scale","sell_rate_scaled"])||
+     semantic.base_currency!=="EUR"||semantic.display_currency!=="DZD"||semantic.rate_scale!==100000||
+     typeof semantic.buy_rate!=="string"||typeof semantic.sell_rate!=="string"||
+     !/^[1-9][0-9]{1,2}\.[0-9]{5}$/.test(semantic.buy_rate)||!/^[1-9][0-9]{1,2}\.[0-9]{5}$/.test(semantic.sell_rate)||
+     !Number.isSafeInteger(semantic.sell_rate_scaled))throw new Error("invalid");
+  const buy=Number(semantic.buy_rate),sell=Number(semantic.sell_rate);
+  if(buy<50||sell>500||sell<buy||semantic.sell_rate_scaled!==Math.round(sell*semantic.rate_scale))throw new Error("invalid");
+  const captured=timestampMs(value.captured_at_utc);
+  if(captured===null)throw new Error("invalid");
+  const age=nowMs-captured;
+  if(age < -FX_FUTURE_TOLERANCE_MS)throw new Error("future");
+  if(age > FX_MAX_AGE_MS)throw new Error("stale");
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(semantic.effective_date))throw new Error("invalid");
+  const effective=Date.parse(`${semantic.effective_date}T00:00:00Z`);
+  const capturedDate=Date.UTC(new Date(captured).getUTCFullYear(),new Date(captured).getUTCMonth(),new Date(captured).getUTCDate());
+  if(!Number.isFinite(effective)||effective>capturedDate+24*60*60*1000||capturedDate-effective>FX_EFFECTIVE_MAX_AGE_MS)throw new Error("stale");
+  if(!Number.isInteger(value.read_count)||value.read_count<2||value.read_count>8||
+     !Array.isArray(value.evidence)||value.evidence.length!==value.read_count)throw new Error("invalid");
+  const hex=/^[0-9a-f]{64}$/;
+  for(const item of value.evidence){
+    if(!exactKeys(item,["replica","evidence_file","bytes","raw_sha256"])||typeof item.replica!=="string"||
+       typeof item.evidence_file!=="string"||item.evidence_file.startsWith("/")||item.evidence_file.split("/").some(part=>!part||part==="."||part==="..")||
+       !Number.isInteger(item.bytes)||item.bytes<=0||item.bytes>1048576||!hex.test(item.raw_sha256))throw new Error("invalid");
+  }
+  if(!hex.test(value.semantic_sha256)||value.semantic_sha256!==await sha256Hex(canonicalJson(semantic)))throw new Error("invalid");
+  if(!exactKeys(value.seal,["algorithm","value"])||value.seal.algorithm!=="sha256"||!hex.test(value.seal.value))throw new Error("invalid");
+  const core={};for(const key of topFields){if(key!=="seal")core[key]=value[key];}
+  if(value.seal.value!==await sha256Hex(canonicalJson(core)))throw new Error("invalid");
+  return {rateScaled:semantic.sell_rate_scaled,rateScale:semantic.rate_scale,rate:sell,
+    effectiveDate:semantic.effective_date,capturedAt:value.captured_at_utc,sourceName:value.source.name};
+}
+const fmtDzd=v=>FX?nf.format(Math.round(finiteNumber(v)*FX.rateScaled/FX.rateScale))+" دج":"";
+const fmtMoney=v=>fmtEu(v)+(FX?` · ${fmtDzd(v)}`:"");
 const fmtPct=v=>pctf.format(finiteNumber(v))+"%";
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const safeUrl=v=>{try{
@@ -276,6 +350,27 @@ function recencyText(value){
   const relative=ageMinutes<1?"الآن":ageMinutes<60?`منذ ${ageMinutes} دقيقة`:
     ageMinutes<1440?`منذ ${Math.floor(ageMinutes/60)} ساعة`:`منذ ${Math.floor(ageMinutes/1440)} يومًا`;
   return `${relative} · ${fmtTime(value)}`;
+}
+function paintFxStatus(){
+  const note=$("fxnote");if(!note)return;
+  note.classList.toggle("warn",FX_STATE==="fallback");
+  if(FX){
+    note.textContent=`عرض الدينار مفعّل: يظهر كل مبلغ معروف باليورو ثم بالدينار، بسعر بيع اليورو للتجارة الخارجية ${FX.rate.toFixed(5)} دج لكل 1 €، فعّال ${FX.effectiveDate} من بوابة ALCES للجمارك الجزائرية (التقاط ${fmtTime(FX.capturedAt)}). التحويل للعرض فقط وليس رسومًا أو تكلفة نهائية.`;
+  }else if(FX_STATE==="fallback"){
+    const reason=FX_REASON==="stale"?"سعر الصرف المنشور قديم":FX_REASON==="future"?"تاريخ سعر الصرف غير صالح":"تعذر التحقق من ملف سعر الصرف المختوم";
+    note.textContent=`عرض الدينار غير متاح الآن لأن ${reason}. نعرض اليورو وحده بدل استعمال سعر غير موثوق.`;
+  }else note.textContent="جاري التحقق من سعر عرض الدينار…";
+}
+async function loadFx(){
+  FX=null;FX_STATE="loading";FX_REASON="";paintFxStatus();
+  try{
+    const response=await fetch(`display_currency.json?v=${Date.now()}`,{cache:"no-store"});
+    if(!response.ok)throw new Error("missing");
+    FX=await validateFxConfig(await response.json());FX_STATE="ready";
+  }catch(error){FX=null;FX_STATE="fallback";FX_REASON=error&&error.message||"invalid";}
+  paintFxStatus();
+  if(DATA.length)render();
+  return FX;
 }
 const FORBIDDEN_OFFER_FIELDS=new Set([
   "pr","ep","prd","roi","er","rd","ld","cd","ci","cb","cr",
@@ -331,8 +426,15 @@ const NAV_KEY="dzr-navigation-v2";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen"];
 const HISTORY_LIMIT=50000;
-const SORT_MODES=new Set(["ranked","price","saving","recent"]);
+const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
+const SORT_HELP={
+  ranked:"أفضل قيمة: مقارنة سعر الإعلان بعروض مشابهة؛ لا تعني ربحًا مضمونًا.",
+  price:"الأقل سعرًا: يرتب سعر شراء السيارة المعلن باليورو من الأقل إلى الأعلى.",
+  saving:"أكبر فرق مرصود: الفرق بين سعر الإعلان والسعر المنخفض لعروض مشابهة؛ ليس ربحًا مضمونًا.",
+  recent:"الأحدث: يعرض الإعلانات ذات وقت الرصد الأحدث أولًا.",
+  km:"الأقل كيلومترات: يرتب عداد السيارة المعلن من الأقل إلى الأعلى."
+};
 
 function readNavigationState(){
   try{
@@ -573,9 +675,11 @@ function apply(){
   const rankedTie=(a,b)=>originalRank(a)-originalRank(b)||lexicalId(a,b);
   const sorts={
     price:(a,b)=>a.p-b.p||rankedTie(a,b),saving:(a,b)=>b.sv-a.sv||rankedTie(a,b),
-    recent:(a,b)=>timestampMs(b.ls)-timestampMs(a.ls)||rankedTie(a,b)
+    recent:(a,b)=>timestampMs(b.ls)-timestampMs(a.ls)||rankedTie(a,b),
+    km:(a,b)=>a.km-b.km||rankedTie(a,b)
   };
   if(s!=="ranked"&&sorts[s])VIEW.sort(sorts[s]);
+  $("sortHelp").textContent=SORT_HELP[s];
   $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> من ${nf.format(DATA.length)} مقارنة مرتبة`;
   render();
 }
@@ -602,22 +706,23 @@ function card(o){
     </div>
     <h2 class="title" title="${esc(o.t)}">${esc(o.t)}</h2>
     <div class="saving">
-      <strong>${fmtMoney(o.sv)}</strong><span>أقل من الربع الأدنى لنظرائه</span>
+      <strong>${fmtMoney(o.sv)}</strong><span>فرق مرصود عن السعر المنخفض لعروض مشابهة</span>
     </div>
     <div class="discounts">
-      <div class="metric">الخصم المحافظ عن الربع الأدنى<strong>${fmtPct(o.sp)}</strong></div>
-      <div class="metric">الخصم عن وسيط النظراء<strong>${fmtPct(o.dp)}</strong></div>
+      <div class="metric">أقل من السعر المنخفض المعتاد لعروض مشابهة<strong>${fmtPct(o.sp)}</strong></div>
+      <div class="metric">أقل من السعر الأوسط لعروض مشابهة<strong>${fmtPct(o.dp)}</strong></div>
     </div>
     <div class="meta">
-      <div>💰 سعر الإعلان <b>${fmtMoney(o.p)}</b></div>
-      <div>◼ الربع الأدنى للنظراء <b>${fmtMoney(o.q1)}</b></div>
-      <div>◉ وسيط النظراء <b>${fmtMoney(o.mp)}</b></div>
+      <div>💰 سعر شراء السيارة المعلن (قبل الشحن والجمارك) <b>${fmtMoney(o.p)}</b></div>
+      <div>◼ سعر منخفض لعروض مشابهة <b>${fmtMoney(o.q1)}</b></div>
+      <div>◉ السعر الأوسط لعروض مشابهة <b>${fmtMoney(o.mp)}</b></div>
       <div>🗓️ السنة <b>${nf.format(o.y)}</b></div>
       <div>🛣️ العداد <b>${nf.format(o.km)} كم</b></div>
       <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
       <div>🌍 دولة الإعلان <b>${esc(countryName)}</b></div>
       <div>🔎 المصدر <b>${esc(o.s)}</b></div>
     </div>
+    ${costEstimator(o)}
     <div class="evidence">دليل النظراء: <b>${nf.format(o.pn)}</b> إعلانًا · <b>${nf.format(o.ps)}</b> عائلات مصادر · <b>${nf.format(o.pc)}</b> دول</div>
     <div class="recency">آخر رصد للإعلان: ${esc(recencyText(o.ls))}</div>
     <div class="foot">
@@ -625,6 +730,36 @@ function card(o){
       ${link}
     </div>
   </article>`;
+}
+function nonNegativeCost(value){
+  const text=String(value??"").trim();if(!text)return null;
+  const number=Number(text);return Number.isFinite(number)&&number>=0&&number<=1000000?number:null;
+}
+function planningCost(price,service,shipping,customs,other){
+  const values=[service,shipping,customs,other].map(nonNegativeCost);
+  return Number.isFinite(Number(price))&&values.every(value=>value!==null)?Number(price)+values.reduce((sum,value)=>sum+value,0):null;
+}
+function costEstimator(o){
+  return `<details class="cost-estimator" data-price="${esc(o.p)}">
+    <summary>حاسبة تكلفة التخطيط (اختيارية)</summary>
+    <p class="cost-note">أدخل مصاريفك باليورو. هذه حاسبة تقديرية وليست تكلفة فعلية أو عرضًا جمركيًا.</p>
+    <div class="cost-fields">
+      <label>خدمة الجالب/الوسيط (€)<input class="cost-input" data-cost="service" type="number" min="0" max="1000000" step="50" value="1000"></label>
+      <label>الشحن (€)<input class="cost-input" data-cost="shipping" type="number" min="0" max="1000000" step="50" placeholder="أدخل القيمة"></label>
+      <label>الجمارك والرسوم (€)<input class="cost-input" data-cost="customs" type="number" min="0" max="1000000" step="50" placeholder="أدخل القيمة"></label>
+      <label>مصاريف أخرى (€)<input class="cost-input" data-cost="other" type="number" min="0" max="1000000" step="50" value="0"></label>
+    </div>
+    <p class="vat-note">خصم TVA: لم يُطبّق؛ بيانات الإعلان الحالية لا تثبت أهلية الخصم لهذه السيارة.</p>
+    <div class="cost-total" role="status">أدخل الشحن والجمارك ليظهر تقديرك الإجمالي.</div>
+  </details>`;
+}
+function updateCostEstimator(container){
+  if(!container)return;
+  const read=key=>{const input=container.querySelector(`[data-cost="${key}"]`);return input?input.value:"";};
+  const total=planningCost(Number(container.dataset.price),read("service"),read("shipping"),read("customs"),read("other"));
+  const output=container.querySelector(".cost-total");if(!output)return;
+  output.textContent=total===null?"أدخل الشحن والجمارك بقيم صحيحة ليظهر تقديرك الإجمالي.":
+    `تقديرك الإجمالي حسب مدخلاتك: ${fmtMoney(total)} — ليس تكلفة فعلية أو نهائية.`;
 }
 function render(){
   const pages=Math.max(1,Math.ceil(VIEW.length/PER));
@@ -637,6 +772,11 @@ function render(){
 }
 
 addEventListener("pagehide",saveNavigationState);
+
+$("grid").addEventListener("input",event=>{
+  if(!event.target.closest(".cost-input"))return;
+  updateCostEstimator(event.target.closest(".cost-estimator"));
+});
 
 let refreshPoll=null,awaitingRefresh=false,requestedRefreshMode="smart",requestedJobId="";
 function bytesHex(buffer){return [...new Uint8Array(buffer)].map(b=>b.toString(16).padStart(2,"0")).join("");}
@@ -699,6 +839,7 @@ async function startRefresh(mode){
 }
 $("refreshBtn").onclick=()=>startRefresh("smart");
 $("fullRefreshBtn").onclick=()=>startRefresh("full");
+FX_LOAD_PROMISE=loadFx();
 readRefreshStatus();
 setInterval(readRefreshStatus,60000);
 </script>

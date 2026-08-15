@@ -91,7 +91,7 @@ function roundRatioHalfEven(numerator, denominator) {
   return quotient + (quotient % 2);
 }
 
-function offer(id, price, saving, observedAt) {
+function offer(id, price, saving, observedAt, km) {
   const q1 = price + saving;
   const median = q1 + 5_000;
   return {
@@ -108,7 +108,7 @@ function offer(id, price, saving, observedAt) {
     ps: 3,
     pc: 2,
     y: 2025,
-    km: 10_000,
+    km,
     f: "petrol",
     c: "FR",
     s: "Source A",
@@ -119,10 +119,10 @@ function offer(id, price, saving, observedAt) {
 }
 
 const offers = [
-  offer("rank-z", 12_000, 4_000, "2026-08-14T12:00:00Z"),
-  offer("tie-b", 9_000, 2_500, "2026-08-14T13:00:00Z"),
-  offer("tie-a", 9_000, 2_500, "2026-08-14T13:00:00Z"),
-  offer("saving-top", 15_000, 7_000, "2026-08-14T14:00:00Z"),
+  offer("rank-z", 12_000, 4_000, "2026-08-14T12:00:00Z", 30_000),
+  offer("tie-b", 9_000, 2_500, "2026-08-14T13:00:00Z", 12_000),
+  offer("tie-a", 9_000, 2_500, "2026-08-14T13:00:00Z", 8_000),
+  offer("saving-top", 15_000, 7_000, "2026-08-14T14:00:00Z", 20_000),
 ];
 const payload = {
   schema_version: 2,
@@ -160,14 +160,15 @@ try {
   const sortSelect = (html.match(/<select class="f" id="fs"[\s\S]*?<\/select>/) || [""])[0];
   const controls = [...sortSelect.matchAll(/<option value="([^"]+)">([^<]+)<\/option>/g)]
     .map(match => ({ value: match[1], label: match[2] }));
-  check(controls.length === 4, `expected exactly four sort controls, got ${controls.length}`);
+  check(controls.length === 5, `expected exactly five sort controls, got ${controls.length}`);
   check(
-    JSON.stringify(controls.map(control => control.value)) === JSON.stringify(["ranked", "price", "saving", "recent"]),
-    "sort controls must be ranked, price, saving, recent",
+    JSON.stringify(controls.map(control => control.value)) === JSON.stringify(["ranked", "price", "saving", "recent", "km"]),
+    "sort controls must be ranked, price, saving, recent, km",
   );
   check(controls.every(control => /[\u0600-\u06ff]/.test(control.label)), "every sort control must have an Arabic label");
   check(!controls.some(control => /roi|profit|ربح|عائد/i.test(control.label)), "sort controls must not claim ROI or profit");
   check(controls.find(control => control.value === "saving").label.includes("فرق مرصود"), "saving must remain an observed difference");
+  check(html.includes('id="sortHelp"'), "sort controls must include a concise explanation");
 
   const local = {
     "dzr-known-offers-v1": JSON.stringify(offers.map(row => row.id)),
@@ -182,11 +183,16 @@ try {
   expectOrder(viewIds(sandbox, "price"), ["tie-b", "tie-a", "rank-z", "saving-top"], "price order with payload-rank tie");
   expectOrder(viewIds(sandbox, "saving"), ["saving-top", "rank-z", "tie-b", "tie-a"], "saving order with payload-rank tie");
   expectOrder(viewIds(sandbox, "recent"), ["saving-top", "tie-b", "tie-a", "rank-z"], "recent order with payload-rank tie");
+  expectOrder(viewIds(sandbox, "km"), ["tie-a", "tie-b", "saving-top", "rank-z"], "odometer order");
+  check(
+    sandbox.document.getElementById("sortHelp").textContent.includes("عداد السيارة"),
+    "km: explanation must state what is sorted",
+  );
 
   evaluate(sandbox, 'ORIGINAL_RANK.delete("tie-a"); ORIGINAL_RANK.delete("tie-b")');
   expectOrder(viewIds(sandbox, "price"), ["tie-a", "tie-b", "rank-z", "saving-top"], "lexical ID final tie-break");
 
-  for (const legacy of ["discount", "median", "year", "km", "unknown"] ) {
+  for (const legacy of ["discount", "median", "year", "unknown"] ) {
     const navigation = {
       page: 1,
       scrollY: 0,
