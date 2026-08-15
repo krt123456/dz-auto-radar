@@ -574,6 +574,30 @@ def canonical_offer_fields_sha256(offers: list[dict[str, Any]]) -> str:
     return digest.hexdigest()
 
 
+def normalized_host(value: Any) -> str:
+    try:
+        host = (urlsplit(str(value or "")).hostname or "").casefold().rstrip(".")
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def browser_evidence_expected(result: dict[str, Any]) -> bool:
+    """Mirror validator browser eligibility after merging attempted results."""
+    if "direct_reason" in result:
+        return True
+    paruvendu_protection_redirect = (
+        result.get("reason") == "protection_redirect"
+        and normalized_host(result.get("url")) == "paruvendu.fr"
+        and normalized_host(result.get("final_url")) == "paruvendu.fr"
+    )
+    return (
+        result.get("status") == "unknown"
+        and str(result.get("url") or "").startswith("http")
+        and not paruvendu_protection_redirect
+    )
+
+
 def load_validation(
     path: Path,
     expected_timestamp: str,
@@ -671,14 +695,7 @@ def load_validation(
     evidenced_target_ranks = [
         position
         for position, result in enumerate(results, start=1)
-        if isinstance(result, dict)
-        and (
-            "direct_reason" in result
-            or (
-                result.get("status") == "unknown"
-                and str(result.get("url") or "").startswith("http")
-            )
-        )
+        if isinstance(result, dict) and browser_evidence_expected(result)
     ]
     result_attempted_ranks = {
         position
@@ -714,12 +731,10 @@ def load_validation(
         expected_frontier is not None
         and expected_frontier_attempted == len(expected_frontier_target_ranks)
         and all(
-            "direct_reason" in result
+            not browser_evidence_expected(result) or "direct_reason" in result
             for position, result in enumerate(results, start=1)
             if isinstance(result, dict)
             and position <= expected_frontier
-            and result.get("status") == "unknown"
-            and str(result.get("url") or "").startswith("http")
         )
     )
     if (

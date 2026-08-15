@@ -304,11 +304,9 @@ def validate_contract(
         expected_frontier is not None
         and expected_frontier_attempted == len(expected_frontier_target_ranks)
         and all(
-            "direct_reason" in result
+            not browser_evidence_expected(result) or "direct_reason" in result
             for position, result in enumerate(results, start=1)
             if position <= expected_frontier
-            and result.get("status") == "unknown"
-            and str(result.get("url") or "").startswith("http")
         )
     )
     if (
