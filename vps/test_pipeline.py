@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -128,6 +129,20 @@ def provisional_offer_digest(offers: list[dict[str, Any]]) -> str:
 
 
 class PipelineTest(unittest.TestCase):
+
+    def test_publisher_accepts_git_worktree_metadata_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            site = Path(directory)
+            (site / ".git").write_text(
+                "gitdir: /tmp/example/.git/worktrees/publication\n",
+                encoding="utf-8",
+            )
+            completed = SimpleNamespace(returncode=0, stdout="true\n")
+            with mock.patch.object(publisher, "run_git", return_value=completed):
+                self.assertTrue(publisher.is_git_checkout(site))
+
+            (site / ".git").unlink()
+            self.assertFalse(publisher.is_git_checkout(site))
     def write_v7_fixture(self, temp: Path) -> dict[str, Any]:
         root = temp / "car_deal_finder"
         board_dir = root / "mobile_site_local"
