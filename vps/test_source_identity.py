@@ -14,6 +14,28 @@ except ImportError:
 
 
 class SourceIdentityTests(unittest.TestCase):
+    def test_autoscout_requires_a_stable_listing_id_in_the_path(self) -> None:
+        non_detail = (
+            "https://www.autoscout24.com/lst/peugeot/2008?atype=C&page=2",
+            "https://www.autoscout24.com/lst/peugeot/2008/123456?atype=C",
+            "https://www.autoscout24.de/lst?sort=price",
+            "https://www.autoscout24.fr/",
+        )
+        details = (
+            "https://www.autoscout24.it/annunci/car-503f6455-b5a5-48af-bcfa-8a08c1dd87c7",
+            "https://www.autoscout24.ch/de/d/20483026",
+            "https://www.autoscout24.de/smyle/details/018f8bf5-a7e4-45c9-8dfe-91235bf72408/",
+        )
+        for url in non_detail:
+            with self.subTest(url=url):
+                self.assertTrue(identity.autoscout24_non_detail_url(url))
+        for url in details:
+            with self.subTest(url=url):
+                self.assertFalse(identity.autoscout24_non_detail_url(url))
+        self.assertFalse(
+            identity.autoscout24_non_detail_url("https://cars.example/lst/peugeot")
+        )
+
     def test_olx_aliases_and_legacy_ids_converge_on_production_identity(self) -> None:
         expected = ("olx.pl", "olxpl_1084550358")
         cases = (

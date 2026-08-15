@@ -35,6 +35,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import listing_availability as lifecycle
+from source_identity import autoscout24_non_detail_url
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -364,6 +365,11 @@ def classify_browser_page(
     """Classify a rendered page without promoting a search/error page as live."""
     original_url = str(offer.get("url") or "")
     combined = f"{page_title}\n{body_text}"
+    if autoscout24_non_detail_url(original_url):
+        return {
+            "status": "unknown", "http_status": http_status,
+            "final_url": final_url, "reason": "browser_autoscout24_non_detail_url",
+        }
     path_protection = protection_path_reason(final_url)
     if path_protection:
         return {
@@ -727,6 +733,7 @@ def browser_eligible(item: dict[str, Any]) -> bool:
     return (
         item.get("status") == "unknown"
         and str(item.get("url") or "").startswith("http")
+        and not autoscout24_non_detail_url(item.get("url"))
         and not paruvendu_protection_redirect
     )
 
@@ -926,6 +933,10 @@ class CheckpointStore:
                 )
         if raw.get("status") not in {"verified", "dead", "unknown"}:
             raise CheckpointError(f"checkpoint result rank {rank} has an invalid status")
+        if raw.get("status") == "verified" and autoscout24_non_detail_url(raw.get("url")):
+            raise CheckpointError(
+                f"checkpoint result rank {rank} verifies a non-detail AutoScout URL"
+            )
         http_status = raw.get("http_status")
         if http_status is not None and type(http_status) is not int:
             raise CheckpointError(f"checkpoint result rank {rank} has an invalid HTTP status")

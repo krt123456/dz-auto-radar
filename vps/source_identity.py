@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from typing import Any
+from urllib.parse import urlsplit
 
 
 OLX_PL_CANONICAL_SOURCE = "olx.pl"
@@ -55,6 +56,30 @@ _LEGACY_FULL_OLX_ID = re.compile(
     r"^olxpl_[a-z0-9][a-z0-9_.-]*(?:_[a-z0-9][a-z0-9_.-]*)*_([1-9][0-9]*)$",
     re.IGNORECASE,
 )
+_AUTOSCOUT24_UUID = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+    re.IGNORECASE,
+)
+_AUTOSCOUT24_NUMERIC_ID = re.compile(r"(?:^|/)[1-9][0-9]{5,}(?:/|$)")
+
+
+def autoscout24_non_detail_url(value: Any) -> bool:
+    """Identify AutoScout collection/search URLs that cannot prove one listing."""
+    try:
+        parsed = urlsplit(str(value or ""))
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").casefold().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    if not host.startswith("autoscout24."):
+        return False
+    path = parsed.path or "/"
+    if "lst" in {segment.casefold() for segment in path.split("/") if segment}:
+        return True
+    return not (
+        _AUTOSCOUT24_UUID.search(path) or _AUTOSCOUT24_NUMERIC_ID.search(path)
+    )
 
 
 def canonical_source(value: Any) -> str:

@@ -24,6 +24,7 @@ if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import audit_best_selection as selection_audit
+import build_observed_value_board as observed
 import listing_availability as lifecycle
 import publish_radar_dashboard as publisher
 
@@ -129,6 +130,59 @@ def provisional_offer_digest(offers: list[dict[str, Any]]) -> str:
 
 
 class PipelineTest(unittest.TestCase):
+
+    def test_autoscout_collection_urls_are_rejected_at_release_gates(self) -> None:
+        search = compact_offer(1)
+        search["u"] = "https://www.autoscout24.com/lst/toyota/corolla?atype=C"
+        self.assertFalse(publisher.eligible_offer(search))
+        self.assertFalse(selection_audit.eligible(search))
+
+        detail = compact_offer(1)
+        detail["u"] = (
+            "https://www.autoscout24.it/annunci/toyota-corolla-hybrid-"
+            "503f6455-b5a5-48af-bcfa-8a08c1dd87c7"
+        )
+        self.assertTrue(publisher.eligible_offer(detail))
+        self.assertTrue(selection_audit.eligible(detail))
+
+    def test_french_damaged_inflections_are_rejected_without_broad_matches(self) -> None:
+        damaged_titles = (
+            "Peugeot 208 endommagé",
+            "Peugeot 208 endommagée",
+            "Peugeot 208 endommagés",
+            "Peugeot 208 endommagées",
+            "Peugeot 208 endommage",
+            "Peugeot 208 endommagee",
+            "Peugeot 208 endommages",
+            "Peugeot 208 endommagees",
+        )
+        risk_matchers = (
+            (observed.RISK_PATTERN, observed.normalized_text),
+            (selection_audit.RISK_PATTERN, selection_audit.normalized_semantic_text),
+            (publisher.RISK_PATTERN, publisher.normalized_semantic_text),
+        )
+        for title in damaged_titles:
+            with self.subTest(title=title):
+                for pattern, normalizer in risk_matchers:
+                    self.assertIsNotNone(pattern.search(normalizer(title)))
+                offer = compact_offer(1)
+                offer["t"] = title
+                self.assertFalse(publisher.eligible_offer(offer))
+                self.assertFalse(selection_audit.eligible(offer))
+
+        related_but_not_damaged = (
+            "Peugeot 208 avec protection anti-endommagement",
+            "Peugeot 208 à ne pas endommager",
+            "Peugeot 208 historique des dommages disponible",
+        )
+        for title in related_but_not_damaged:
+            with self.subTest(negative_control=title):
+                for pattern, normalizer in risk_matchers:
+                    self.assertIsNone(pattern.search(normalizer(title)))
+                offer = compact_offer(1)
+                offer["t"] = title
+                self.assertTrue(publisher.eligible_offer(offer))
+                self.assertTrue(selection_audit.eligible(offer))
 
     def test_publisher_accepts_git_worktree_metadata_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

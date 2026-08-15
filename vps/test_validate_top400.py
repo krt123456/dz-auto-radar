@@ -257,6 +257,32 @@ class BrowserPageTests(unittest.TestCase):
         self.assertEqual(result["status"], "verified")
         self.assertEqual(result["reason"], "browser_rendered_detail_identity")
 
+    def test_autoscout_search_results_never_verify_matching_identity(self):
+        url = "https://www.autoscout24.com/lst/toyota/corolla?atype=C&page=2"
+        result = validator.classify_browser_page(
+            {"url": url, "title": "Toyota Corolla Hybrid"},
+            http_status=200,
+            final_url=url,
+            page_title="Toyota Corolla Hybrid offers",
+            body_text=self.body,
+        )
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(result["reason"], "browser_autoscout24_non_detail_url")
+
+    def test_autoscout_individual_detail_can_verify_matching_identity(self):
+        url = (
+            "https://www.autoscout24.it/annunci/toyota-corolla-hybrid-"
+            "503f6455-b5a5-48af-bcfa-8a08c1dd87c7"
+        )
+        result = validator.classify_browser_page(
+            {"url": url, "title": "Toyota Corolla Hybrid"},
+            http_status=200,
+            final_url=url,
+            page_title="Toyota Corolla Hybrid",
+            body_text=self.body,
+        )
+        self.assertEqual(result["status"], "verified")
+
 
 class BrowserEligibilityTests(unittest.TestCase):
     @staticmethod
@@ -321,6 +347,15 @@ class BrowserEligibilityTests(unittest.TestCase):
                     )
                 )
 
+    def test_autoscout_search_results_are_not_browser_targets(self):
+        item = self.result(
+            url="https://www.autoscout24.com/lst/peugeot/2008?atype=C&page=2",
+            final_url="https://www.autoscout24.com/lst/peugeot/2008?atype=C&page=2",
+            reason="http_200_listing_identity_unproven",
+        )
+        self.assertFalse(validator.browser_eligible(item))
+        self.assertEqual(validator.select_browser_target_ranks([item], 0), [])
+
 
 class CheckpointTests(unittest.TestCase):
     def setUp(self):
@@ -342,6 +377,31 @@ class CheckpointTests(unittest.TestCase):
                 "verified_target": 1,
             },
         }
+
+    def test_checkpoint_rejects_verified_autoscout_search_result(self):
+        normalized = validator.normalize_offers(
+            [{
+                "u": "https://www.autoscout24.com/lst/peugeot/2008?atype=C",
+                "t": "Peugeot 2008",
+                "s": "AutoScout24",
+            }],
+            limit=0,
+            id_index={},
+        )
+        store = validator.CheckpointStore(
+            Path("unused-checkpoint.json"), identity={}, normalized=normalized
+        )
+        result = {
+            **normalized[0],
+            "status": "verified",
+            "http_status": 200,
+            "final_url": normalized[0]["url"],
+            "reason": "browser_rendered_detail_identity",
+        }
+        with self.assertRaisesRegex(
+            validator.CheckpointError, "non-detail AutoScout URL"
+        ):
+            store._validated_result(result, browser=False, direct_by_rank={})
 
     @staticmethod
     def classification(offer):

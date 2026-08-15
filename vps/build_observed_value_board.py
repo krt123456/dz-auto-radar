@@ -36,6 +36,7 @@ try:
         source_family as canonical_source_family,
         source_identity_keys as canonical_source_identity_keys,
         source_key as canonical_source_key,
+        autoscout24_non_detail_url,
     )
 except ImportError:
     from source_identity import (
@@ -44,6 +45,7 @@ except ImportError:
         source_family as canonical_source_family,
         source_identity_keys as canonical_source_identity_keys,
         source_key as canonical_source_key,
+        autoscout24_non_detail_url,
     )
 
 
@@ -98,6 +100,9 @@ SEMANTIC_PRICE_PATTERNS = (
 )
 RISK_PATTERN = re.compile(
     r"\b(?:salvage|accident(?:ed)?|damaged|unfall|motorschaden|bastler|epave|"
+    # Text is accent-folded before matching. Keep the French participles
+    # explicit so endommagement/endommager do not become broad false positives.
+    r"endommag(?:e|ee|es|ees)|"
     r"sinistr\w*|uszkodz\w*|powypadk\w*|pour\s+pieces|parts\s+only|non\s+runner)\b"
 )
 GHOST_PATTERN = re.compile(
@@ -592,6 +597,7 @@ def browser_evidence_expected(result: dict[str, Any]) -> bool:
     return (
         result.get("status") == "unknown"
         and str(result.get("url") or "").startswith("http")
+        and not autoscout24_non_detail_url(result.get("url"))
         and not paruvendu_protection_redirect
     )
 
@@ -652,6 +658,7 @@ def load_validation(
             )
             or type(status) is not str
             or status not in states
+            or (status == "verified" and autoscout24_non_detail_url(url))
         ):
             return {}, {}
         seen_urls.add(url)

@@ -19,6 +19,11 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+try:
+    from .source_identity import autoscout24_non_detail_url
+except ImportError:
+    from source_identity import autoscout24_non_detail_url
+
 
 MAGIC = b"DZAR1"
 ITERATIONS = 310_000
@@ -69,6 +74,9 @@ SEMANTIC_PRICE_PATTERNS = (
 )
 RISK_PATTERN = re.compile(
     r"\b(?:salvage|accident(?:ed)?|damaged|unfall|motorschaden|bastler|epave|"
+    # Text is accent-folded before matching. Keep the French participles
+    # explicit so endommagement/endommager do not become broad false positives.
+    r"endommag(?:e|ee|es|ees)|"
     r"sinistr\w*|uszkodz\w*|powypadk\w*|pour\s+pieces|parts\s+only|non\s+runner)\b"
 )
 FORBIDDEN_ECONOMICS_FIELDS = frozenset(
@@ -457,6 +465,7 @@ def eligible(offer: dict[str, Any]) -> bool:
         semantic_price_reason(title) is None
         and RISK_PATTERN.search(normalized_semantic_text(title)) is None
         and valid_https_url(offer.get("u"))
+        and not autoscout24_non_detail_url(offer.get("u"))
         and valid_timestamp(offer.get("ls"))
         and str(offer.get("c")).upper() in SCHENGEN_COUNTRIES
         and offer.get("f") in {"petrol", "hybrid"}

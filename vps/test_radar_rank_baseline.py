@@ -161,7 +161,7 @@ class RankBaselineTests(unittest.TestCase):
         # exporter contract, not merely over a subset of fields.
         self.assertEqual(
             hashlib.sha256(encoded).hexdigest(),
-            "bc9937226bba7d74594eed21f3fd1df60faaf16fe3342c368600fd3c6c687a94",
+            "6e3e300c56da5163b2ed78c18b3d1ad40aca44cc7dfccadf9056a428bcae0b5f",
         )
         with tempfile.TemporaryDirectory() as directory:
             first_path, first_hash = baseline.write_content_addressed(Path(directory), value)

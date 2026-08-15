@@ -23,6 +23,7 @@ function makeStorage(initial = {}) {
 }
 
 function stubElement(id) {
+  const classes = new Set();
   return {
     value: "",
     checked: id === "flive",
@@ -33,10 +34,15 @@ function stubElement(id) {
     onclick: null,
     dataset: {},
     classList: {
-      add() {},
-      remove() {},
-      toggle() {},
-      contains() { return false; },
+      add(...names) { names.forEach(name => classes.add(name)); },
+      remove(...names) { names.forEach(name => classes.delete(name)); },
+      toggle(name, force) {
+        if (force === true) { classes.add(name); return true; }
+        if (force === false) { classes.delete(name); return false; }
+        if (classes.has(name)) { classes.delete(name); return false; }
+        classes.add(name); return true;
+      },
+      contains(name) { return classes.has(name); },
     },
     addEventListener() {},
   };
@@ -176,6 +182,7 @@ try {
   check(!controls.some(control => /roi|profit|ربح|عائد/i.test(control.label)), "sort controls must not claim ROI or profit");
   check(controls.find(control => control.value === "saving").label.includes("فرق مرصود"), "saving must remain an observed difference");
   check(html.includes('id="sortHelp"'), "sort controls must include a concise explanation");
+  check(html.includes('id="coverageTruth"'), "dashboard must include a coverage-truth alert");
   check(sortSelect.includes('aria-describedby="sortHelp"'), "sort control must be linked to its explanation");
 
   const local = {
@@ -191,6 +198,12 @@ try {
     sandbox.document.getElementById("stats").innerHTML.includes("مرشحون مرتبون بالقيمة المرصودة"),
     "stats must distinguish the ranked candidate pool from published offers",
   );
+  const statsHtml = sandbox.document.getElementById("stats").innerHTML;
+  check(statsHtml.includes('data-stat="ranked" data-value="10"'), "stats must show exactly 10 ranked candidates");
+  check(statsHtml.includes('data-stat="validated-verified" data-value="4"'), "stats must show exactly 4 validation successes");
+  check(statsHtml.includes('data-stat="dead" data-value="3"'), "stats must show exactly 3 dead links");
+  check(statsHtml.includes('data-stat="unknown" data-value="3"'), "stats must show exactly 3 unknown links");
+  check(statsHtml.includes('data-stat="published-verified" data-value="4"'), "stats must show exactly 4 published verified links");
   check(
     sandbox.document.getElementById("stats").innerHTML.includes("روابط غير محسومة مخفية"),
     "stats must disclose unresolved hidden links",
@@ -204,9 +217,18 @@ try {
     "coverage note must constrain ranking to verified links",
   );
   check(
-    sandbox.document.getElementById("sortHelp").textContent.includes("الروابط التي تم التحقق منها"),
+    sandbox.document.getElementById("sortHelp").textContent.includes("الروابط المتحقق منها"),
     "default sort explanation must constrain ranking to verified links",
   );
+
+  const noUnknown = makeSandbox({ local });
+  noUnknown.__payload = {
+    ...payload,
+    validation: { ...payload.validation, counts: { verified: offers.length, dead: 0, unknown: 0 } },
+  };
+  evaluate(noUnknown, "boot(__payload)");
+  check(noUnknown.document.getElementById("coverageTruth").classList.contains("hidden"), "zero unknown links must hide coverage alert");
+  check(noUnknown.document.getElementById("coverageTruth").textContent === "", "zero unknown links must clear coverage alert text");
 
   expectOrder(viewIds(sandbox, "ranked"), ["rank-z", "tie-b", "tie-a", "saving-top"], "ranked order");
   expectOrder(viewIds(sandbox, "price"), ["tie-b", "tie-a", "rank-z", "saving-top"], "price order with payload-rank tie");

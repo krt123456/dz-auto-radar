@@ -28,6 +28,7 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import listing_availability as lifecycle
+from source_identity import autoscout24_non_detail_url
 
 
 MAGIC = b"DZAR1"
@@ -107,6 +108,9 @@ SEMANTIC_PRICE_PATTERNS = (
 )
 RISK_PATTERN = re.compile(
     r"\b(?:salvage|accident(?:ed)?|damaged|unfall|motorschaden|bastler|epave|"
+    # Text is accent-folded before matching. Keep the French participles
+    # explicit so endommagement/endommager do not become broad false positives.
+    r"endommag(?:e|ee|es|ees)|"
     r"sinistr\w*|uszkodz\w*|powypadk\w*|pour\s+pieces|parts\s+only|non\s+runner)\b"
 )
 
@@ -265,6 +269,7 @@ def eligible_offer(offer: dict[str, Any]) -> bool:
         str(offer["c"]).upper() in SCHENGEN_COUNTRIES
         and offer["f"] in {"petrol", "hybrid"}
         and valid_https_url(offer.get("u"))
+        and not autoscout24_non_detail_url(offer.get("u"))
         and valid_timestamp(offer.get("ls"))
         and 4_000 <= price <= 45_000
         and lower_quartile > price

@@ -140,6 +140,13 @@ class SealValidationReportTests(unittest.TestCase):
         )
         self.assertEqual(stat.S_IMODE(self.validation_path.stat().st_mode), 0o600)
 
+    def test_verified_autoscout_search_result_fails_closed(self) -> None:
+        search_url = "https://www.autoscout24.com/lst/peugeot/2008?atype=C&page=2"
+        self.board["offers"][0]["u"] = search_url
+        self.validation["results"][0]["url"] = search_url
+        self.write_inputs()
+        self.assert_rejected_without_rewrite()
+
     def test_target_reached_accepts_partial_lower_priority_tail(self) -> None:
         self.validation["browser_attempted_count"] = 1
         self.validation["browser_attempted_ranks"] = [1]

@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Any, Sequence
 from urllib.parse import urlsplit
 
+try:
+    from .source_identity import autoscout24_non_detail_url
+except ImportError:
+    from source_identity import autoscout24_non_detail_url
+
 
 ALGORITHM = "schengen-observed-peer-value-v7-live-verified"
 READY_MARKER = f"VALIDATION_SEALER_READY algorithm={ALGORITHM}"
@@ -107,6 +112,7 @@ def browser_evidence_expected(result: dict[str, Any]) -> bool:
     return (
         result.get("status") == "unknown"
         and str(result.get("url") or "").startswith("http")
+        and not autoscout24_non_detail_url(result.get("url"))
         and not paruvendu_protection_redirect
     )
 
@@ -218,6 +224,10 @@ def validate_contract(
         ):
             raise ContractError(
                 f"validation result {position} does not match its board rank"
+            )
+        if result.get("status") == "verified" and autoscout24_non_detail_url(url):
+            raise ContractError(
+                f"validation result {position} verifies a non-detail AutoScout URL"
             )
         result_urls.append(url)
     if len(set(result_urls)) != len(result_urls):
