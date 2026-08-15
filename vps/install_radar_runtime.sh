@@ -40,6 +40,7 @@ install -m 0644 "$SOURCE/source_identity.py" /opt/sonardeals-radar/source_identi
 install -m 0644 "$SOURCE/source_identity.py" "$ROOT/source_identity.py"
 install -m 0755 "$SOURCE/import_live_offers_to_universe.py" "$ROOT/import_live_offers_to_universe.py"
 install -m 0755 "$SOURCE/seal_validation_report.py" /opt/sonardeals-radar/seal_validation_report.py
+install -m 0755 "$SOURCE/radar_freshness_sla.py" /opt/sonardeals-radar/radar_freshness_sla.py
 install -m 0755 "$SOURCE/radar_control_client.py" /opt/sonardeals-radar/radar_control_client.py
 install -m 0755 "$SOURCE/radar_poller.py" /opt/sonardeals-radar/radar_poller.py
 install -m 0755 "$SOURCE/build_schengen_lake.py" /opt/sonardeals-radar/build_schengen_lake.py
