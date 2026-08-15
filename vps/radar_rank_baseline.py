@@ -25,6 +25,7 @@ from typing import Any, Iterable
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import build_observed_value_board as builder
 import publish_radar_dashboard as publisher
+import source_identity
 
 
 CONTRACT = "radar-rank-baseline-v1"
@@ -338,9 +339,9 @@ def source_family_contract() -> dict[str, Any]:
     return {
         "name": "observed-peer-source-family-v1",
         "autoscout24_rule": "autoscout24.ch-isolated;all-other-autoscout24-shared",
-        "pl_listing_mirrors": sorted(builder.PL_MIRROR_SOURCES),
-        "it_listing_mirrors": sorted(builder.IT_MIRROR_SOURCES),
-        "be_listing_mirrors": sorted(builder.BE_MIRROR_SOURCES),
+        "pl_listing_mirrors": sorted(source_identity.PL_MIRROR_SOURCE_KEYS),
+        "it_listing_mirrors": sorted(source_identity.IT_MIRROR_SOURCE_KEYS),
+        "be_listing_mirrors": sorted(source_identity.BE_MIRROR_SOURCE_KEYS),
         "fallback": "normalized-source-key",
     }
 
