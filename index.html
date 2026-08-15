@@ -204,7 +204,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="20000-30000">20,000 — 30,000 €</option>
         <option value="30000-999999">فوق 30,000 €</option>
       </select>
-      <select class="f" id="fs" aria-label="ترتيب النتائج">
+      <select class="f" id="fs" aria-label="ترتيب النتائج" aria-describedby="sortHelp">
         <option value="ranked">✨ أفضل قيمة مرصودة</option>
         <option value="price">💶 الأقل سعراً باليورو</option>
         <option value="saving">💰 أكبر فرق مرصود باليورو</option>
@@ -306,15 +306,18 @@ async function validateFxConfig(value,nowMs=Date.now()){
      !Number.isSafeInteger(semantic.sell_rate_scaled))throw new Error("invalid");
   const buy=Number(semantic.buy_rate),sell=Number(semantic.sell_rate);
   if(buy<50||sell>500||sell<buy||semantic.sell_rate_scaled!==Math.round(sell*semantic.rate_scale))throw new Error("invalid");
+  if(typeof value.captured_at_utc!=="string"||
+     !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value.captured_at_utc))throw new Error("invalid");
   const captured=timestampMs(value.captured_at_utc);
-  if(captured===null)throw new Error("invalid");
+  if(captured===null||new Date(captured).toISOString().replace(".000Z","Z")!==value.captured_at_utc)throw new Error("invalid");
   const age=nowMs-captured;
   if(age < -FX_FUTURE_TOLERANCE_MS)throw new Error("future");
   if(age > FX_MAX_AGE_MS)throw new Error("stale");
   if(!/^\d{4}-\d{2}-\d{2}$/.test(semantic.effective_date))throw new Error("invalid");
   const effective=Date.parse(`${semantic.effective_date}T00:00:00Z`);
+  if(!Number.isFinite(effective)||new Date(effective).toISOString().slice(0,10)!==semantic.effective_date)throw new Error("invalid");
   const capturedDate=Date.UTC(new Date(captured).getUTCFullYear(),new Date(captured).getUTCMonth(),new Date(captured).getUTCDate());
-  if(!Number.isFinite(effective)||effective>capturedDate+24*60*60*1000||capturedDate-effective>FX_EFFECTIVE_MAX_AGE_MS)throw new Error("stale");
+  if(effective>capturedDate+24*60*60*1000||capturedDate-effective>FX_EFFECTIVE_MAX_AGE_MS)throw new Error("stale");
   if(!Number.isInteger(value.read_count)||value.read_count<2||value.read_count>8||
      !Array.isArray(value.evidence)||value.evidence.length!==value.read_count)throw new Error("invalid");
   const hex=/^[0-9a-f]{64}$/;
@@ -430,7 +433,7 @@ const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
 const SORT_HELP={
   ranked:"أفضل قيمة: مقارنة سعر الإعلان بعروض مشابهة؛ لا تعني ربحًا مضمونًا.",
-  price:"الأقل سعرًا: يرتب سعر شراء السيارة المعلن باليورو من الأقل إلى الأعلى.",
+  price:"الأقل سعرًا: يرتب سعر الإعلان المرصود باليورو من الأقل إلى الأعلى.",
   saving:"أكبر فرق مرصود: الفرق بين سعر الإعلان والسعر المنخفض لعروض مشابهة؛ ليس ربحًا مضمونًا.",
   recent:"الأحدث: يعرض الإعلانات ذات وقت الرصد الأحدث أولًا.",
   km:"الأقل كيلومترات: يرتب عداد السيارة المعلن من الأقل إلى الأعلى."
@@ -713,7 +716,7 @@ function card(o){
       <div class="metric">أقل من السعر الأوسط لعروض مشابهة<strong>${fmtPct(o.dp)}</strong></div>
     </div>
     <div class="meta">
-      <div>💰 سعر شراء السيارة المعلن (قبل الشحن والجمارك) <b>${fmtMoney(o.p)}</b></div>
+      <div>💰 سعر الإعلان المرصود (قبل الشحن والجمارك؛ شمول الضريبة غير مثبت) <b>${fmtMoney(o.p)}</b></div>
       <div>◼ سعر منخفض لعروض مشابهة <b>${fmtMoney(o.q1)}</b></div>
       <div>◉ السعر الأوسط لعروض مشابهة <b>${fmtMoney(o.mp)}</b></div>
       <div>🗓️ السنة <b>${nf.format(o.y)}</b></div>
@@ -744,7 +747,7 @@ function costEstimator(o){
     <summary>حاسبة تكلفة التخطيط (اختيارية)</summary>
     <p class="cost-note">أدخل مصاريفك باليورو. هذه حاسبة تقديرية وليست تكلفة فعلية أو عرضًا جمركيًا.</p>
     <div class="cost-fields">
-      <label>خدمة الجالب/الوسيط (€)<input class="cost-input" data-cost="service" type="number" min="0" max="1000000" step="50" value="1000"></label>
+      <label>خدمة الاستيراد المفترضة (€، قابلة للتعديل)<input class="cost-input" data-cost="service" type="number" min="0" max="1000000" step="50" value="1000"></label>
       <label>الشحن (€)<input class="cost-input" data-cost="shipping" type="number" min="0" max="1000000" step="50" placeholder="أدخل القيمة"></label>
       <label>الجمارك والرسوم (€)<input class="cost-input" data-cost="customs" type="number" min="0" max="1000000" step="50" placeholder="أدخل القيمة"></label>
       <label>مصاريف أخرى (€)<input class="cost-input" data-cost="other" type="number" min="0" max="1000000" step="50" value="0"></label>

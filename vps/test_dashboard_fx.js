@@ -65,6 +65,13 @@ function buildFx({ ageHours = 1 } = {}) {
   return { ...core, seal: { algorithm: "sha256", value: digest(core) } };
 }
 
+function resealFx(value) {
+  const core = JSON.parse(JSON.stringify(value));
+  delete core.seal;
+  core.semantic_sha256 = digest(core.semantic);
+  return { ...core, seal: { algorithm: "sha256", value: digest(core) } };
+}
+
 function makeStorage() {
   const values = new Map();
   return {
@@ -202,7 +209,7 @@ function evaluate(sandbox, source) {
     check(formatted.includes("€"), "valid: EUR code must remain visible");
     check(formatted.includes(expectedDzd) && formatted.includes("دج"), "valid: DZD conversion must be visible");
     const cardHtml = evaluate(validSandbox, "card(__offer)");
-    check(cardHtml.includes("سعر شراء السيارة المعلن (قبل الشحن والجمارك)"), "card must label the observed price directly");
+    check(cardHtml.includes("سعر الإعلان المرصود") && cardHtml.includes("شمول الضريبة غير مثبت"), "card must label listing price without claiming an actual purchase price");
     check(cardHtml.includes("€") && cardHtml.includes("دج"), "card must show EUR and DZD for known amounts");
     check(cardHtml.includes("لم يُطبّق") && cardHtml.includes("لا تثبت أهلية الخصم"), "card must not invent a VAT deduction");
     check(cardHtml.includes("ليست تكلفة فعلية"), "estimator must be explicitly non-actual");
@@ -219,12 +226,43 @@ function evaluate(sandbox, source) {
     const actualResult = await evaluate(validSandbox, "validateFxConfig(__actualFx,__validationTime)");
     check(actualResult.rateScaled === actual.semantic.sell_rate_scaled, "committed sidecar seal must validate");
 
+    async function expectValidationFailure(value, nowMs, message) {
+      validSandbox.__invalidFx = value;
+      validSandbox.__invalidNow = nowMs;
+      let rejected = false;
+      try {
+        await evaluate(validSandbox, "validateFxConfig(__invalidFx,__invalidNow)");
+      } catch (_error) {
+        rejected = true;
+      }
+      check(rejected, message);
+    }
+
+    const noncanonical = buildFx();
+    noncanonical.captured_at_utc = noncanonical.captured_at_utc.replace("Z", ".000Z");
+    const resealedNoncanonical = resealFx(noncanonical);
+    await expectValidationFailure(
+      resealedNoncanonical,
+      Date.parse(resealedNoncanonical.captured_at_utc) + 60 * 60 * 1000,
+      "resealed noncanonical capture timestamp must be rejected",
+    );
+
+    const impossibleDate = buildFx();
+    impossibleDate.captured_at_utc = "2026-03-02T12:00:00Z";
+    impossibleDate.semantic.effective_date = "2026-02-30";
+    await expectValidationFailure(
+      resealFx(impossibleDate),
+      Date.parse("2026-03-02T13:00:00Z"),
+      "resealed impossible effective date must be rejected",
+    );
+
     const tampered = buildFx();
     tampered.semantic.sell_rate = "199.99999";
     const scenarios = [
       ["missing", { ok: false }, "تعذر التحقق"],
       ["tampered", tampered, "تعذر التحقق"],
       ["stale", buildFx({ ageHours: 80 }), "قديم"],
+      ["future", buildFx({ ageHours: -1 }), "تاريخ سعر الصرف غير صالح"],
     ];
     for (const [name, response, statusText] of scenarios) {
       const sandbox = makeSandbox(response);

@@ -169,6 +169,7 @@ try {
   check(!controls.some(control => /roi|profit|ربح|عائد/i.test(control.label)), "sort controls must not claim ROI or profit");
   check(controls.find(control => control.value === "saving").label.includes("فرق مرصود"), "saving must remain an observed difference");
   check(html.includes('id="sortHelp"'), "sort controls must include a concise explanation");
+  check(sortSelect.includes('aria-describedby="sortHelp"'), "sort control must be linked to its explanation");
 
   const local = {
     "dzr-known-offers-v1": JSON.stringify(offers.map(row => row.id)),
