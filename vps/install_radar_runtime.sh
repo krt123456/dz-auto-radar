@@ -36,6 +36,9 @@ install -m 0755 "$SOURCE/publish_radar_dashboard.py" /opt/sonardeals-radar/publi
 install -m 0755 "$SOURCE/audit_best_selection.py" /opt/sonardeals-radar/audit_best_selection.py
 install -m 0755 "$SOURCE/audit_live_convergence.py" /opt/sonardeals-radar/audit_live_convergence.py
 install -m 0755 "$SOURCE/build_observed_value_board.py" /opt/sonardeals-radar/build_observed_value_board.py
+install -m 0644 "$SOURCE/source_identity.py" /opt/sonardeals-radar/source_identity.py
+install -m 0644 "$SOURCE/source_identity.py" "$ROOT/source_identity.py"
+install -m 0755 "$SOURCE/import_live_offers_to_universe.py" "$ROOT/import_live_offers_to_universe.py"
 install -m 0755 "$SOURCE/seal_validation_report.py" /opt/sonardeals-radar/seal_validation_report.py
 install -m 0755 "$SOURCE/radar_control_client.py" /opt/sonardeals-radar/radar_control_client.py
 install -m 0755 "$SOURCE/radar_poller.py" /opt/sonardeals-radar/radar_poller.py

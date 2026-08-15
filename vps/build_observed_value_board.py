@@ -29,6 +29,23 @@ from pathlib import Path
 from typing import Any, Iterator
 from urllib.parse import urlsplit, urlunsplit
 
+try:
+    from .source_identity import (
+        IdentityError,
+        canonical_source_identity,
+        source_family as canonical_source_family,
+        source_identity_keys as canonical_source_identity_keys,
+        source_key as canonical_source_key,
+    )
+except ImportError:
+    from source_identity import (
+        IdentityError,
+        canonical_source_identity,
+        source_family as canonical_source_family,
+        source_identity_keys as canonical_source_identity_keys,
+        source_key as canonical_source_key,
+    )
+
 
 ALGORITHM = "schengen-observed-peer-value-v7-live-verified"
 SCHENGEN_COUNTRIES = frozenset(
@@ -105,19 +122,6 @@ LARGUS_FACT_PATTERN = re.compile(
     r"/annonce-[0-9a-f-]{36}-.+-((?:19|20)\d{2})-(\d{1,7})km(?:[/?#]|$)",
     re.IGNORECASE,
 )
-PL_MIRROR_SOURCES = frozenset(
-    {
-        "otomoto", "olx poland cars", "motogratka", "sprzedajemy cars",
-        "aaa auto poland", "autotrader.pl", "truck1 poland",
-    }
-)
-IT_MIRROR_SOURCES = frozenset({"automobile.it", "subito motori", "subito.it"})
-BE_MIRROR_SOURCES = frozenset(
-    {
-        "2dehands auto's", "2dehands autos", "2dehands.be",
-        "2ememain autos", "2ememain.be",
-    }
-)
 COMPACT_OFFER_TYPES = {
     "id": str, "m": str, "t": str, "p": int, "q1": int, "mp": int,
     "sv": int, "sp": float, "dp": float, "pn": int, "ps": int,
@@ -165,7 +169,7 @@ def normalized_text(value: Any) -> str:
 
 
 def source_key(value: Any) -> str:
-    return " ".join(unicodedata.normalize("NFKC", str(value or "")).split()).casefold()
+    return canonical_source_key(value)
 
 
 def canonical_sha256(value: Any) -> str:
@@ -189,24 +193,11 @@ def public_offer_id(source: Any, native_listing_id: Any) -> str:
 
 
 def source_identity_keys(value: Any) -> frozenset[str]:
-    key = source_key(value)
-    identities = {key} if key else set()
-    if "autoscout24" in key and key not in {"autoscout24.ch", "autoscout24.ch liechtenstein"}:
-        identities.add("autoscout24")
-    return frozenset(identities)
+    return canonical_source_identity_keys(value)
 
 
 def source_family(value: Any) -> str:
-    key = source_key(value)
-    if "autoscout24" in key:
-        return "autoscout24.ch" if key in {"autoscout24.ch", "autoscout24.ch liechtenstein"} else "autoscout24"
-    if key in PL_MIRROR_SOURCES:
-        return "pl_listing_mirrors"
-    if key in IT_MIRROR_SOURCES:
-        return "it_listing_mirrors"
-    if key in BE_MIRROR_SOURCES:
-        return "be_listing_mirrors"
-    return key
+    return canonical_source_family(value)
 
 
 def _load_json_and_hash(path: Path) -> tuple[Any | None, str | None]:
@@ -401,12 +392,19 @@ def eligible_rows(
             if raw_listing_id is not None and str(raw_listing_id).strip()
             else source_listing_id or ""
         ).strip()
+        identity_error = False
+        try:
+            source, listing_id = canonical_source_identity(source, listing_id)
+        except IdentityError:
+            identity_error = True
         identity = (source_key(source), listing_id)
         url = normalize_https_url(raw_url)
         text = normalized_text(f"{title} {model}")
         fuel_label = normalized_fuel(fuel, title)
         reason = ""
-        if not listing_id or not model or model.casefold().startswith("unprofiled"):
+        if identity_error:
+            reason = "identity_normalization"
+        elif not listing_id or not model or model.casefold().startswith("unprofiled"):
             reason = "identity_or_model"
         elif not title or not source:
             reason = "missing_title_or_source"

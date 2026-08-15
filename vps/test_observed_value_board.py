@@ -32,6 +32,12 @@ FORBIDDEN_LONG_ECONOMICS_FIELDS = frozenset(
 
 
 class ObservedValueBoardTest(unittest.TestCase):
+    def test_polish_olx_aliases_share_one_family(self) -> None:
+        self.assertEqual(observed.source_family("olx.pl"), "pl_listing_mirrors")
+        self.assertEqual(
+            observed.source_family("OLX Poland Cars"), "pl_listing_mirrors"
+        )
+
     def test_validation_pool_is_larger_than_publication_target(self) -> None:
         self.assertEqual(observed.DEFAULT_TOP_N, 60_000)
         self.assertEqual(observed.MAX_TOP_N, 100_000)
@@ -384,6 +390,47 @@ class ObservedValueBoardTest(unittest.TestCase):
             if offer["s"].startswith("Collision Source")
         }
         self.assertEqual(compact_ids, {offer["id"] for offer in retained})
+
+    def test_olx_legacy_and_incremental_identities_cannot_be_duplicate_peers(self) -> None:
+        self.insert_offer(
+            source="OLX Poland Cars",
+            source_listing_id="legacy-database-row",
+            native_listing_id="olxpl_tiguan_15_tsi_1084550358",
+            url="https://www.olx.pl/d/oferta/legacy-CID5-IDabc.html",
+            title="Volkswagen Tiguan petrol",
+            price=20_000,
+            country="PL",
+        )
+        self.insert_offer(
+            source="olx.pl",
+            source_listing_id="olxpl_1084550358",
+            native_listing_id="olxpl_1084550358",
+            url="https://www.olx.pl/d/oferta/incremental-CID5-IDdef.html",
+            title="Volkswagen Tiguan petrol",
+            price=20_000,
+            country="PL",
+        )
+        connection = sqlite3.connect(self.database)
+        try:
+            evidence = observed.ScanEvidence()
+            query, parameters = observed.candidate_query(
+                "2000-01-01T00:00:00+00:00", 2026
+            )
+            rows = list(
+                observed.eligible_rows(
+                    connection,
+                    query=query,
+                    parameters=parameters,
+                    blocked_source_keys=frozenset(),
+                    evidence=evidence,
+                )
+            )
+        finally:
+            connection.close()
+        olx_rows = [row for row in rows if row["source"] == "olx.pl"]
+        self.assertEqual(len(olx_rows), 1)
+        self.assertEqual(olx_rows[0]["source_family"], "pl_listing_mirrors")
+        self.assertEqual(evidence.rejected["identity_duplicate"], 1)
 
     def test_auction_sale_term_code_is_rejected(self) -> None:
         self.insert_offer(

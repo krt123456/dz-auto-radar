@@ -238,9 +238,9 @@ class OlxEuropeIncrementalAdapterTests(unittest.TestCase):
         )
         self.assertEqual([len(page.items) for page in pages], [50, 2, 0])
         all_items = [item for page in pages for item in page.items]
-        self.assertEqual(all_items[0].native_id, "olx.pl_200")
-        self.assertEqual(all_items[-2].native_id, "olx.pl_100")
-        self.assertEqual(all_items[-1].native_id, "olx.pl_99")
+        self.assertEqual(all_items[0].native_id, "olxpl_200")
+        self.assertEqual(all_items[-2].native_id, "olxpl_100")
+        self.assertEqual(all_items[-1].native_id, "olxpl_99")
         self.assertEqual(len({item.native_id for item in all_items}), 52)
         self.assertTrue(
             all(
@@ -252,7 +252,7 @@ class OlxEuropeIncrementalAdapterTests(unittest.TestCase):
         assert offer is not None
         self.assertEqual(set(offer), olx.PRODUCTION_OFFER_FIELDS)
         self.assertEqual(offer["make_model"], "audi:a5")
-        self.assertEqual(offer["source_listing_id"], "olx.pl_200")
+        self.assertEqual(offer["source_listing_id"], "olxpl_200")
         self.assertEqual(offer["price_eur"], 23_500)
         self.assertEqual(offer["raw_price"], "100000 PLN")
 
@@ -309,10 +309,10 @@ class OlxEuropeIncrementalAdapterTests(unittest.TestCase):
         ]
         pages = adapt([success(0, rows), success(45, [])])
         offers = {item.native_id: item.offer for item in pages[0].items}
-        for native_id in ("olx.pl_6", "olx.pl_5", "olx.pl_4", "olx.pl_3"):
+        for native_id in ("olxpl_6", "olxpl_5", "olxpl_4", "olxpl_3"):
             self.assertIsNone(offers[native_id])
-        self.assertEqual(offers["olx.pl_2"]["year"], 0)  # type: ignore[index]
-        self.assertEqual(offers["olx.pl_1"]["make_model"], "audi:a5")  # type: ignore[index]
+        self.assertEqual(offers["olxpl_2"]["year"], 0)  # type: ignore[index]
+        self.assertEqual(offers["olxpl_1"]["make_model"], "audi:a5")  # type: ignore[index]
 
     def test_unknown_model_is_filtered_but_identity_remains(self) -> None:
         pages = adapt(
@@ -322,7 +322,7 @@ class OlxEuropeIncrementalAdapterTests(unittest.TestCase):
             ]
         )
         self.assertIsNone(pages[0].items[0].offer)
-        self.assertEqual(pages[0].items[0].native_id, "olx.pl_2")
+        self.assertEqual(pages[0].items[0].native_id, "olxpl_2")
         self.assertEqual(pages[0].items[1].offer["make_model"], "audi:a5")  # type: ignore[index]
 
     def test_listing_url_must_be_canonical_offer_path_without_controls(self) -> None:
@@ -374,13 +374,13 @@ class OlxEuropeIncrementalAdapterTests(unittest.TestCase):
                     [tuple(row) for row in connection.execute(
                         "SELECT source_listing_id, make_model FROM offers"
                     )],
-                    [("olx.pl_1", "audi:a5")],
+                    [("olxpl_1", "audi:a5")],
                 )
                 self.assertEqual(
                     {row[0] for row in connection.execute(
                         "SELECT native_id FROM radar_incremental_frontier_ids"
                     )},
-                    {"olx.pl_1", "olx.pl_2", "olx.pl_3"},
+                    {"olxpl_1", "olxpl_2", "olxpl_3"},
                 )
             finally:
                 connection.close()

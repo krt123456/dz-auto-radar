@@ -31,6 +31,7 @@ try:
         persist_frontier,
         plan_frontier,
     )
+    from .source_identity import IdentityError, canonical_source_identity
 except ImportError:
     from incremental_frontier import (
         ConcurrentFrontierUpdate,
@@ -44,6 +45,7 @@ except ImportError:
         persist_frontier,
         plan_frontier,
     )
+    from source_identity import IdentityError, canonical_source_identity
 
 
 RUN_SCHEMA_VERSION = 2
@@ -356,6 +358,14 @@ def normalize_offer(
     source_listing_id = _text(
         raw.get("source_listing_id"), "source_listing_id", required=True
     )
+    try:
+        canonical_source, canonical_listing_id = canonical_source_identity(
+            source, source_listing_id
+        )
+    except IdentityError as error:
+        raise IngestError("offer identity is not canonical") from error
+    if canonical_source != source or canonical_listing_id != source_listing_id:
+        raise IngestError("offer identity is not canonical")
     source_url = _text(raw.get("source_url"), "source_url", required=True)
     if not source_url.startswith("https://"):
         raise IngestError("offer source_url must be HTTPS")

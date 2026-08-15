@@ -42,6 +42,7 @@ try:
         SourcePage,
     )
     from .radar_incremental_ingest import canonical_utc
+    from .source_identity import OLX_PL_CANONICAL_SOURCE, olx_pl_listing_id
 except ImportError:
     from incremental_frontier import (
         ContractError,
@@ -52,6 +53,7 @@ except ImportError:
         SourcePage,
     )
     from radar_incremental_ingest import canonical_utc
+    from source_identity import OLX_PL_CANONICAL_SOURCE, olx_pl_listing_id
 
 
 SIGNED_64_MAX = 9_223_372_036_854_775_807
@@ -266,12 +268,12 @@ def _sort_contract_hash(
     page_step: int = 45,
 ) -> str:
     specification = {
-        "adapter": "olx-europe-incremental-v2",
+        "adapter": "olx-europe-incremental-v3",
         "country": country_code,
         "api_host": api_host,
         "category_id": category_id,
         "sort_by": sort_by,
-        "native_identity": "source-key underscore canonical-decimal-id",
+        "native_identity": "olxpl underscore canonical-decimal-api-id",
         "source_order_claim": "created_at:desc only; no native ID tie-break claim",
         "derived_order": "complete equal-second group then numeric-id-desc",
         "sort_value": "created-time epoch seconds shift-left-32 or numeric-id",
@@ -289,7 +291,7 @@ def _sort_contract_hash(
 
 PL_COUNTRY_CONTRACT = OlxCountryContract(
     country_code="PL",
-    source_key="olx.pl",
+    source_key=OLX_PL_CANONICAL_SOURCE,
     partition_key="cars.pl.created-time-id.v2",
     api_host="www.olx.pl",
     category_id=84,
@@ -596,7 +598,7 @@ def _project_offer(
     mileage_value = params.get("milage", params.get("mileage"))
     year = _bounded_digits(year_value, "year", maximum=9_999)
     source_url = _source_url(raw.get("url") or raw.get("external_url"), country)
-    source_listing_id = f"{country.source_key}_{canonical_id}"
+    source_listing_id = olx_pl_listing_id(canonical_id)
     raw_params = raw.get("params")
     compact_raw = {
         "api_id": numeric_id,
@@ -673,7 +675,7 @@ def _prepare_item(
         country=country,
         observed_at_utc=observed_at_utc,
     )
-    native_id = f"{country.source_key}_{canonical_id}"
+    native_id = olx_pl_listing_id(canonical_id)
     return _PreparedItem(
         numeric_id=numeric_id,
         created_epoch=epoch,
