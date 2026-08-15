@@ -81,6 +81,7 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             "input_offer_fields_sha256": self.hashes["offer_fields"],
             "checked": 60_000,
             "ranked_pool_count": 60_000,
+            "ranked_candidate_count": 60_000,
             "direct_attempted_count": 60_000,
             "verified_target": 10_000,
             "target_reached": True,
@@ -136,6 +137,28 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             arguments.extend((f"--{label}", str(path)))
         arguments.extend(("--allow-test-now", "--now", self.timestamp(self.now)))
         return arguments
+
+    def set_exhausted_pool(self, published_count: int = 6_292) -> None:
+        self.payload["count"] = published_count
+        self.payload["published_offer_count"] = published_count
+        self.payload["verified_live_count"] = published_count
+        self.payload["offers"] = [0] * published_count
+        self.publication["published_offer_count"] = published_count
+        self.publication["verified_live_count"] = published_count
+        self.convergence["published_offer_count"] = published_count
+        self.convergence["verified_live_count"] = published_count
+        self.convergence["qualified_universe_offers"] = published_count
+        self.validation["counts"] = {
+            "verified": published_count,
+            "dead": 22_822,
+            "unknown": 60_000 - published_count - 22_822,
+        }
+        self.validation["target_reached"] = False
+        self.validation["browser_frontier_complete"] = False
+        self.validation["pool_exhausted"] = True
+        self.validation["ranked_universe_exhausted"] = True
+        self.validation["browser_target_count"] = 32_258
+        self.validation["browser_attempted_count"] = 32_258
 
     def run_cli(self) -> tuple[int, dict[str, object]]:
         stdout = io.StringIO()
@@ -207,7 +230,7 @@ class RadarFreshnessSlaTests(unittest.TestCase):
         self.assertEqual(code, sla.EXIT_INVALID)
         self.assertIn("validation offer hash", report["error"])
 
-    def test_any_present_public_count_must_be_exactly_ten_thousand(self) -> None:
+    def test_any_present_public_count_must_match_payload_count(self) -> None:
         for artifact, field in (
             ("payload", "count"),
             ("publication", "published_offer_count"),
@@ -218,7 +241,41 @@ class RadarFreshnessSlaTests(unittest.TestCase):
                 getattr(self, artifact)[field] = 9_999
                 code, report = self.run_cli()
                 self.assertEqual(code, sla.EXIT_INVALID)
-                self.assertIn("must equal 10000", report["error"])
+                self.assertIn("must equal", report["error"])
+
+    def test_exhausted_pool_below_target_is_healthy(self) -> None:
+        self.set_exhausted_pool()
+        code, report = self.run_cli()
+        self.assertEqual(code, sla.EXIT_OK)
+        self.assertEqual(report["status"], "healthy")
+        self.assertEqual(report["published_offer_count"], 6_292)
+        self.assertTrue(all(report["checks"].values()))
+
+    def test_below_target_requires_complete_exhaustion_proof(self) -> None:
+        mutations = (
+            lambda: self.validation.__setitem__("pool_exhausted", False),
+            lambda: self.validation.__setitem__("ranked_universe_exhausted", False),
+            lambda: self.validation.__setitem__("browser_attempted_count", 32_257),
+            lambda: self.validation["counts"].__setitem__("verified", 6_291),
+        )
+        for mutate in mutations:
+            with self.subTest(mutation=mutate):
+                self.refresh_evidence()
+                self.set_exhausted_pool()
+                mutate()
+                if self.validation["counts"]["verified"] == 6_291:
+                    self.validation["counts"]["unknown"] += 1
+                code, report = self.run_cli()
+                self.assertEqual(code, sla.EXIT_INVALID)
+                self.assertEqual(report["status"], "invalid")
+
+    def test_boolean_exhaustion_counters_fail_closed(self) -> None:
+        self.set_exhausted_pool()
+        self.validation["browser_target_count"] = 1
+        self.validation["browser_attempted_count"] = True
+        code, report = self.run_cli()
+        self.assertEqual(code, sla.EXIT_INVALID)
+        self.assertEqual(report["status"], "invalid")
 
     def test_validation_may_legitimately_overshoot_verified_target(self) -> None:
         self.validation["counts"] = {
@@ -226,6 +283,7 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             "dead": 1_000,
             "unknown": 48_955,
         }
+        self.convergence["qualified_universe_offers"] = 10_045
         code, report = self.run_cli()
         self.assertEqual(code, sla.EXIT_OK)
         self.assertEqual(report["status"], "healthy")
@@ -246,6 +304,7 @@ class RadarFreshnessSlaTests(unittest.TestCase):
             ("validation", ("browser_frontier_complete",)),
             ("validation", ("full_input_coverage",)),
             ("validation", ("ranked_pool_count",)),
+            ("validation", ("ranked_candidate_count",)),
             ("validation", ("direct_attempted_count",)),
             ("validation", ("input_algorithm",)),
             ("validation", ("input_snapshot_sha256",)),

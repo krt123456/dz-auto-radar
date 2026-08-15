@@ -153,38 +153,48 @@ def require_schema(value: dict[str, Any], expected: int, label: str) -> None:
         raise ContractError(f"{label} schema_version must be {expected}")
 
 
-def require_exact_counts(
-    value: dict[str, Any], label: str, fields: tuple[str, ...]
+def require_matching_counts(
+    value: dict[str, Any], label: str, fields: tuple[str, ...], expected: int
 ) -> None:
     for field in fields:
         if field not in value:
             raise ContractError(f"{label}.{field} is required")
         count = value[field]
-        if type(count) is not int or count != EXPECTED_PUBLISHED_OFFERS:
-            raise ContractError(
-                f"{label}.{field} must equal {EXPECTED_PUBLISHED_OFFERS}"
-            )
+        if type(count) is not int or count != expected:
+            raise ContractError(f"{label}.{field} must equal {expected}")
 
 
-def require_payload_shape(payload: dict[str, Any]) -> None:
-    require_exact_counts(
+def require_payload_shape(payload: dict[str, Any]) -> int:
+    published_count = payload.get("count")
+    if (
+        type(published_count) is not int
+        or not 1 <= published_count <= EXPECTED_PUBLISHED_OFFERS
+    ):
+        raise ContractError(
+            f"payload.count must be between 1 and {EXPECTED_PUBLISHED_OFFERS}"
+        )
+    require_matching_counts(
         payload,
         "payload",
         ("count", "published_offer_count", "verified_live_count"),
+        published_count,
     )
     offers = payload.get("offers")
-    if not isinstance(offers, list) or len(offers) != EXPECTED_PUBLISHED_OFFERS:
+    if not isinstance(offers, list) or len(offers) != published_count:
         raise ContractError(
-            f"payload.offers must contain exactly {EXPECTED_PUBLISHED_OFFERS} entries"
+            f"payload.offers must contain exactly {published_count} entries"
         )
+    return published_count
 
 
-def require_validation_success(validation: dict[str, Any]) -> None:
+def require_validation_success(
+    validation: dict[str, Any], published_count: int
+) -> None:
     checked = validation.get("checked")
     counts = validation.get("counts")
-    if type(checked) is not int or checked < EXPECTED_PUBLISHED_OFFERS:
+    if type(checked) is not int or checked < published_count:
         raise ContractError(
-            f"validation.checked must be at least {EXPECTED_PUBLISHED_OFFERS}"
+            f"validation.checked must be at least {published_count}"
         )
     if (
         not isinstance(counts, dict)
@@ -194,26 +204,60 @@ def require_validation_success(validation: dict[str, Any]) -> None:
         or sum(counts.values()) != checked
     ):
         raise ContractError("validation.counts must exactly account for validation.checked")
-    if counts["verified"] < EXPECTED_PUBLISHED_OFFERS:
-        raise ContractError(
-            f"validation.counts.verified must be at least {EXPECTED_PUBLISHED_OFFERS}"
-        )
     if validation.get("verified_target") != EXPECTED_PUBLISHED_OFFERS:
         raise ContractError(
             f"validation.verified_target must equal {EXPECTED_PUBLISHED_OFFERS}"
         )
-    if validation.get("target_reached") is not True:
-        raise ContractError("validation.target_reached must be true")
-    if validation.get("browser_frontier_complete") is not True:
-        raise ContractError("validation.browser_frontier_complete must be true")
     if validation.get("full_input_coverage") is not True:
         raise ContractError("validation.full_input_coverage must be true")
-    for field in ("ranked_pool_count", "direct_attempted_count"):
-        if validation.get(field) != checked:
+    for field in (
+        "ranked_pool_count",
+        "ranked_candidate_count",
+        "direct_attempted_count",
+    ):
+        value = validation.get(field)
+        if type(value) is not int or value != checked:
             raise ContractError(f"validation.{field} must equal validation.checked")
 
+    if validation.get("target_reached") is True:
+        if published_count != EXPECTED_PUBLISHED_OFFERS:
+            raise ContractError("target-reached validation must publish the full target")
+        if counts["verified"] < published_count:
+            raise ContractError(
+                "target-reached validation has fewer verified rows than published rows"
+            )
+        if validation.get("browser_frontier_complete") is not True:
+            raise ContractError("validation.browser_frontier_complete must be true")
+        return
 
-def require_convergence_pass(convergence: dict[str, Any], generation: str) -> None:
+    if validation.get("target_reached") is not False:
+        raise ContractError("validation.target_reached must be boolean")
+    if published_count >= EXPECTED_PUBLISHED_OFFERS:
+        raise ContractError("exhausted-pool validation must publish below the target")
+    if counts["verified"] != published_count:
+        raise ContractError(
+            "exhausted-pool validation verified count must equal published count"
+        )
+    for field in ("pool_exhausted", "ranked_universe_exhausted"):
+        if validation.get(field) is not True:
+            raise ContractError(f"validation.{field} must be true below target")
+    browser_target_count = validation.get("browser_target_count")
+    browser_attempted_count = validation.get("browser_attempted_count")
+    if (
+        type(browser_target_count) is not int
+        or browser_target_count < 0
+        or type(browser_attempted_count) is not int
+        or browser_attempted_count < 0
+        or browser_attempted_count != browser_target_count
+    ):
+        raise ContractError(
+            "exhausted-pool validation must attempt every browser target"
+        )
+
+
+def require_convergence_pass(
+    convergence: dict[str, Any], generation: str, published_count: int
+) -> None:
     if convergence.get("result") != "LIVE_GENERATION_AUDIT_PASS":
         raise ContractError("convergence did not record LIVE_GENERATION_AUDIT_PASS")
     for field in ("expected_generation", "observed_generation"):
@@ -243,7 +287,11 @@ def require_convergence_pass(convergence: dict[str, Any], generation: str) -> No
         != convergence["full_ranked_input_offers"]
         or convergence["ranking_saved_offers"]
         != convergence["ranking_saved_observed_offers"]
-        or not EXPECTED_PUBLISHED_OFFERS <= convergence["qualified_universe_offers"]
+        or convergence["qualified_universe_offers"] < published_count
+        or (
+            published_count < EXPECTED_PUBLISHED_OFFERS
+            and convergence["qualified_universe_offers"] != published_count
+        )
         or convergence["qualified_universe_offers"]
         > convergence["ranking_qualified_offers"]
         or convergence["qualified_universe_offers"]
@@ -327,21 +375,23 @@ def evaluate(
     require_schema(validation, 1, "validation")
     require_schema(publication, 1, "publication")
     require_schema(convergence, 1, "convergence")
-    require_payload_shape(payload)
-    require_exact_counts(
+    published_count = require_payload_shape(payload)
+    require_matching_counts(
         publication,
         "publication",
         ("published_offer_count", "verified_live_count"),
+        published_count,
     )
-    require_exact_counts(
+    require_matching_counts(
         convergence,
         "convergence",
         ("published_offer_count", "verified_live_count"),
+        published_count,
     )
-    require_validation_success(validation)
+    require_validation_success(validation, published_count)
 
     generation = required_hex(payload.get("generation_id"), 16, "payload.generation_id")
-    require_convergence_pass(convergence, generation)
+    require_convergence_pass(convergence, generation, published_count)
     for label, value in (("publication", publication), ("convergence", convergence)):
         if required_hex(value.get("generation_id"), 16, f"{label}.generation_id") != generation:
             raise ContractError(f"{label} generation does not match the public payload")
@@ -449,7 +499,7 @@ def evaluate(
         "status": status,
         "now_utc": canonical_timestamp(now),
         "generation_id": generation,
-        "published_offer_count": EXPECTED_PUBLISHED_OFFERS,
+        "published_offer_count": published_count,
         "thresholds_hours": {
             "warn_at": 4,
             "fallback_at": 5,
@@ -457,7 +507,7 @@ def evaluate(
         },
         "ages": ages,
         "checks": {
-            "exact_published_offer_count": True,
+            "published_offer_count_converged": True,
             "generation_bound": True,
             "generation_converged": True,
             "hashes_converged": True,
