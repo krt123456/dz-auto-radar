@@ -11,6 +11,7 @@ IDs still advance the source frontier.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -45,7 +46,7 @@ except ImportError:
     )
 
 
-RUN_SCHEMA_VERSION = 1
+RUN_SCHEMA_VERSION = 2
 RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$")
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -60,6 +61,10 @@ class RunConflictError(IngestError):
 
 class StaleObservationError(IngestError):
     """An older observation would overwrite a newer stored offer."""
+
+
+class SchemaError(IngestError):
+    """Persisted incremental tables do not match the sealed schema."""
 
 
 OFFERS_SCHEMA = """
@@ -91,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_offers_last_seen ON offers(last_seen_at);
 
 RUN_SCHEMA = """
 CREATE TABLE IF NOT EXISTS radar_incremental_runs (
-  run_id TEXT PRIMARY KEY,
+  run_id TEXT PRIMARY KEY NOT NULL,
   request_sha256 TEXT NOT NULL,
   input_sha256 TEXT NOT NULL,
   source_key TEXT NOT NULL,
@@ -103,11 +108,46 @@ CREATE TABLE IF NOT EXISTS radar_incremental_runs (
   new_native_id_count INTEGER NOT NULL,
   observed_offer_count INTEGER NOT NULL,
   inserted_offer_count INTEGER NOT NULL,
-  updated_offer_count INTEGER NOT NULL,
+  changed_offer_count INTEGER NOT NULL,
+  refreshed_offer_count INTEGER NOT NULL,
   frontier_revision INTEGER NOT NULL,
   stop_reason TEXT NOT NULL,
-  receipt_json TEXT NOT NULL
-);
+  receipt_json TEXT NOT NULL,
+  CHECK (observed_offer_count >= 0),
+  CHECK (inserted_offer_count >= 0),
+  CHECK (changed_offer_count >= 0),
+  CHECK (refreshed_offer_count >= 0),
+  CHECK (
+    observed_offer_count =
+      inserted_offer_count + changed_offer_count + refreshed_offer_count
+  )
+) STRICT;
+CREATE TABLE IF NOT EXISTS radar_incremental_changes (
+  run_id TEXT NOT NULL,
+  source TEXT NOT NULL CHECK (source <> ''),
+  source_listing_id TEXT NOT NULL CHECK (source_listing_id <> ''),
+  change_kind TEXT NOT NULL
+    CHECK (change_kind IN ('inserted', 'material_update')),
+  prior_material_sha256 TEXT,
+  material_sha256 TEXT NOT NULL
+    CHECK (
+      length(material_sha256) = 64
+      AND material_sha256 NOT GLOB '*[^0-9a-f]*'
+    ),
+  observed_at_utc TEXT NOT NULL CHECK (observed_at_utc <> ''),
+  offer_json TEXT NOT NULL CHECK (json_valid(offer_json)),
+  PRIMARY KEY (run_id, source, source_listing_id),
+  CHECK (
+    (change_kind = 'inserted' AND prior_material_sha256 IS NULL)
+    OR
+    (change_kind = 'material_update'
+      AND length(prior_material_sha256) = 64
+      AND prior_material_sha256 NOT GLOB '*[^0-9a-f]*'
+      AND prior_material_sha256 <> material_sha256)
+  ),
+  FOREIGN KEY (run_id) REFERENCES radar_incremental_runs(run_id)
+    ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED
+) STRICT;
 """
 
 
@@ -133,8 +173,25 @@ OFFER_COLUMNS = (
     "raw_json",
 )
 
+MATERIAL_OFFER_FIELDS = (
+    "source_url",
+    "title",
+    "make_model",
+    "variant",
+    "country",
+    "price_eur",
+    "raw_price",
+    "currency",
+    "year",
+    "mileage_km",
+    "fuel",
+    "seller_type",
+    "location",
+)
+MATERIAL_INTEGER_FIELDS = frozenset({"price_eur", "year", "mileage_km"})
 
-UPSERT_OFFER = """
+
+INSERT_OFFER = """
 INSERT INTO offers (
   source, source_listing_id, source_url, title, make_model, variant, country,
   price_eur, raw_price, currency, year, mileage_km, fuel, seller_type, location,
@@ -144,24 +201,82 @@ INSERT INTO offers (
   :price_eur, :raw_price, :currency, :year, :mileage_km, :fuel, :seller_type, :location,
   :fetched_at, :first_seen_at, :last_seen_at, :raw_json
 )
-ON CONFLICT(source, source_listing_id) DO UPDATE SET
-  source_url=excluded.source_url,
-  title=excluded.title,
-  make_model=excluded.make_model,
-  variant=excluded.variant,
-  country=excluded.country,
-  price_eur=excluded.price_eur,
-  raw_price=excluded.raw_price,
-  currency=excluded.currency,
-  year=excluded.year,
-  mileage_km=excluded.mileage_km,
-  fuel=excluded.fuel,
-  seller_type=excluded.seller_type,
-  location=excluded.location,
-  fetched_at=excluded.fetched_at,
-  last_seen_at=excluded.last_seen_at,
-  raw_json=excluded.raw_json
 """
+
+UPDATE_MATERIAL_OFFER = """
+UPDATE offers SET
+  source_url=:source_url,
+  title=:title,
+  make_model=:make_model,
+  variant=:variant,
+  country=:country,
+  price_eur=:price_eur,
+  raw_price=:raw_price,
+  currency=:currency,
+  year=:year,
+  mileage_km=:mileage_km,
+  fuel=:fuel,
+  seller_type=:seller_type,
+  location=:location,
+  fetched_at=:fetched_at,
+  last_seen_at=:last_seen_at,
+  raw_json=:raw_json
+WHERE source=:source AND source_listing_id=:source_listing_id
+"""
+
+REFRESH_OFFER = """
+UPDATE offers SET fetched_at=:fetched_at, last_seen_at=:last_seen_at
+WHERE source=:source AND source_listing_id=:source_listing_id
+"""
+
+RUN_TABLE_COLUMNS = (
+    "run_id", "request_sha256", "input_sha256", "source_key",
+    "partition_key", "sort_contract_sha256", "committed_at_utc",
+    "processed_pages", "raw_item_count", "new_native_id_count",
+    "observed_offer_count", "inserted_offer_count", "changed_offer_count",
+    "refreshed_offer_count", "frontier_revision", "stop_reason",
+    "receipt_json",
+)
+CHANGE_TABLE_COLUMNS = (
+    "run_id", "source", "source_listing_id", "change_kind",
+    "prior_material_sha256", "material_sha256", "observed_at_utc",
+    "offer_json",
+)
+
+
+def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    return connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone() is not None
+
+
+def _require_sealed_table(
+    connection: sqlite3.Connection, table: str, expected_columns: tuple[str, ...]
+) -> None:
+    columns = tuple(row[1] for row in connection.execute(f"PRAGMA table_info({table})"))
+    strict = next(
+        (row[5] for row in connection.execute("PRAGMA table_list") if row[1] == table),
+        0,
+    )
+    stored_row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone()
+    match = re.search(
+        rf"(CREATE TABLE IF NOT EXISTS {re.escape(table)} \(.*?\n\) STRICT);",
+        RUN_SCHEMA,
+        flags=re.DOTALL,
+    )
+    if match is None:  # pragma: no cover - sealed source constant
+        raise AssertionError(f"missing sealed schema source for {table}")
+    expected_sql = match.group(1).replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE", 1)
+    normalize_sql = lambda value: " ".join(value.split())  # noqa: E731
+    if (
+        columns != expected_columns
+        or strict != 1
+        or stored_row is None
+        or normalize_sql(stored_row[0]) != normalize_sql(expected_sql)
+    ):
+        raise SchemaError(f"{table} does not match the sealed incremental schema")
 
 
 def canonical_utc(raw: str) -> str:
@@ -178,18 +293,30 @@ def canonical_utc(raw: str) -> str:
 
 def ensure_schema(connection: sqlite3.Connection) -> None:
     connection.execute("PRAGMA foreign_keys=ON")
+    for table, columns in (
+        ("radar_incremental_runs", RUN_TABLE_COLUMNS),
+        ("radar_incremental_changes", CHANGE_TABLE_COLUMNS),
+    ):
+        if _table_exists(connection, table):
+            _require_sealed_table(connection, table, columns)
     connection.executescript(OFFERS_SCHEMA)
     ensure_frontier_schema(connection)
     connection.executescript(RUN_SCHEMA)
+    _require_sealed_table(connection, "radar_incremental_runs", RUN_TABLE_COLUMNS)
+    _require_sealed_table(connection, "radar_incremental_changes", CHANGE_TABLE_COLUMNS)
 
 
 def connect(path: Path, *, timeout_seconds: float = 5.0) -> sqlite3.Connection:
     connection = sqlite3.connect(path, timeout=timeout_seconds)
-    connection.row_factory = sqlite3.Row
-    connection.execute(f"PRAGMA busy_timeout={max(1, int(timeout_seconds * 1000))}")
-    connection.execute("PRAGMA foreign_keys=ON")
-    ensure_schema(connection)
-    return connection
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute(f"PRAGMA busy_timeout={max(1, int(timeout_seconds * 1000))}")
+        connection.execute("PRAGMA foreign_keys=ON")
+        ensure_schema(connection)
+        return connection
+    except BaseException:
+        connection.close()
+        raise
 
 
 def _bounded_int(value: Any, field: str) -> int:
@@ -285,15 +412,74 @@ def _observed_offers(
     return list(offers.values())
 
 
+def _material_payload(offer: Mapping[str, Any]) -> dict[str, Any]:
+    payload: dict[str, Any] = {}
+    for field in MATERIAL_OFFER_FIELDS:
+        value = offer[field]
+        if field in MATERIAL_INTEGER_FIELDS:
+            payload[field] = _bounded_int(value, field)
+        elif not isinstance(value, str):
+            raise IngestError(f"stored offer {field} is not text")
+        else:
+            payload[field] = value
+    return payload
+
+
+def _canonical_material_json(offer: Mapping[str, Any]) -> str:
+    return json.dumps(
+        _material_payload(offer),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _material_sha256(offer_json: str) -> str:
+    return hashlib.sha256(offer_json.encode("utf-8")).hexdigest()
+
+
+def _write_change(
+    connection: sqlite3.Connection,
+    *,
+    run_id: str,
+    offer: Mapping[str, Any],
+    change_kind: str,
+    prior_material_sha256: str | None,
+    material_sha256: str,
+    offer_json: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO radar_incremental_changes (
+          run_id, source, source_listing_id, change_kind,
+          prior_material_sha256, material_sha256, observed_at_utc, offer_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            run_id,
+            offer["source"],
+            offer["source_listing_id"],
+            change_kind,
+            prior_material_sha256,
+            material_sha256,
+            offer["last_seen_at"],
+            offer_json,
+        ),
+    )
+
+
 def _upsert_observed_offers(
     connection: sqlite3.Connection,
     offers: list[dict[str, Any]],
-) -> tuple[int, int]:
+    *,
+    run_id: str,
+) -> tuple[int, int, int]:
     inserted = 0
-    updated = 0
+    changed = 0
+    refreshed = 0
     for offer in offers:
         existed = connection.execute(
-            "SELECT last_seen_at FROM offers WHERE source=? AND source_listing_id=?",
+            "SELECT * FROM offers WHERE source=? AND source_listing_id=?",
             (offer["source"], offer["source_listing_id"]),
         ).fetchone()
         if existed is not None:
@@ -307,12 +493,41 @@ def _upsert_observed_offers(
                 raise StaleObservationError(
                     "an older observation cannot overwrite a newer offer"
                 )
-        connection.execute(UPSERT_OFFER, offer)
+        offer_json = _canonical_material_json(offer)
+        material_sha256 = _material_sha256(offer_json)
         if existed is None:
+            connection.execute(INSERT_OFFER, offer)
+            _write_change(
+                connection,
+                run_id=run_id,
+                offer=offer,
+                change_kind="inserted",
+                prior_material_sha256=None,
+                material_sha256=material_sha256,
+                offer_json=offer_json,
+            )
             inserted += 1
         else:
-            updated += 1
-    return inserted, updated
+            prior_json = _canonical_material_json(existed)
+            prior_sha256 = _material_sha256(prior_json)
+            if prior_sha256 == material_sha256:
+                cursor = connection.execute(REFRESH_OFFER, offer)
+                refreshed += 1
+            else:
+                cursor = connection.execute(UPDATE_MATERIAL_OFFER, offer)
+                _write_change(
+                    connection,
+                    run_id=run_id,
+                    offer=offer,
+                    change_kind="material_update",
+                    prior_material_sha256=prior_sha256,
+                    material_sha256=material_sha256,
+                    offer_json=offer_json,
+                )
+                changed += 1
+            if cursor.rowcount != 1:
+                raise ConcurrentFrontierUpdate("observed offer changed concurrently")
+    return inserted, changed, refreshed
 
 
 RECEIPT_ROW_FIELDS = (
@@ -328,7 +543,8 @@ RECEIPT_ROW_FIELDS = (
     "new_native_id_count",
     "observed_offer_count",
     "inserted_offer_count",
-    "updated_offer_count",
+    "changed_offer_count",
+    "refreshed_offer_count",
     "frontier_revision",
     "stop_reason",
 )
@@ -343,7 +559,70 @@ def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
-def _receipt_from_row(row: sqlite3.Row) -> dict[str, Any]:
+def _verify_change_ledger(
+    connection: sqlite3.Connection,
+    *,
+    receipt: Mapping[str, Any],
+) -> None:
+    rows = connection.execute(
+        """
+        SELECT run_id, source, source_listing_id, change_kind,
+               prior_material_sha256, material_sha256, observed_at_utc, offer_json
+          FROM radar_incremental_changes
+         WHERE run_id=?
+         ORDER BY source, source_listing_id
+        """,
+        (receipt["run_id"],),
+    ).fetchall()
+    expected_count = receipt["inserted_offer_count"] + receipt["changed_offer_count"]
+    if len(rows) != expected_count:
+        raise RunConflictError("stored incremental change ledger count is corrupt")
+    counts = {"inserted": 0, "material_update": 0}
+    for row in rows:
+        try:
+            payload = json.loads(
+                row["offer_json"], object_pairs_hook=_unique_json_object
+            )
+            canonical = _canonical_material_json(payload)
+            observed_at = canonical_utc(row["observed_at_utc"])
+        except (json.JSONDecodeError, TypeError, KeyError, IngestError) as error:
+            raise RunConflictError("stored incremental change ledger is corrupt") from error
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != set(MATERIAL_OFFER_FIELDS)
+            or canonical != row["offer_json"]
+            or _material_sha256(canonical) != row["material_sha256"]
+            or row["run_id"] != receipt["run_id"]
+            or row["source"] != receipt["source_key"]
+            or not isinstance(row["source_listing_id"], str)
+            or not row["source_listing_id"]
+            or row["source_listing_id"]
+                != " ".join(row["source_listing_id"].split())
+            or observed_at != receipt["committed_at_utc"]
+            or row["change_kind"] not in counts
+        ):
+            raise RunConflictError("stored incremental change ledger is corrupt")
+        prior = row["prior_material_sha256"]
+        if row["change_kind"] == "inserted":
+            if prior is not None:
+                raise RunConflictError("stored inserted change has a prior hash")
+        elif (
+            not isinstance(prior, str)
+            or not HEX_64.fullmatch(prior)
+            or prior == row["material_sha256"]
+        ):
+            raise RunConflictError("stored material update prior hash is corrupt")
+        counts[row["change_kind"]] += 1
+    if (
+        counts["inserted"] != receipt["inserted_offer_count"]
+        or counts["material_update"] != receipt["changed_offer_count"]
+    ):
+        raise RunConflictError("stored incremental change ledger kinds are corrupt")
+
+
+def _receipt_from_row(
+    connection: sqlite3.Connection, row: sqlite3.Row
+) -> dict[str, Any]:
     try:
         receipt = json.loads(
             row["receipt_json"], object_pairs_hook=_unique_json_object
@@ -365,6 +644,13 @@ def _receipt_from_row(row: sqlite3.Row) -> dict[str, Any]:
         raise RunConflictError(
             "stored incremental run receipt does not match its database row"
         )
+    if receipt["observed_offer_count"] != (
+        receipt["inserted_offer_count"]
+        + receipt["changed_offer_count"]
+        + receipt["refreshed_offer_count"]
+    ):
+        raise RunConflictError("stored incremental run counts do not reconcile")
+    _verify_change_ledger(connection, receipt=receipt)
     return receipt
 
 
@@ -382,7 +668,7 @@ def _existing_receipt(
         return None
     if row["request_sha256"] != request_sha256:
         raise RunConflictError("run_id was reused with a different request digest")
-    return _receipt_from_row(row)
+    return _receipt_from_row(connection, row)
 
 
 def _write_run_receipt(
@@ -396,9 +682,9 @@ def _write_run_receipt(
           run_id, request_sha256, input_sha256, source_key, partition_key,
           sort_contract_sha256, committed_at_utc, processed_pages,
           raw_item_count, new_native_id_count, observed_offer_count,
-          inserted_offer_count, updated_offer_count, frontier_revision,
-          stop_reason, receipt_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          inserted_offer_count, changed_offer_count, refreshed_offer_count,
+          frontier_revision, stop_reason, receipt_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             receipt["run_id"],
@@ -413,7 +699,8 @@ def _write_run_receipt(
             receipt["new_native_id_count"],
             receipt["observed_offer_count"],
             receipt["inserted_offer_count"],
-            receipt["updated_offer_count"],
+            receipt["changed_offer_count"],
+            receipt["refreshed_offer_count"],
             receipt["frontier_revision"],
             receipt["stop_reason"],
             json.dumps(
@@ -467,7 +754,9 @@ def ingest_incremental_run(
             connection.rollback()
             return existing
         assert_snapshot_current(connection, snapshot, allowlist)
-        inserted, updated = _upsert_observed_offers(connection, offers)
+        inserted, changed, refreshed = _upsert_observed_offers(
+            connection, offers, run_id=run_id
+        )
         revision = persist_frontier(
             connection,
             plan,
@@ -489,7 +778,8 @@ def ingest_incremental_run(
             "new_native_id_count": len(plan.new_native_ids),
             "observed_offer_count": len(offers),
             "inserted_offer_count": inserted,
-            "updated_offer_count": updated,
+            "changed_offer_count": changed,
+            "refreshed_offer_count": refreshed,
             "frontier_revision": revision,
             "stop_reason": plan.stop_reason,
         }

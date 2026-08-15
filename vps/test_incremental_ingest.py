@@ -133,7 +133,10 @@ class IncrementalIngestTests(unittest.TestCase):
         self.assertEqual(receipt["stop_reason"], "source_exhausted")
         self.assertEqual(receipt["processed_pages"], 4)
         self.assertEqual(receipt["new_native_id_count"], 6)
+        self.assertEqual(receipt["observed_offer_count"], 6)
         self.assertEqual(receipt["inserted_offer_count"], 6)
+        self.assertEqual(receipt["changed_offer_count"], 0)
+        self.assertEqual(receipt["refreshed_offer_count"], 0)
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM offers").fetchone()[0], 6
         )
@@ -148,6 +151,114 @@ class IncrementalIngestTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM radar_incremental_runs"
             ).fetchone()[0],
             1,
+        )
+        changes = self.connection.execute(
+            """
+            SELECT change_kind, prior_material_sha256, material_sha256, offer_json
+              FROM radar_incremental_changes ORDER BY source_listing_id
+            """
+        ).fetchall()
+        self.assertEqual(len(changes), 6)
+        for change in changes:
+            payload = json.loads(change["offer_json"])
+            self.assertEqual(change["change_kind"], "inserted")
+            self.assertIsNone(change["prior_material_sha256"])
+            self.assertEqual(set(payload), set(ingest.MATERIAL_OFFER_FIELDS))
+            self.assertFalse(
+                {"source", "source_listing_id", "first_seen_at", "last_seen_at",
+                 "fetched_at", "raw_json"} & set(payload)
+            )
+            self.assertEqual(
+                change["material_sha256"],
+                hashlib.sha256(change["offer_json"].encode("utf-8")).hexdigest(),
+            )
+
+    def test_identical_offer_refreshes_only_liveness_and_writes_no_change(self) -> None:
+        self.bootstrap()
+        before = self.connection.execute(
+            """
+            SELECT first_seen_at, raw_json, title, price_eur
+              FROM offers WHERE source_listing_id='n6'
+            """
+        ).fetchone()
+        noisy = item("n6", 106)
+        assert isinstance(noisy["offer"], dict)
+        noisy["offer"]["raw_json"] = '{"transport":"changed","native_id":"n6"}'
+        noisy["offer"]["fetched_at"] = "2026-08-14T12:59:59Z"
+        receipt = self.run_ingest(
+            "no-op-refresh",
+            [
+                page(1, noisy, item("n5", 105)),
+                page(2, item("n4", 104), item("n3", 103)),
+            ],
+            observed_at="2026-08-14T13:00:00Z",
+        )
+        self.assertEqual(receipt["observed_offer_count"], 4)
+        self.assertEqual(receipt["inserted_offer_count"], 0)
+        self.assertEqual(receipt["changed_offer_count"], 0)
+        self.assertEqual(receipt["refreshed_offer_count"], 4)
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT COUNT(*) FROM radar_incremental_changes WHERE run_id=?",
+                ("no-op-refresh",),
+            ).fetchone()[0],
+            0,
+        )
+        after = self.connection.execute(
+            """
+            SELECT first_seen_at, raw_json, title, price_eur, fetched_at, last_seen_at
+              FROM offers WHERE source_listing_id='n6'
+            """
+        ).fetchone()
+        self.assertEqual(after["first_seen_at"], before["first_seen_at"])
+        self.assertEqual(after["raw_json"], before["raw_json"])
+        self.assertEqual(after["title"], before["title"])
+        self.assertEqual(after["price_eur"], before["price_eur"])
+        self.assertEqual(after["fetched_at"], "2026-08-14T12:59:59+00:00")
+        self.assertEqual(after["last_seen_at"], "2026-08-14T13:00:00+00:00")
+
+    def test_equal_timestamp_material_update_is_ledged_and_preserves_first_seen(self) -> None:
+        self.bootstrap()
+        before = self.connection.execute(
+            "SELECT * FROM offers WHERE source_listing_id='n6'"
+        ).fetchone()
+        changed = item("n6", 106, title="Material title change")
+        assert isinstance(changed["offer"], dict)
+        changed["offer"]["price_eur"] = 12_345
+        changed["offer"]["raw_price"] = "12345"
+        receipt = self.run_ingest(
+            "material-change",
+            [
+                page(1, changed, item("n5", 105)),
+                page(2, item("n4", 104), item("n3", 103)),
+            ],
+            observed_at="2026-08-14T12:00:00Z",
+        )
+        self.assertEqual(receipt["observed_offer_count"], 4)
+        self.assertEqual(receipt["inserted_offer_count"], 0)
+        self.assertEqual(receipt["changed_offer_count"], 1)
+        self.assertEqual(receipt["refreshed_offer_count"], 3)
+        after = self.connection.execute(
+            "SELECT * FROM offers WHERE source_listing_id='n6'"
+        ).fetchone()
+        self.assertEqual(after["first_seen_at"], before["first_seen_at"])
+        self.assertEqual(after["title"], "Material title change")
+        self.assertEqual(after["price_eur"], 12_345)
+        change = self.connection.execute(
+            "SELECT * FROM radar_incremental_changes WHERE run_id=?",
+            ("material-change",),
+        ).fetchone()
+        self.assertEqual(change["change_kind"], "material_update")
+        self.assertEqual(
+            change["prior_material_sha256"],
+            ingest._material_sha256(ingest._canonical_material_json(before)),
+        )
+        self.assertEqual(
+            change["material_sha256"],
+            ingest._material_sha256(ingest._canonical_material_json(after)),
+        )
+        self.assertNotEqual(
+            change["prior_material_sha256"], change["material_sha256"]
         )
 
     def test_frontier_cap_retains_newest_ids_for_next_known_stop(self) -> None:
@@ -391,6 +502,27 @@ class IncrementalIngestTests(unittest.TestCase):
             "radar_incremental_frontiers",
             "radar_incremental_frontier_ids",
             "radar_incremental_runs",
+            "radar_incremental_changes",
+        ):
+            self.assertEqual(
+                self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                0,
+                table,
+            )
+
+    def test_change_ledger_failure_rolls_back_offer_frontier_run_and_ledger(self) -> None:
+        with mock.patch.object(
+            ingest, "_write_change", side_effect=RuntimeError("ledger injected")
+        ):
+            with self.assertRaisesRegex(RuntimeError, "ledger injected"):
+                self.run_ingest("ledger-rollback", complete_bootstrap_pages())
+        self.assertFalse(self.connection.in_transaction)
+        for table in (
+            "offers",
+            "radar_incremental_frontiers",
+            "radar_incremental_frontier_ids",
+            "radar_incremental_runs",
+            "radar_incremental_changes",
         ):
             self.assertEqual(
                 self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
@@ -413,6 +545,7 @@ class IncrementalIngestTests(unittest.TestCase):
             "radar_incremental_frontiers",
             "radar_incremental_frontier_ids",
             "radar_incremental_runs",
+            "radar_incremental_changes",
         ):
             self.assertEqual(
                 self.connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
@@ -422,6 +555,9 @@ class IncrementalIngestTests(unittest.TestCase):
 
     def test_retry_is_idempotent_and_does_not_consume_pages(self) -> None:
         first = self.bootstrap()
+        first_change_count = self.connection.execute(
+            "SELECT COUNT(*) FROM radar_incremental_changes"
+        ).fetchone()[0]
 
         def must_not_run():
             raise AssertionError("idempotent retry consumed the source")
@@ -432,12 +568,33 @@ class IncrementalIngestTests(unittest.TestCase):
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM offers").fetchone()[0], 6
         )
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT COUNT(*) FROM radar_incremental_changes"
+            ).fetchone()[0],
+            first_change_count,
+        )
         with self.assertRaises(ingest.RunConflictError):
             self.run_ingest(
                 "bootstrap",
                 must_not_run(),
                 request_label="different-request",
             )
+
+    def test_corrupt_change_ledger_is_not_accepted_as_idempotent_success(self) -> None:
+        self.bootstrap()
+        self.connection.execute(
+            "DELETE FROM radar_incremental_changes WHERE run_id=? AND source_listing_id=?",
+            ("bootstrap", "n1"),
+        )
+        self.connection.commit()
+
+        def must_not_run():
+            raise AssertionError("corrupt-retry consumed the source")
+            yield  # pragma: no cover
+
+        with self.assertRaises(ingest.RunConflictError):
+            self.run_ingest("bootstrap", must_not_run())
 
     def test_corrupt_receipt_is_not_accepted_as_idempotent_success(self) -> None:
         self.bootstrap()
@@ -492,8 +649,13 @@ class IncrementalIngestTests(unittest.TestCase):
             self.run_ingest(
                 "stale",
                 [
-                    page(1, item("n6", 106, title="Stale overwrite"), item("n5", 105)),
-                    page(2, item("n4", 104), item("n3", 103)),
+                    page(
+                        1,
+                        item("new-before-stale", 107),
+                        item("n6", 106, title="Stale overwrite"),
+                    ),
+                    page(2, item("n5", 105), item("n4", 104)),
+                    page(3, item("n3", 103), item("n2", 102)),
                 ],
                 observed_at="2026-08-14T11:00:00Z",
             )
@@ -515,6 +677,17 @@ class IncrementalIngestTests(unittest.TestCase):
                 "SELECT COUNT(*) FROM radar_incremental_runs"
             ).fetchone()[0],
             before_run_count,
+        )
+        self.assertIsNone(
+            self.connection.execute(
+                "SELECT 1 FROM offers WHERE source_listing_id='new-before-stale'"
+            ).fetchone()
+        )
+        self.assertEqual(
+            self.connection.execute(
+                "SELECT COUNT(*) FROM radar_incremental_changes"
+            ).fetchone()[0],
+            6,
         )
 
     def test_only_observed_rows_refresh_last_seen(self) -> None:
@@ -559,6 +732,34 @@ class IncrementalIngestTests(unittest.TestCase):
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM offers").fetchone()[0], 0
         )
+
+    def test_legacy_v1_run_schema_is_rejected_without_partial_upgrade(self) -> None:
+        legacy_path = Path(self.temporary.name) / "legacy.sqlite"
+        legacy = sqlite3.connect(legacy_path)
+        try:
+            legacy.execute(
+                """
+                CREATE TABLE radar_incremental_runs (
+                  run_id TEXT PRIMARY KEY,
+                  updated_offer_count INTEGER NOT NULL
+                )
+                """
+            )
+            legacy.commit()
+        finally:
+            legacy.close()
+        with self.assertRaisesRegex(ingest.SchemaError, "sealed incremental schema"):
+            ingest.connect(legacy_path)
+        audit = sqlite3.connect(legacy_path)
+        try:
+            tables = {
+                row[0] for row in audit.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+        finally:
+            audit.close()
+        self.assertEqual(tables, {"radar_incremental_runs"})
 
 
 if __name__ == "__main__":
