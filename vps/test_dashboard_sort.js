@@ -185,6 +185,11 @@ try {
   check(html.includes('id="coverageTruth"'), "dashboard must include a coverage-truth alert");
   check(sortSelect.includes('aria-describedby="sortHelp"'), "sort control must be linked to its explanation");
 
+  check(evaluate(makeSandbox(), 'autoscoutCollectionUrl("https://www.autoscout24.com/lst/toyota/123456")'), "AutoScout collection URLs must fail the display gate");
+  check(!evaluate(makeSandbox(), 'autoscoutCollectionUrl("https://www.autoscout24.it/annunci/car-503f6455-b5a5-48af-bcfa-8a08c1dd87c7")'), "AutoScout detail URLs must remain displayable");
+  check(evaluate(makeSandbox(), 'legacyDamagedOffer({t:"Citroën C3 hybride endommagé",m:"c3"})'), "accented French damaged offers must fail the display gate");
+  check(!evaluate(makeSandbox(), 'legacyDamagedOffer({t:"Peugeot avec protection anti-endommagement",m:"208"})'), "related non-damaged wording must remain displayable");
+
   const local = {
     "dzr-known-offers-v1": JSON.stringify(offers.map(row => row.id)),
     "dzr-new-offers-v1": "[]",
