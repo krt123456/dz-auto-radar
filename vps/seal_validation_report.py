@@ -87,6 +87,30 @@ def safe_https_url(value: Any) -> bool:
     return True
 
 
+def normalized_host(value: Any) -> str:
+    try:
+        host = (urlsplit(str(value or "")).hostname or "").casefold().rstrip(".")
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
+def browser_evidence_expected(result: dict[str, Any]) -> bool:
+    """Mirror validator browser eligibility after merging attempted results."""
+    if "direct_reason" in result:
+        return True
+    paruvendu_protection_redirect = (
+        result.get("reason") == "protection_redirect"
+        and normalized_host(result.get("url")) == "paruvendu.fr"
+        and normalized_host(result.get("final_url")) == "paruvendu.fr"
+    )
+    return (
+        result.get("status") == "unknown"
+        and str(result.get("url") or "").startswith("http")
+        and not paruvendu_protection_redirect
+    )
+
+
 def offer_url(offer: dict[str, Any], position: int) -> str:
     compact = offer.get("u")
     verbose = offer.get("url")
@@ -251,11 +275,7 @@ def validate_contract(
     evidenced_target_ranks = [
         position
         for position, result in enumerate(results, start=1)
-        if "direct_reason" in result
-        or (
-            result.get("status") == "unknown"
-            and str(result.get("url") or "").startswith("http")
-        )
+        if browser_evidence_expected(result)
     ]
     expected_target_ranks = (
         evidenced_target_ranks[:browser_targets]
@@ -342,9 +362,7 @@ def validate_contract(
         attempted_ranks != target_ranks
         or target_rank_set != set(evidenced_target_ranks)
         or any(
-            result.get("status") == "unknown"
-            and str(result.get("url") or "").startswith("http")
-            and "direct_reason" not in result
+            browser_evidence_expected(result) and "direct_reason" not in result
             for result in results
         )
     ):

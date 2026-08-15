@@ -176,6 +176,9 @@ xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --checkpoint-batch-size "${RADAR_VALIDATION_CHECKPOINT_BATCH_SIZE:-1000}" \
   --checkpoint-interval-sec "${RADAR_VALIDATION_CHECKPOINT_INTERVAL_SEC:-120}" \
   --checkpoint-max-age-sec "${RADAR_VALIDATION_CHECKPOINT_MAX_AGE_SEC:-21600}" \
+  --checkpoint-resume-grace-sec "${RADAR_VALIDATION_CHECKPOINT_RESUME_GRACE_SEC:-0}" \
+  --checkpoint-compatible-identity-sha256 "${RADAR_VALIDATION_COMPATIBLE_IDENTITY_SHA256:-}" \
+  --checkpoint-compatible-sha256 "${RADAR_VALIDATION_COMPATIBLE_CHECKPOINT_SHA256:-}" \
   --limit "$VERIFY_LIMIT" --workers "${RADAR_VERIFY_WORKERS:-24}" \
   --timeout-sec "${RADAR_VERIFY_TIMEOUT:-8}" \
   --browser-fallback \

@@ -544,6 +544,108 @@ class CheckpointTests(unittest.TestCase):
             self.assertFalse(resume_path.exists())
             self.assertEqual(len(list(root.glob("resume.json.*.quarantine"))), 1)
 
+    def test_expired_browser_checkpoint_accepts_only_bounded_explicit_grace(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        expired = (datetime.now(UTC) - timedelta(hours=7)).replace(
+            microsecond=0
+        ).isoformat().replace("+00:00", "Z")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "browser.json"
+            store = validator.CheckpointStore(
+                path,
+                identity=self.identity,
+                normalized=self.normalized,
+                resume_grace_sec=2 * 60 * 60,
+            )
+            store.save(
+                stage="browser",
+                run_started_at=expired,
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=validator.select_browser_target_ranks(direct, 2),
+                browser_by_rank={},
+            )
+            resumed = store.load()
+            self.assertEqual(resumed["run_started_at"], expired)
+
+            direct_path = root / "direct.json"
+            direct_store = validator.CheckpointStore(
+                direct_path,
+                identity=self.identity,
+                normalized=self.normalized,
+                resume_grace_sec=2 * 60 * 60,
+            )
+            direct_store.save(
+                stage="direct",
+                run_started_at=expired,
+                direct_by_rank={1: direct[0]},
+                browser_target_ranks=[],
+                browser_by_rank={},
+            )
+            with self.assertRaises(validator.CheckpointError):
+                direct_store.load()
+
+        with self.assertRaises(ValueError):
+            validator.CheckpointStore(
+                Path("unused.json"),
+                identity=self.identity,
+                normalized=self.normalized,
+                resume_grace_sec=validator.MAX_CHECKPOINT_RESUME_GRACE_SEC + 1,
+            )
+
+    def test_compatibility_pins_allow_only_validator_source_hash_migration(self):
+        direct = [self.classification(offer) for offer in self.normalized]
+        old_identity = json.loads(json.dumps(self.identity))
+        old_identity["validator"] = {"source_sha256": "c" * 64}
+        current_identity = json.loads(json.dumps(old_identity))
+        current_identity["validator"]["source_sha256"] = "d" * 64
+        old_identity_sha = validator.sha256_bytes(
+            validator.canonical_json_bytes(old_identity)
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "checkpoint.json"
+            old_store = validator.CheckpointStore(
+                path, identity=old_identity, normalized=self.normalized
+            )
+            checkpoint_sha = old_store.save(
+                stage="browser",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=validator.select_browser_target_ranks(direct, 2),
+                browser_by_rank={},
+            )
+            rescue_store = validator.CheckpointStore(
+                path,
+                identity=current_identity,
+                normalized=self.normalized,
+                compatible_identity_sha256=old_identity_sha,
+                compatible_checkpoint_sha256=checkpoint_sha,
+            )
+            self.assertEqual(rescue_store.load()["stage"], "browser")
+
+            wrong_path = Path(directory) / "wrong.json"
+            wrong_store = validator.CheckpointStore(
+                wrong_path,
+                identity=old_identity,
+                normalized=self.normalized,
+            )
+            wrong_store.save(
+                stage="browser",
+                run_started_at=validator.utc_now(),
+                direct_by_rank={item["board_rank"]: item for item in direct},
+                browser_target_ranks=validator.select_browser_target_ranks(direct, 2),
+                browser_by_rank={},
+            )
+            rejected = validator.CheckpointStore(
+                wrong_path,
+                identity=current_identity,
+                normalized=self.normalized,
+                compatible_identity_sha256=old_identity_sha,
+                compatible_checkpoint_sha256="e" * 64,
+            )
+            with self.assertRaises(validator.CheckpointError):
+                rejected.load()
+
     def test_completed_removal_rejects_stale_digest_and_wrong_identity(self):
         direct = [self.classification(offer) for offer in self.normalized]
         targets = validator.select_browser_target_ranks(direct, 2)

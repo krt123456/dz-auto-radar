@@ -46,6 +46,7 @@ CHECKPOINT_CONTRACT = "sonardeals-top400-validation-checkpoint-v1"
 DEFAULT_CHECKPOINT_BATCH_SIZE = 100
 DEFAULT_CHECKPOINT_INTERVAL_SEC = 30.0
 DEFAULT_CHECKPOINT_MAX_AGE_SEC = 6 * 60 * 60
+MAX_CHECKPOINT_RESUME_GRACE_SEC = 2 * 60 * 60
 
 HEADERS = {
     "User-Agent": (
@@ -809,7 +810,25 @@ class CheckpointStore:
         identity: dict[str, Any],
         normalized: list[dict[str, Any]],
         source_diagnostics: dict[str, Any] | None = None,
+        resume_grace_sec: int = 0,
+        compatible_identity_sha256: str | None = None,
+        compatible_checkpoint_sha256: str | None = None,
     ) -> None:
+        if (
+            type(resume_grace_sec) is not int
+            or resume_grace_sec < 0
+            or resume_grace_sec > MAX_CHECKPOINT_RESUME_GRACE_SEC
+        ):
+            raise ValueError("checkpoint resume grace is invalid")
+        compatibility_values = (
+            compatible_identity_sha256,
+            compatible_checkpoint_sha256,
+        )
+        if any(compatibility_values) and not all(
+            isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+            for value in compatibility_values
+        ):
+            raise ValueError("checkpoint compatibility pins are invalid")
         self.path = path
         self.lock_path = path.with_name(f"{path.name}.lock")
         self.identity = identity
@@ -818,6 +837,44 @@ class CheckpointStore:
             int(item["board_rank"]): item for item in normalized
         }
         self.source_diagnostics = source_diagnostics or {}
+        self.resume_grace_sec = resume_grace_sec
+        self.compatible_identity_sha256 = compatible_identity_sha256
+        self.compatible_checkpoint_sha256 = compatible_checkpoint_sha256
+
+    def _identity_is_compatible(
+        self,
+        supplied_identity: Any,
+        *,
+        supplied_identity_sha256: Any,
+        supplied_checkpoint_sha256: str,
+    ) -> bool:
+        if (
+            self.compatible_identity_sha256 is None
+            or self.compatible_checkpoint_sha256 is None
+            or supplied_identity_sha256 != self.compatible_identity_sha256
+            or supplied_checkpoint_sha256 != self.compatible_checkpoint_sha256
+            or not isinstance(supplied_identity, dict)
+            or sha256_bytes(canonical_json_bytes(supplied_identity))
+            != supplied_identity_sha256
+        ):
+            return False
+        expected = json.loads(json.dumps(self.identity))
+        supplied_validator = supplied_identity.get("validator")
+        expected_validator = expected.get("validator")
+        if not isinstance(supplied_validator, dict) or not isinstance(
+            expected_validator, dict
+        ):
+            return False
+        supplied_source_sha = supplied_validator.get("source_sha256")
+        current_source_sha = expected_validator.get("source_sha256")
+        if (
+            not isinstance(supplied_source_sha, str)
+            or re.fullmatch(r"[0-9a-f]{64}", supplied_source_sha) is None
+            or supplied_source_sha == current_source_sha
+        ):
+            return False
+        expected_validator["source_sha256"] = supplied_source_sha
+        return supplied_identity == expected
 
     @contextmanager
     def _exclusive_lock(self) -> Iterator[None]:
@@ -904,12 +961,28 @@ class CheckpointStore:
             raise CheckpointError("checkpoint schema mismatch")
         if payload.get("contract") != CHECKPOINT_CONTRACT:
             raise CheckpointError("checkpoint contract mismatch")
-        if payload.get("identity_sha256") != self.identity_sha256:
+        exact_identity = (
+            payload.get("identity_sha256") == self.identity_sha256
+            and payload.get("identity") == self.identity
+        )
+        compatible_identity = self._identity_is_compatible(
+            payload.get("identity"),
+            supplied_identity_sha256=payload.get("identity_sha256"),
+            supplied_checkpoint_sha256=supplied_checksum,
+        )
+        if not exact_identity and not compatible_identity:
             raise CheckpointError("checkpoint identity mismatch")
-        if payload.get("identity") != self.identity:
-            raise CheckpointError("checkpoint identity mismatch")
+        if compatible_identity:
+            print(
+                "CHECKPOINT_IDENTITY_COMPATIBILITY_ACCEPTED "
+                f"supplied_identity_sha256={payload['identity_sha256']} "
+                f"current_identity_sha256={self.identity_sha256} "
+                f"checkpoint_sha256={supplied_checksum}",
+                file=sys.stderr,
+            )
         if payload.get("stage") not in {"direct", "browser", "complete"}:
             raise CheckpointError("checkpoint stage is invalid")
+        stage = payload["stage"]
         if not isinstance(payload.get("run_started_at"), str) or not payload["run_started_at"]:
             raise CheckpointError("checkpoint run timestamp is invalid")
         try:
@@ -922,8 +995,24 @@ class CheckpointStore:
             raise CheckpointError("checkpoint run timestamp is invalid")
         age = (datetime.now(UTC) - started_at).total_seconds()
         max_age = int(self.identity["config"]["checkpoint_max_age_sec"])
-        if age < -300 or (enforce_resume_expiry and age > max_age):
+        grace_applies = (
+            enforce_resume_expiry
+            and stage == "browser"
+            and age > max_age
+            and age <= max_age + self.resume_grace_sec
+        )
+        if age < -300 or (
+            enforce_resume_expiry and age > max_age and not grace_applies
+        ):
             raise CheckpointError("checkpoint has expired or is future-dated")
+        if grace_applies:
+            print(
+                "CHECKPOINT_RESUME_GRACE_ACCEPTED "
+                f"age_sec={int(age)} base_max_age_sec={max_age} "
+                f"grace_sec={self.resume_grace_sec} "
+                f"checkpoint_sha256={supplied_checksum}",
+                file=sys.stderr,
+            )
 
         direct_by_rank: dict[int, dict[str, Any]] = {}
         previous_rank = 0
@@ -963,7 +1052,6 @@ class CheckpointStore:
             browser_by_rank[rank] = result
             previous_rank = rank
 
-        stage = payload["stage"]
         all_ranks = set(self.normalized_by_rank)
         if stage == "direct":
             if targets or browser_by_rank:
@@ -1312,6 +1400,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-max-age-sec", type=int, default=DEFAULT_CHECKPOINT_MAX_AGE_SEC
     )
+    parser.add_argument(
+        "--checkpoint-resume-grace-sec",
+        type=int,
+        default=0,
+        help=(
+            "allow one in-progress browser checkpoint to resume for this many "
+            "seconds beyond its identity-bound age; capped at two hours"
+        ),
+    )
+    parser.add_argument("--checkpoint-compatible-identity-sha256", default="")
+    parser.add_argument("--checkpoint-compatible-sha256", default="")
     return parser.parse_args()
 
 
@@ -1326,9 +1425,20 @@ def main() -> int:
         or args.checkpoint_batch_size < 1
         or args.checkpoint_interval_sec <= 0
         or args.checkpoint_max_age_sec < 1
+        or args.checkpoint_resume_grace_sec < 0
+        or args.checkpoint_resume_grace_sec > MAX_CHECKPOINT_RESUME_GRACE_SEC
         or args.verified_target < 1
     ):
         raise RuntimeError("browser/checkpoint limits are invalid")
+    compatibility_values = (
+        args.checkpoint_compatible_identity_sha256,
+        args.checkpoint_compatible_sha256,
+    )
+    if any(compatibility_values) and not all(
+        re.fullmatch(r"[0-9a-f]{64}", value or "")
+        for value in compatibility_values
+    ):
+        raise RuntimeError("checkpoint compatibility pins are invalid")
     args.checkpoint = args.checkpoint or args.output_json.with_name(
         f"{args.output_json.name}.checkpoint.json"
     )
@@ -1379,6 +1489,13 @@ def main() -> int:
                 sha256_bytes(id_index_raw) if id_index_raw is not None else None
             ),
         },
+        resume_grace_sec=args.checkpoint_resume_grace_sec,
+        compatible_identity_sha256=(
+            args.checkpoint_compatible_identity_sha256 or None
+        ),
+        compatible_checkpoint_sha256=(
+            args.checkpoint_compatible_sha256 or None
+        ),
     )
     if args.discard_checkpoint and args.checkpoint.exists():
         store.quarantine("explicitly-discarded")

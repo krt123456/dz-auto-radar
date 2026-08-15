@@ -363,7 +363,7 @@ const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
 let DATA=[],VIEW=[],page=1,VERIFICATION_RECENT=false,VERIFICATION_AT_MS=null,ACTIVE_PIN="",ORIGINAL_RANK=new Map();
 let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
-const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=6*60*60*1000;
+const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=8*60*60*1000;
 let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
 const DATA_MAX_AGE_MS=6*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
