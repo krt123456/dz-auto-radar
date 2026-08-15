@@ -185,6 +185,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     </div>
     <div class="stats" id="stats" aria-label="ملخص بيانات اللوحة"></div>
     <div class="freshness-alert hidden" id="freshnessAlert" role="alert"></div>
+    <div class="freshness-alert hidden" id="coverageTruth" role="status"></div>
     <div class="fx-note" id="fxnote" role="status" aria-live="polite">جاري التحقق من سعر عرض الدينار…</div>
   </header>
 
@@ -205,7 +206,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="30000-999999">فوق 30,000 €</option>
       </select>
       <select class="f" id="fs" aria-label="ترتيب النتائج" aria-describedby="sortHelp">
-        <option value="ranked">✨ أفضل قيمة مرصودة</option>
+        <option value="ranked">✨ أفضل قيمة مثبتة</option>
         <option value="price">💶 الأقل سعراً باليورو</option>
         <option value="saving">💰 أكبر فرق مرصود باليورو</option>
         <option value="recent">🕒 الأحدث رصدًا</option>
@@ -224,7 +225,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <input type="checkbox" id="funseen"> لم أفتحها فقط
       </label>
     </div>
-    <div class="sort-help" id="sortHelp">أفضل قيمة: مقارنة سعر الإعلان بعروض مشابهة؛ لا تعني ربحًا مضمونًا.</div>
+    <div class="sort-help" id="sortHelp">أفضل قيمة مثبتة: مقارنة بين الروابط التي تم التحقق منها في هذا الجيل؛ لا تعني ربحًا مضمونًا.</div>
     <div class="count" id="count" role="status" aria-live="polite"></div>
   </section>
 
@@ -235,7 +236,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     <span id="pageinfo"></span>
     <button id="next">التالي ›</button>
   </div>
-  <footer id="coverageNote">مقارنة سعر الإعلان بعروض أوروبية مشابهة مرصودة حديثًا؛ لا تمثل تكلفة اقتناء نهائية أو عائدًا متوقعًا.</footer>
+  <footer id="coverageNote">مقارنة سعر الإعلان بعروض أوروبية مشابهة مرصودة حديثًا؛ الترتيب يخص الروابط المثبتة فقط ولا يمثل تكلفة اقتناء نهائية أو عائدًا متوقعًا.</footer>
 </div>
 
 <script>
@@ -432,7 +433,7 @@ const HISTORY_LIMIT=50000;
 const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
 const SORT_HELP={
-  ranked:"أفضل قيمة: مقارنة سعر الإعلان بعروض مشابهة؛ لا تعني ربحًا مضمونًا.",
+  ranked:"أفضل قيمة مثبتة: مقارنة بين الروابط التي تم التحقق منها في هذا الجيل؛ لا تعني ربحًا مضمونًا.",
   price:"الأقل سعرًا: يرتب سعر الإعلان المرصود باليورو من الأقل إلى الأعلى.",
   saving:"أكبر فرق مرصود: الفرق بين سعر الإعلان والسعر المنخفض لعروض مشابهة؛ ليس ربحًا مضمونًا.",
   recent:"الأحدث: يعرض الإعلانات ذات وقت الرصد الأحدث أولًا.",
@@ -606,16 +607,28 @@ function boot(payload){
   const displayed=finiteCount(payload.displayed_source_count)||new Set(DATA.map(o=>o.s)).size;
   const displayedCountries=finiteCount(payload.displayed_country_count)||new Set(DATA.map(o=>o.c)).size;
   const universe=finiteCount(payload.universe_unique_offers);
-  const qualifiedUniverse=finiteCount(payload.qualified_universe_offers||payload.ranked_candidate_rows);
+  const rankedCandidates=finiteCount(payload.ranked_candidate_rows);
+  const publicationCandidates=finiteCount(payload.qualified_universe_offers);
   const eligibleRows=finiteCount(payload.eligible_observed_rows);
-  const verified=finiteCount(payload.verified_live_count||payload.live_verified_offer_count);
+  const validationCounts=payload.validation&&payload.validation.counts&&typeof payload.validation.counts==="object"
+    ?payload.validation.counts:{};
+  const verified=finiteCount(payload.verified_live_count||payload.live_verified_offer_count||validationCounts.verified||DATA.length);
+  const dead=finiteCount(validationCounts.dead);
+  const unknown=finiteCount(validationCounts.unknown);
+  const coverageTruth=$("coverageTruth");
+  coverageTruth.classList.toggle("hidden",unknown===0);
+  coverageTruth.textContent=unknown===0?"":
+    `حد التغطية: توجد ${nf.format(unknown)} روابط مرتبة غير محسومة في هذا الجيل. أخفيناها إلى أن تثبت حياتها؛ لذلك «أفضل قيمة» تعني الأفضل بين الروابط المثبتة، وليست إثباتًا للأفضل من كامل المخزون.`;
   $("stats").innerHTML=
     `<div class="stat">مقارنات معروضة<b>${nf.format(DATA.length)}</b></div>`+
     `<div class="stat">جديدة لم ترها<b id="newStat">0</b></div>`+
     `<div class="stat">فتحتها سابقًا<b id="openedStat">0</b></div>`+
     (universe?`<div class="stat">مخزون فريد مفحوص<b>${nf.format(universe)}</b></div>`:"")+
     (eligibleRows?`<div class="stat">سجلات حديثة مؤهلة<b>${nf.format(eligibleRows)}</b></div>`:"")+
-    (qualifiedUniverse?`<div class="stat">مرشحو المقارنة<b>${nf.format(qualifiedUniverse)}</b></div>`:"")+
+    (rankedCandidates?`<div class="stat">مرشحون مرتبون بالقيمة المرصودة<b>${nf.format(rankedCandidates)}</b></div>`:"")+
+    (publicationCandidates&&publicationCandidates!==verified?`<div class="stat">مرشحو النشر<b>${nf.format(publicationCandidates)}</b></div>`:"")+
+    (dead?`<div class="stat">روابط ميتة مستبعدة<b>${nf.format(dead)}</b></div>`:"")+
+    (unknown?`<div class="stat">روابط غير محسومة مخفية<b>${nf.format(unknown)}</b></div>`:"")+
     `<div class="stat">مصادر الأدلة<b>${nf.format(connected)}</b></div>`+
     `<div class="stat">دول الأدلة<b>${nf.format(connectedCountries)}</b></div>`+
     `<div class="stat">مصادر العروض المعروضة<b>${nf.format(displayed)}</b></div>`+
@@ -653,6 +666,7 @@ function boot(payload){
     `الأدلة تغطي ${nf.format(connected)} مصدرًا و${nf.format(connectedCountries)} دولة. `+
     (VERIFICATION_RECENT?`فحص الروابط حديث (${fmtTime(VERIFICATION_AT_MS)}). `:
       `حالة التحقق مرتبطة بجيل البيانات؛ آخر فحص ${VERIFICATION_AT_MS===null?"غير متاح":fmtTime(VERIFICATION_AT_MS)}. `)+
+    `العروض الميتة وغير المحسومة لا تُعرض. النتيجة هي الأفضل بين الروابط المثبتة في هذا الجيل، وليست إثباتًا للأفضل من كل السجلات. `+
     `المقارنة لسعر الإعلان فقط، وليست تكلفة اقتناء نهائية أو عائدًا متوقعًا.`;
   apply();
   saveNavigationState();

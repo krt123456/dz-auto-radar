@@ -130,9 +130,16 @@ const payload = {
   unsupported_economics_published: 0,
   data_generated_at_utc: "2026-08-14T14:00:00Z",
   board_built_at_utc: "2026-08-14T14:00:00Z",
-  validation: { generated_at: "2026-08-14T14:00:00Z" },
+  validation: {
+    generated_at: "2026-08-14T14:00:00Z",
+    counts: { verified: offers.length, dead: 3, unknown: 3 },
+  },
   connected_source_count: 3,
   connected_country_count: 2,
+  universe_unique_offers: 100,
+  eligible_observed_rows: 20,
+  ranked_candidate_rows: 10,
+  qualified_universe_offers: offers.length,
   verified_live_count: offers.length,
   offers,
 };
@@ -179,6 +186,27 @@ try {
   const sandbox = makeSandbox({ local });
   sandbox.__payload = payload;
   evaluate(sandbox, "boot(__payload)");
+
+  check(
+    sandbox.document.getElementById("stats").innerHTML.includes("مرشحون مرتبون بالقيمة المرصودة"),
+    "stats must distinguish the ranked candidate pool from published offers",
+  );
+  check(
+    sandbox.document.getElementById("stats").innerHTML.includes("روابط غير محسومة مخفية"),
+    "stats must disclose unresolved hidden links",
+  );
+  check(
+    sandbox.document.getElementById("coverageTruth").textContent.includes("ليست إثباتًا للأفضل من كامل المخزون"),
+    "coverage alert must constrain the best-value claim",
+  );
+  check(
+    sandbox.document.getElementById("coverageNote").textContent.includes("الأفضل بين الروابط المثبتة"),
+    "coverage note must constrain ranking to verified links",
+  );
+  check(
+    sandbox.document.getElementById("sortHelp").textContent.includes("الروابط التي تم التحقق منها"),
+    "default sort explanation must constrain ranking to verified links",
+  );
 
   expectOrder(viewIds(sandbox, "ranked"), ["rank-z", "tie-b", "tie-a", "saving-top"], "ranked order");
   expectOrder(viewIds(sandbox, "price"), ["tie-b", "tie-a", "rank-z", "saving-top"], "price order with payload-rank tie");
