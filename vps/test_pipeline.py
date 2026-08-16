@@ -805,6 +805,7 @@ process.stdout.write("DASHBOARD_CONTRACT_PASS");
         self.assertIn('${RADAR_RANKED_POOL_LIMIT:-60000}', refresh)
         self.assertIn('${RADAR_VERIFIED_TARGET:-10000}', refresh)
         self.assertIn('${RADAR_BROWSER_VERIFY_LIMIT:-$RANKED_POOL_LIMIT}', refresh)
+        self.assertIn('${RADAR_BROWSER_SESSION_SIZE:-1000}', refresh)
         self.assertIn('--verified-target "$VERIFIED_TARGET"', refresh)
         self.assertIn('${RADAR_VALIDATION_CHECKPOINT_BATCH_SIZE:-1000}', refresh)
         self.assertIn('${RADAR_VALIDATION_CHECKPOINT_INTERVAL_SEC:-120}', refresh)

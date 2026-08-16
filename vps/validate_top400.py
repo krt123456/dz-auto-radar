@@ -48,6 +48,7 @@ DEFAULT_CHECKPOINT_BATCH_SIZE = 100
 DEFAULT_CHECKPOINT_INTERVAL_SEC = 30.0
 DEFAULT_CHECKPOINT_MAX_AGE_SEC = 6 * 60 * 60
 MAX_CHECKPOINT_RESUME_GRACE_SEC = 2 * 60 * 60
+DEFAULT_BROWSER_SESSION_SIZE = 1_000
 
 HEADERS = {
     "User-Agent": (
@@ -455,6 +456,7 @@ async def _browser_verify_unknowns(
     limit: int,
     workers: int,
     timeout_sec: int,
+    session_size: int = DEFAULT_BROWSER_SESSION_SIZE,
     verified_target: int = 0,
     target_ranks: list[int] | None = None,
     completed_ranks: set[int] | None = None,
@@ -493,67 +495,94 @@ async def _browser_verify_unknowns(
     if not executable:
         raise RuntimeError("no Chrome/Chromium executable is available for browser fallback")
 
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(
-            headless=False,
-            executable_path=executable,
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
-        )
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            locale="en-US",
-        )
-        async def verify_one(index: int, offer: dict[str, Any]) -> None:
-            page = await context.new_page()
+    # Patchright's Node driver retains protocol bookkeeping even after individual
+    # pages close. A single driver processing tens of thousands of pages therefore
+    # grows until V8's default heap limit is exhausted. Re-entering
+    # async_playwright() is intentional: closing only the browser/context does not
+    # recycle the driver process that owns that heap.
+    if session_size < 1:
+        raise ValueError("browser session size must be at least 1")
+    effective_session_size = session_size
+    stop_requested = False
+    for session_offset in range(0, len(targets), effective_session_size):
+        session_targets = targets[
+            session_offset : session_offset + effective_session_size
+        ]
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(
+                headless=False,
+                executable_path=executable,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
             try:
-                response = await page.goto(
-                    offer["url"],
-                    wait_until="domcontentloaded",
-                    timeout=max(1, timeout_sec) * 1000,
+                context = await browser.new_context(
+                    viewport={"width": 1280, "height": 900},
+                    locale="en-US",
                 )
-                await page.wait_for_timeout(750)
                 try:
-                    body = await page.locator("body").inner_text(timeout=5_000)
-                except Exception:
-                    body = ""
-                classification = classify_browser_page(
-                    offer,
-                    http_status=response.status if response else None,
-                    final_url=page.url,
-                    page_title=await page.title(),
-                    body_text=body[:MAX_BODY_BYTES],
-                )
-            except Exception as exc:
-                classification = {
-                    "status": "unknown",
-                    "http_status": None,
-                    "final_url": "",
-                    "reason": f"browser_error:{type(exc).__name__}",
-                }
-            finally:
-                await page.close()
-            results[index] = {
-                **offer,
-                "direct_reason": offer.get("reason", ""),
-                **classification,
-            }
-            attempted_ranks.add(int(offer["board_rank"]))
-            if on_result is not None:
-                on_result(results[index])
+                    async def verify_one(index: int, offer: dict[str, Any]) -> None:
+                        page = await context.new_page()
+                        try:
+                            response = await page.goto(
+                                offer["url"],
+                                wait_until="domcontentloaded",
+                                timeout=max(1, timeout_sec) * 1000,
+                            )
+                            await page.wait_for_timeout(750)
+                            try:
+                                body = await page.locator("body").inner_text(
+                                    timeout=5_000
+                                )
+                            except Exception:
+                                body = ""
+                            classification = classify_browser_page(
+                                offer,
+                                http_status=response.status if response else None,
+                                final_url=page.url,
+                                page_title=await page.title(),
+                                body_text=body[:MAX_BODY_BYTES],
+                            )
+                        except Exception as exc:
+                            classification = {
+                                "status": "unknown",
+                                "http_status": None,
+                                "final_url": "",
+                                "reason": f"browser_error:{type(exc).__name__}",
+                            }
+                        finally:
+                            # A close failure can signal a dead driver. Let it
+                            # escape so untouched ranks stay out of the checkpoint
+                            # instead of being misclassified as browser errors.
+                            await page.close()
+                        results[index] = {
+                            **offer,
+                            "direct_reason": offer.get("reason", ""),
+                            **classification,
+                        }
+                        attempted_ranks.add(int(offer["board_rank"]))
+                        if on_result is not None:
+                            on_result(results[index])
 
-        batch_size = max(1, workers)
-        for offset in range(0, len(targets), batch_size):
-            batch = targets[offset : offset + batch_size]
-            await asyncio.gather(*(verify_one(index, offer) for index, offer in batch))
-            if target_finalization_ready(
-                results=results,
-                verified_target=verified_target,
-                browser_target_ranks=effective_target_ranks,
-                browser_attempted_ranks=attempted_ranks,
-            ):
-                break
-        await context.close()
-        await browser.close()
+                    batch_size = max(1, workers)
+                    for offset in range(0, len(session_targets), batch_size):
+                        batch = session_targets[offset : offset + batch_size]
+                        await asyncio.gather(
+                            *(verify_one(index, offer) for index, offer in batch)
+                        )
+                        if target_finalization_ready(
+                            results=results,
+                            verified_target=verified_target,
+                            browser_target_ranks=effective_target_ranks,
+                            browser_attempted_ranks=attempted_ranks,
+                        ):
+                            stop_requested = True
+                            break
+                finally:
+                    await context.close()
+            finally:
+                await browser.close()
+        if stop_requested:
+            break
     return results
 
 
@@ -563,6 +592,7 @@ def browser_verify_unknowns(
     limit: int,
     workers: int,
     timeout_sec: int,
+    session_size: int = DEFAULT_BROWSER_SESSION_SIZE,
     verified_target: int = 0,
     target_ranks: list[int] | None = None,
     completed_ranks: set[int] | None = None,
@@ -573,6 +603,7 @@ def browser_verify_unknowns(
             results,
             limit=limit,
             workers=workers,
+            session_size=session_size,
             timeout_sec=timeout_sec,
             verified_target=verified_target,
             target_ranks=target_ranks,
@@ -705,6 +736,9 @@ def build_checkpoint_identity(
             "browser_fallback": browser_enabled,
             "browser_limit": args.browser_limit,
             "browser_workers": args.browser_workers,
+            "browser_session_size": getattr(
+                args, "browser_session_size", DEFAULT_BROWSER_SESSION_SIZE
+            ),
             "browser_timeout_sec": args.browser_timeout_sec,
             "checkpoint_batch_size": args.checkpoint_batch_size,
             "checkpoint_interval_sec": args.checkpoint_interval_sec,
@@ -1394,6 +1428,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--browser-fallback", action="store_true")
     parser.add_argument("--browser-limit", type=int, default=2_000)
     parser.add_argument("--browser-workers", type=int, default=6)
+    parser.add_argument(
+        "--browser-session-size", type=int, default=DEFAULT_BROWSER_SESSION_SIZE
+    )
     parser.add_argument("--browser-timeout-sec", type=int, default=30)
     parser.add_argument("--verified-target", type=int, default=10_000)
     parser.add_argument("--checkpoint", "--checkpoint-json", type=Path)
@@ -1432,6 +1469,7 @@ def main() -> int:
     if (
         args.browser_limit < 0
         or args.browser_workers < 1
+        or args.browser_session_size < 1
         or args.browser_timeout_sec < 1
         or args.checkpoint_batch_size < 1
         or args.checkpoint_interval_sec <= 0
@@ -1580,6 +1618,7 @@ def main() -> int:
                 results,
                 limit=args.browser_limit,
                 workers=args.browser_workers,
+                session_size=args.browser_session_size,
                 timeout_sec=args.browser_timeout_sec,
                 verified_target=args.verified_target,
                 target_ranks=state["browser_target_ranks"],

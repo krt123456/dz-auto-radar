@@ -4,7 +4,7 @@ import threading
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import requests
 
@@ -357,6 +357,156 @@ class BrowserEligibilityTests(unittest.TestCase):
         self.assertEqual(validator.select_browser_target_ranks([item], 0), [])
 
 
+class FakePatchrightHarness:
+    def __init__(self, *, fail_page_close=False):
+        self.fail_page_close = fail_page_close
+        self.driver_enters = 0
+        self.driver_exits = 0
+        self.launches = 0
+        self.browser_closes = 0
+        self.context_closes = 0
+        self.page_closes = 0
+        self.context_page_counts = []
+
+    def async_playwright(self):
+        harness = self
+
+        class Manager:
+            async def __aenter__(self):
+                harness.driver_enters += 1
+
+                class Chromium:
+                    async def launch(self, **_kwargs):
+                        harness.launches += 1
+
+                        class Browser:
+                            async def new_context(self, **_context_kwargs):
+                                context_index = len(harness.context_page_counts)
+                                harness.context_page_counts.append(0)
+
+                                class Context:
+                                    async def new_page(self):
+                                        harness.context_page_counts[context_index] += 1
+
+                                        class Page:
+                                            url = ""
+
+                                            async def goto(self, url, **_goto_kwargs):
+                                                self.url = url
+                                                return type("Response", (), {"status": 200})()
+
+                                            async def wait_for_timeout(self, _timeout):
+                                                return None
+
+                                            def locator(self, _selector):
+                                                return self
+
+                                            async def inner_text(self, **_kwargs):
+                                                return "Toyota Corolla Hybrid vehicle details " * 20
+
+                                            async def title(self):
+                                                return "Toyota Corolla Hybrid"
+
+                                            async def close(self):
+                                                harness.page_closes += 1
+                                                if harness.fail_page_close:
+                                                    raise RuntimeError("driver disconnected on close")
+
+                                        return Page()
+
+                                    async def close(self):
+                                        harness.context_closes += 1
+
+                                return Context()
+
+                            async def close(self):
+                                harness.browser_closes += 1
+
+                        return Browser()
+
+                return type("Playwright", (), {"chromium": Chromium()})()
+
+            async def __aexit__(self, _exc_type, _exc, _traceback):
+                harness.driver_exits += 1
+
+        return Manager()
+
+
+class BrowserSessionRecycleTests(unittest.TestCase):
+    @staticmethod
+    def results(count):
+        return [
+            {
+                "board_rank": rank,
+                "status": "unknown",
+                "url": f"https://cars.example/listing/{rank}",
+                "final_url": f"https://cars.example/listing/{rank}",
+                "reason": "http_429",
+                "title": "Toyota Corolla Hybrid",
+            }
+            for rank in range(1, count + 1)
+        ]
+
+    def run_browser(self, harness, results, **overrides):
+        completed = []
+        kwargs = {
+            "limit": 0,
+            "workers": 2,
+            "timeout_sec": 1,
+            "session_size": 2,
+            "verified_target": 0,
+            "target_ranks": [item["board_rank"] for item in results],
+            "on_result": lambda item: completed.append(item["board_rank"]),
+        }
+        kwargs.update(overrides)
+        with (
+            patch.object(validator, "browser_executable", return_value="/fake/chrome"),
+            patch("patchright.async_api.async_playwright", harness.async_playwright),
+        ):
+            output = validator.browser_verify_unknowns(results, **kwargs)
+        return output, completed
+
+    def test_recycles_entire_driver_at_bounded_intervals(self):
+        harness = FakePatchrightHarness()
+        output, completed = self.run_browser(harness, self.results(5))
+
+        self.assertEqual(harness.driver_enters, 3)
+        self.assertEqual(harness.driver_exits, 3)
+        self.assertEqual(harness.launches, 3)
+        self.assertEqual(harness.context_page_counts, [2, 2, 1])
+        self.assertEqual(harness.context_closes, 3)
+        self.assertEqual(harness.browser_closes, 3)
+        self.assertEqual(harness.page_closes, 5)
+        self.assertEqual(completed, [1, 2, 3, 4, 5])
+        self.assertEqual([item["board_rank"] for item in output], [1, 2, 3, 4, 5])
+        self.assertTrue(all(item["status"] == "verified" for item in output))
+
+    def test_target_finalization_does_not_open_another_driver(self):
+        harness = FakePatchrightHarness()
+        output, completed = self.run_browser(
+            harness, self.results(5), verified_target=1
+        )
+
+        self.assertEqual(harness.driver_enters, 1)
+        self.assertEqual(harness.driver_exits, 1)
+        self.assertEqual(harness.context_page_counts, [2])
+        self.assertEqual(completed, [1, 2])
+        self.assertEqual([item["status"] for item in output[:2]], ["verified", "verified"])
+        self.assertTrue(all(item["status"] == "unknown" for item in output[2:]))
+
+    def test_page_close_failure_escapes_and_tears_down_driver(self):
+        harness = FakePatchrightHarness(fail_page_close=True)
+        results = self.results(1)
+        with self.assertRaisesRegex(RuntimeError, "driver disconnected"):
+            self.run_browser(harness, results, workers=1, session_size=1)
+
+        self.assertEqual(harness.driver_enters, 1)
+        self.assertEqual(harness.driver_exits, 1)
+        self.assertEqual(harness.context_closes, 1)
+        self.assertEqual(harness.browser_closes, 1)
+        self.assertNotIn("direct_reason", results[0])
+
+
 class CheckpointTests(unittest.TestCase):
     def setUp(self):
         self.offers = [
@@ -481,6 +631,7 @@ class CheckpointTests(unittest.TestCase):
             browser_fallback=False,
             browser_limit=0,
             browser_workers=1,
+            browser_session_size=1_000,
             browser_timeout_sec=1,
             checkpoint_batch_size=2,
             checkpoint_interval_sec=1.0,
@@ -495,6 +646,20 @@ class CheckpointTests(unittest.TestCase):
         )
         self.assertEqual(identity["input"]["file_sha256"], "a" * 64)
         self.assertEqual(identity["input"]["id_index_file_sha256"], "b" * 64)
+        self.assertEqual(identity["config"]["browser_session_size"], 1_000)
+        session_args = validator.argparse.Namespace(**vars(args))
+        session_args.browser_session_size = 500
+        session_changed = validator.build_checkpoint_identity(
+            args=session_args,
+            normalized=self.normalized,
+            input_updated_at="2026-08-13T08:00:00Z",
+            input_file_sha256="a" * 64,
+            id_index_file_sha256="b" * 64,
+        )
+        self.assertNotEqual(
+            validator.sha256_bytes(validator.canonical_json_bytes(identity)),
+            validator.sha256_bytes(validator.canonical_json_bytes(session_changed)),
+        )
         changed = validator.build_checkpoint_identity(
             args=args,
             normalized=self.normalized,

@@ -184,6 +184,7 @@ xvfb-run -a python3 "$ROOT/validate_top400.py" \
   --browser-fallback \
   --browser-limit "${RADAR_BROWSER_VERIFY_LIMIT:-$RANKED_POOL_LIMIT}" \
   --browser-workers "${RADAR_BROWSER_VERIFY_WORKERS:-8}" \
+  --browser-session-size "${RADAR_BROWSER_SESSION_SIZE:-1000}" \
   --browser-timeout-sec "${RADAR_BROWSER_VERIFY_TIMEOUT:-30}"
 python3 "$VALIDATION_SEALER" \
   --board "$ROOT/mobile_site_local/board.json" \
