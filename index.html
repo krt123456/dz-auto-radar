@@ -491,12 +491,31 @@ function normalizeSearchText(value){
     .toLowerCase();
 }
 
+const SEARCH_ALIASES={
+  "مرسيدس":"mercedes","مرسداس":"mercedes","مرسيدس بنز":"mercedes benz",
+  "بي ام دبليو":"bmw","بي ام":"bmw",
+  "فولكس فاجن":"volkswagen","فولكسفاجن":"volkswagen",
+  "رونو":"renault","رينو":"renault","تويوتا":"toyota",
+  "هيونداي":"hyundai","هونداي":"hyundai","كيا":"kia",
+  "فورد":"ford","نيسان":"nissan","بيجو":"peugeot","بيجيو":"peugeot",
+  "سيات":"seat","فيات":"fiat","أودي":"audi","اودي":"audi",
+  "سكودا":"skoda","سكوادا":"skoda","مازدا":"mazda","داسيا":"dacia","داسية":"dacia",
+  "جيب":"jeep","ميتسوبيشي":"mitsubishi","سوزوكي":"suzuki","هوندا":"honda",
+  "فولفو":"volvo","لاند روفر":"land rover","لاندروف":"land rover",
+  "رنج روفر":"range rover","رانج روفر":"range rover","أوبل":"opel","اوبل":"opel",
+  "تسلا":"tesla","ألفا روميو":"alfa romeo","الفا روميو":"alfa romeo"
+};
 function matchesSearch(offer,tokens){
   if(!tokens.length)return true;
   const vehicle=normalizeSearchText([offer.t,offer.m].join(" "));
   const vehicleTokens=vehicle.split(" ");
   const country=normalizeSearchText([CN[offer.c]||"",COUNTRY_SEARCH_ALIASES[offer.c]||""].join(" "));
-  return tokens.every(token=>token.length<=2?vehicleTokens.includes(token):vehicle.includes(token)||country.includes(token));
+  const query=normalizeSearchText(tokens.join(" "));
+  const queryAlias=SEARCH_ALIASES[query];
+  const check=w=>w.length<=2?vehicleTokens.includes(w):vehicle.includes(w)||country.includes(w);
+  if(queryAlias)return queryAlias.split(" ").every(check);
+  const expanded=tokens.flatMap(t=>{const a=SEARCH_ALIASES[t];return a?a.split(" "):[t];});
+  return expanded.every(check);
 }
 
 function readIdSet(key){
