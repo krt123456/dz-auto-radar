@@ -11,6 +11,7 @@ AUDITOR="${RADAR_AUDITOR:-/opt/sonardeals-radar/audit_best_selection.py}"
 LIVE_CONVERGENCE="${RADAR_LIVE_CONVERGENCE:-/opt/sonardeals-radar/audit_live_convergence.py}"
 RANKER="${RADAR_RANKER:-/opt/sonardeals-radar/build_observed_value_board.py}"
 VALIDATION_SEALER="${RADAR_VALIDATION_SEALER:-/opt/sonardeals-radar/seal_validation_report.py}"
+LANE_BUILDER="${RADAR_LANE_BUILDER:-/opt/sonardeals-radar/build_auction_board.py}"
 VALIDATION_CHECKPOINT="$STATE/runtime/top400_validation.checkpoint.json"
 REFRESH_LOCK_FILE="${RADAR_REFRESH_LOCK_FILE:-/run/lock/sonardeals-radar-refresh.lock}"
 RANKED_POOL_LIMIT="${RADAR_RANKED_POOL_LIMIT:-60000}"
@@ -195,6 +196,14 @@ python3 "$RANKER" \
   --board-output "$ROOT/mobile_site_local/board.json" \
   --validation-report "$ROOT/top400_validation.json" \
   --top-n "$RANKED_POOL_LIMIT"
+
+PHASE="auction_lane"
+notify running "$PHASE" "يبني مسار المزادات الموثق من الكون المقبول (fail-closed)"
+python3 "$LANE_BUILDER" \
+  --database "$ROOT/universe_offers.sqlite" \
+  --board "$ROOT/mobile_site_local/board.json" \
+  --generated-at "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["data_generated_at_utc"])' "$ROOT/mobile_site_local/board.json")" \
+  --output "$ROOT/mobile_site_local/auction_lane.json"
 
 PHASE="publication_audit"
 notify running "$PHASE" "يدقق مستقلًا أن المنشور هو الأفضل من كامل الكون المؤهل"
