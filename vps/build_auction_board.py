@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import re
 import sqlite3
@@ -30,6 +31,25 @@ from auction_registry import (
     source_has_explicit_auction_semantics,
     registry_digest_json,
 )
+from source_identity import source_key as canonical_source_key
+
+
+def canonical_sha256(value: Any) -> str:
+    """Byte-identical to the regular lane's public id hashing (Rule 4)."""
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def public_offer_id(source: Any, native_listing_id: Any) -> str:
+    """The same public ID the regular lane would mint for this listing."""
+    identity = [
+        canonical_source_key(source),
+        str(native_listing_id if native_listing_id is not None else "").strip(),
+    ]
+    return canonical_sha256(identity)
 
 END_SOON_HOURS = 24
 UTC = dt.timezone.utc
@@ -144,7 +164,11 @@ def auction_rows(
         seen_origins.add(origin)
 
         offer_id = f"{source}:{listing_id}"
-        if offer_id in regular_lane_ids or url in regular_lane_urls:
+        if (
+            offer_id in regular_lane_ids
+            or public_offer_id(source, listing_id) in regular_lane_ids
+            or url in regular_lane_urls
+        ):
             excluded("cross_lane_duplicate")
             continue
 
@@ -207,8 +231,11 @@ def build_lane(
     cutoff: str,
     regular_lane_ids: frozenset[str],
     regular_lane_urls: frozenset[str],
+    generated_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Read-only build: connect, read offers via registry lane, return payload."""
+    if generated_at is None:
+        generated_at = dt.datetime.now(UTC).isoformat()
 
     def connect(path: Path) -> sqlite3.Connection:
         con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=120)
@@ -228,11 +255,40 @@ def build_lane(
         "schema_version": 1,
         "lane": "auction",
         "registry_digest": registry_digest_json(),
-        "generated_at_utc": dt.datetime.now(UTC).isoformat(),
+        "generated_at_utc": generated_at,
         "lane_count": len(rows),
         "excluded_counts": counts,
         "rows": rows,
     }
+
+
+def load_regular_board(board_path: Optional[Path]) -> tuple[frozenset[str], frozenset[str]]:
+    """Extract the regular lane's public ids and urls from the accepted board.
+
+    Never invented: the board.json written by build_observed_value_board.py is
+    the authoritative accepted snapshot of the regular lane. Any auction row
+    whose id or url already lives there is a cross-lane duplicate.
+    """
+    if board_path is None or not board_path.is_file():
+        return frozenset(), frozenset()
+    try:
+        board = json.loads(board_path.read_text(encoding="utf-8"))
+        offers = board.get("offers")
+        if not isinstance(offers, list):
+            raise ValueError("board offers are not a list")
+    except (ValueError, OSError, TypeError) as exc:
+        raise RuntimeError(f"regular board is unusable for cross-lane dedupe: {exc}") from exc
+    ids: set[str] = set()
+    urls: set[str] = set()
+    for offer in offers:
+        if not isinstance(offer, dict):
+            continue
+        if isinstance(offer.get("id"), str) and offer["id"]:
+            ids.add(offer["id"])
+        url = str(offer.get("u") or "").strip()
+        if url:
+            urls.add(url)
+    return frozenset(ids), frozenset(urls)
 
 
 def normalize_lane_url(url: str) -> str:
@@ -249,6 +305,10 @@ def main() -> int:
                         default=Path("/home/krt/car_deal_finder/universe_offers.sqlite"))
     parser.add_argument("--cutoff", default=None,
                         help="last_seen_at cutoff (ISO); default 30 days ago")
+    parser.add_argument("--board", type=Path, default=None,
+                        help="regular lane board.json for cross-lane dedupe")
+    parser.add_argument("--generated-at", default=None,
+                        help="bind the lane to this board generation (ISO)")
     parser.add_argument("--output", type=Path, default=Path("/tmp/auction_lane.json"))
     parser.add_argument("--max-observation-age-days", type=int, default=30)
     args = parser.parse_args()
@@ -256,8 +316,11 @@ def main() -> int:
     cutoff = args.cutoff or (
         dt.datetime.now(UTC) - dt.timedelta(days=args.max_observation_age_days)
     ).isoformat()
-    payload = build_lane(args.database, cutoff=cutoff, regular_lane_ids=frozenset(),
-                         regular_lane_urls=frozenset())
+    regular_ids, regular_urls = load_regular_board(args.board)
+    payload = build_lane(args.database, cutoff=cutoff,
+                         regular_lane_ids=regular_ids,
+                         regular_lane_urls=regular_urls,
+                         generated_at=args.generated_at)
     args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
     print(json.dumps({
         "lane_count": payload["lane_count"],

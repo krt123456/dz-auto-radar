@@ -972,6 +972,47 @@ def audit_payload(
         "connected_country_count": connected_country_count,
         "connected_source_count": connected_source_count,
     }
+    auction_fields = audit_auction_lane(payload, data_generated_at, report["generation_id"])
+    report.update(auction_fields)
+    return report
+
+
+def audit_auction_lane(
+    payload: dict[str, Any],
+    data_generated_at: str,
+    generation_id: str,
+) -> dict[str, Any]:
+    """Verify the optional generation-bound auction lane in the payload.
+
+    Absent lane => all None (old payloads and lane-less publishes pass).
+    Present lane => every binding field must match the same-generation payload.
+    """
+    lane = payload.get("auction_lane")
+    if lane is None:
+        return {
+            "auction_lane_count": None,
+            "auction_lane_sha256": None,
+            "auction_lane_registry_digest": None,
+        }
+    if not isinstance(lane, dict):
+        raise AssertionError("auction lane in payload is not an object")
+    if lane.get("schema_version") != 1 or lane.get("lane") != "auction":
+        raise AssertionError("auction lane contract metadata is invalid")
+    if lane.get("bound_generation_id") != generation_id:
+        raise AssertionError("auction lane is not bound to this generation")
+    if lane.get("bound_data_generated_at_utc") != data_generated_at:
+        raise AssertionError("auction lane is not bound to this data snapshot")
+    rows = lane.get("rows")
+    if not isinstance(rows, list) or lane.get("lane_count") != len(rows):
+        raise AssertionError("auction lane count does not match its rows")
+    registry_digest = lane.get("registry_digest")
+    if not isinstance(registry_digest, str) or len(registry_digest) < 8:
+        raise AssertionError("auction lane registry digest is invalid")
+    return {
+        "auction_lane_count": lane.get("lane_count"),
+        "auction_lane_sha256": canonical_json_sha256(lane),
+        "auction_lane_registry_digest": registry_digest,
+    }
 
 
 def main() -> int:

@@ -273,6 +273,23 @@ def validate_payload_against_sealed_evidence(
     ):
         if payload.get(field) != evidence.pass_report.get(field):
             raise AssertionError("payload counters differ from sealed evidence")
+    sealed_lane = evidence.pass_report.get("auction_lane_sha256")
+    remote_lane = payload.get("auction_lane")
+    if sealed_lane is None:
+        if remote_lane is not None:
+            raise AssertionError("remote payload carries an unsealed auction lane")
+        return
+    if not isinstance(remote_lane, dict):
+        raise AssertionError("remote payload is missing the sealed auction lane")
+    if selection_audit.canonical_json_sha256(remote_lane) != sealed_lane:
+        raise AssertionError("remote auction lane does not match the sealed lane")
+    if (
+        payload.get("auction_lane", {}).get("bound_generation_id")
+        != evidence.generation_id
+        or payload.get("auction_lane", {}).get("lane_count")
+        != evidence.pass_report.get("auction_lane_count")
+    ):
+        raise AssertionError("remote auction lane binding differs from sealed evidence")
 
 
 def cache_busted_url(url: str, expected_generation: str, attempt: int) -> str:
@@ -421,6 +438,16 @@ def sanitized_pass_report(
         if report.get(field) is not True:
             raise ValueError("pass boolean invalid")
         safe[field] = True
+    lane_count = report.get("auction_lane_count")
+    if lane_count is not None:
+        safe["auction_lane_count"] = selection_audit.bounded_uint(
+            lane_count, "auction_lane_count"
+        )
+    lane_sha = report.get("auction_lane_sha256")
+    if lane_sha is not None:
+        if not isinstance(lane_sha, str) or not HEX_64.fullmatch(lane_sha):
+            raise ValueError("pass auction lane digest invalid")
+        safe["auction_lane_sha256"] = lane_sha
     for field in (
         "coverage_quota_substitutions",
         "cesja_count",

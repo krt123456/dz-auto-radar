@@ -460,6 +460,92 @@ def universe_metrics(database: Path) -> dict[str, Any]:
         connection.close()
 
 
+AUCTION_LANE_SCHEMA_VERSION = 1
+AUCTION_LANE_REQUIRED_FIELDS = frozenset({
+    "id", "source", "source_key", "registry_key", "registry_priority",
+    "url", "title", "model", "country", "year", "mileage", "fuel", "seller",
+    "current_bid_eur", "canonical_end_utc", "ends_soon", "first_seen_at",
+    "last_seen_at", "access_sale_note", "evidence",
+})
+
+
+def validate_auction_lane(lane: Any) -> None:
+    """Fail closed unless the lane is exactly the accepted auction contract.
+
+    Raises RuntimeError (never silently drops rows, never weakens the gate).
+    """
+    if not isinstance(lane, dict):
+        raise RuntimeError("auction lane is not an object")
+    if lane.get("schema_version") != AUCTION_LANE_SCHEMA_VERSION:
+        raise RuntimeError("unsupported auction lane schema")
+    if lane.get("lane") != "auction":
+        raise RuntimeError("auction lane field mismatch")
+    registry_digest = lane.get("registry_digest")
+    if not isinstance(registry_digest, str) or len(registry_digest) < 8:
+        raise RuntimeError("auction lane registry digest is invalid")
+    generated_at = lane.get("generated_at_utc")
+    if not valid_timestamp(generated_at):
+        raise RuntimeError("auction lane generation timestamp is invalid")
+    rows = lane.get("rows")
+    if not isinstance(rows, list):
+        raise RuntimeError("auction lane rows are not a list")
+    if lane.get("lane_count") != len(rows):
+        raise RuntimeError("auction lane count does not match its rows")
+    if rows:
+        seen_ids: set[str] = set()
+        seen_urls: set[str] = set()
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                raise RuntimeError(f"auction lane row {index} is not an object")
+            if set(row) != AUCTION_LANE_REQUIRED_FIELDS:
+                raise RuntimeError(f"auction lane row {index} does not have the exact lane fields")
+            row_id = str(row.get("id") or "").strip()
+            url = str(row.get("url") or "").strip()
+            if not row_id or not url:
+                raise RuntimeError(f"auction lane row {index} is missing id or url")
+            if row_id in seen_ids or url in seen_urls:
+                raise RuntimeError(f"auction lane row {index} duplicates id or url")
+            seen_ids.add(row_id)
+            seen_urls.add(url)
+            bid = row.get("current_bid_eur")
+            if type(bid) is not int or bid <= 0:
+                raise RuntimeError(f"auction lane row {index} has an invalid current bid")
+            if type(row.get("ends_soon")) is not bool:
+                raise RuntimeError(f"auction lane row {index} has an invalid ends_soon")
+            end = parsed_utc(row.get("canonical_end_utc"))
+            if end is None:
+                raise RuntimeError(f"auction lane row {index} has an invalid canonical end")
+            priority = row.get("registry_priority")
+            if type(priority) is not int or priority < 1:
+                raise RuntimeError(f"auction lane row {index} has an invalid registry priority")
+            if not isinstance(row.get("evidence"), str) or not row["evidence"]:
+                raise RuntimeError(f"auction lane row {index} is missing source evidence")
+
+
+def embed_auction_lane(
+    lane: dict[str, Any],
+    data_generated_at: str,
+    generation_id: str,
+    published_ids: set[str],
+    published_urls: set[str],
+) -> dict[str, Any]:
+    """Embed the lane, generation-bound, after fail-closed validation."""
+    validate_auction_lane(lane)
+    for row in lane["rows"]:
+        if str(row.get("id") or "") in published_ids or str(row.get("url") or "") in published_urls:
+            raise RuntimeError("auction lane row overlaps the regular lane")
+    return {
+        "schema_version": AUCTION_LANE_SCHEMA_VERSION,
+        "lane": "auction",
+        "registry_digest": lane["registry_digest"],
+        "generated_at_utc": lane["generated_at_utc"],
+        "bound_generation_id": generation_id,
+        "bound_data_generated_at_utc": data_generated_at,
+        "lane_count": lane["lane_count"],
+        "rows": lane["rows"],
+    }
+
+
 def load_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -633,6 +719,20 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
             "offers": selected,
         }
     )
+    published_ids = {str(offer.get("id") or "") for offer in selected}
+    published_urls = {str(offer.get("u") or "") for offer in selected}
+    auction_lane_block: dict[str, Any] | None = None
+    auction_lane_sha256: str | None = None
+    if args.auction_lane is not None and args.auction_lane.is_file():
+        try:
+            lane = json.loads(args.auction_lane.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise RuntimeError(f"auction lane file is unreadable: {exc}") from exc
+        auction_lane_block = embed_auction_lane(
+            lane, data_generated_at, generation_id, published_ids, published_urls,
+        )
+        auction_lane_sha256 = canonical_json_sha256(auction_lane_block)
+        payload["auction_lane"] = auction_lane_block
     manifest = {
         "schema_version": 1,
         "prepared_at": payload["published_at_utc"],
@@ -655,6 +755,10 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
         "data_generated_at_utc": payload.get("data_generated_at_utc"),
         "snapshot_eligible_sha256": snapshot_digest,
         "selection_input_counts": payload["selection_input_counts"],
+        "auction_lane_count": None if auction_lane_block is None else auction_lane_block["lane_count"],
+        "auction_lane_sha256": auction_lane_sha256,
+        "auction_lane_registry_digest": None if auction_lane_block is None
+            else auction_lane_block["registry_digest"],
     }
     return payload, manifest
 
@@ -738,6 +842,9 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
     ):
         if audit.get(key) != manifest.get(key):
             raise RuntimeError(f"selection audit does not match manifest: {key}")
+    for key in ("auction_lane_count", "auction_lane_sha256", "auction_lane_registry_digest"):
+        if audit.get(key) != manifest.get(key):
+            raise RuntimeError(f"selection audit does not match manifest: {key}")
     if manifest.get("verified_live_count") != manifest.get("published_offer_count"):
         raise RuntimeError("publication contains links not verified in this generation")
 
@@ -782,10 +889,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--per-source-min", type=int, default=5)
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--push-only", action="store_true")
+    parser.add_argument("--auction-lane", type=Path, default=None,
+                        help="auction lane JSON; omitted when absent (toggle hidden)")
     args = parser.parse_args()
     args.board = args.root / "mobile_site_local" / "board.json"
     args.database = args.root / "universe_offers.sqlite"
     args.ranked_meta = args.root / "top_offers.json"
+    if args.auction_lane is None:
+        args.auction_lane = args.root / "mobile_site_local" / "auction_lane.json"
     if args.prepare_only and args.push_only:
         parser.error("--prepare-only and --push-only are mutually exclusive")
     return args

@@ -3,6 +3,7 @@
 to fail; negative controls included and demonstrably caught)."""
 import datetime as dt
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -138,6 +139,76 @@ lane, counts = run(rows, regular_ids=frozenset({"zoll-auktion:dup"}))
 check("id shared with regular lane excluded", len(lane) == 0 and counts.get("cross_lane_duplicate", 0) == 1, negative=True)
 lane, counts = run(rows, regular_urls=frozenset({"https://www.zoll-auktion.de/dup"}))
 check("url shared with regular lane excluded", len(lane) == 0 and counts.get("cross_lane_duplicate", 0) == 1, negative=True)
+# cross-lane dedupe must also catch the canonical public-id space used by the
+# regular board (compact offer ids are sha256 hashes, not source:listing strings)
+pub_id = bab.public_offer_id("zoll-auktion", "dup")
+check("public id computed in regular-board id space", re.fullmatch(r"[0-9a-f]{64}", pub_id) is not None)
+lane, counts = run(rows, regular_ids=frozenset({pub_id}))
+check("public-id form shared with regular lane excluded",
+      len(lane) == 0 and counts.get("cross_lane_duplicate", 0) == 1, negative=True)
+# negative control: a regular id that is NOT this row must not exclude it
+lane, counts = run(rows, regular_ids=frozenset({bab.public_offer_id("zoll-auktion", "other")}))
+check("unrelated regular public id does not exclude row", len(lane) == 1)
+
+# ---------- load_regular_board: real accepted board shape --------------------
+import json as _json
+board_fixture = {
+    "schema_version": 2,
+    "offers": [
+        {"id": "abc123", "u": "https://www.zoll-auktion.de/dup", "m": "golf"},
+        {"id": "def456", "u": "https://www.olx.pl/d/oferta/x", "m": "golf"},
+        {"id": "", "u": "", "m": "golf"},
+    ],
+}
+from pathlib import Path as _Path
+import tempfile as _tf
+with _tf.TemporaryDirectory() as _td:
+    _board = _Path(_td) / "board.json"
+    _board.write_text(_json.dumps(board_fixture))
+    ids, urls = bab.load_regular_board(_board)
+    check("board ids extracted", ids == frozenset({"abc123", "def456"}))
+    check("board urls extracted", urls == frozenset({
+        "https://www.zoll-auktion.de/dup", "https://www.olx.pl/d/oferta/x"}))
+    lane, counts = run(rows, regular_ids=ids, regular_urls=urls)
+    check("auction row excluded against real board.json fixture",
+          len(lane) == 0 and counts.get("cross_lane_duplicate", 0) == 1, negative=True)
+
+# ---------- generation binding -----------------------------------------------
+with _tf.TemporaryDirectory() as _td:
+    _db = _Path(_td) / "u.sqlite"
+    con = sqlite3.connect(_db)
+    con.execute("""CREATE TABLE offers (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   source TEXT, source_listing_id TEXT, source_url TEXT, title TEXT,
+                   make_model TEXT, country TEXT, price_eur INTEGER, year INTEGER,
+                   mileage_km INTEGER, fuel TEXT, seller_type TEXT, last_seen_at TEXT,
+                   raw_json TEXT)""")
+    con.execute("CREATE INDEX idx_offers_last_seen ON offers(last_seen_at)")
+    con.execute(
+        "INSERT INTO offers (source, source_listing_id, source_url, title, make_model,"
+        " country, price_eur, year, mileage_km, fuel, seller_type, last_seen_at, raw_json)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        ("zoll-auktion", "z1", "https://www.zoll-auktion.de/z1", "t", "m", "DE", 5000,
+         2018, 100, "petrol", "p", "2026-08-17T02:00:00Z",
+         _json.dumps({"auction_end_at": "2026-08-18T10:00:00Z"})))
+    con.commit(); con.close()
+    payload = bab.build_lane(_db, cutoff="2026-01-01T00:00:00Z",
+                             regular_lane_ids=frozenset(), regular_lane_urls=frozenset(),
+                             generated_at="2026-08-17T04:00:00+00:00")
+    check("lane generation is bound, not wall-clock",
+          payload["generated_at_utc"] == "2026-08-17T04:00:00+00:00")
+    check("lane generation deterministic", payload["lane_count"] == 1 and
+          payload["rows"][0]["id"] == "zoll-auktion:z1")
+    payload2 = bab.build_lane(_db, cutoff="2026-01-01T00:00:00Z",
+                              regular_lane_ids=frozenset(), regular_lane_urls=frozenset(),
+                              generated_at="2026-08-17T04:00:00+00:00")
+    check("same input yields byte-identical lane payload",
+          _json.dumps(payload, sort_keys=True) == _json.dumps(payload2, sort_keys=True))
+    # negative control: generation bound from board timestamp, not random now
+    payload3 = bab.build_lane(_db, cutoff="2026-01-01T00:00:00Z",
+                              regular_lane_ids=frozenset(), regular_lane_urls=frozenset(),
+                              generated_at="2026-08-17T09:00:00+00:00")
+    check("different generation produces different payload timestamp",
+          payload3["generated_at_utc"] != payload["generated_at_utc"], negative=True)
 
 # ---------- no profit/ROI language in lane rows (design contract) ------------
 lane, counts = run([frow("zoll-auktion", "p", "https://www.zoll-auktion.de/p", end=end_soon)])
