@@ -1,35 +1,49 @@
 #!/usr/bin/env python3
-"""Export and validate an immutable, dark Radar ranking baseline.
+"""Export and validate an immutable Radar ranking baseline.
 
-The baseline is deliberately a local artifact.  This module has no network,
-publisher, database, timer, email, or production-install integration.  It
-reconstructs the exact accepted public selection from generation-bound source
-evidence and emits a deterministic, content-addressed JSON file.
+The baseline is deliberately a local auxiliary artifact.  This module has no
+network, publisher, database, timer, or email integration.  It reconstructs the
+exact accepted public selection from generation-bound source evidence and emits
+a deterministic, content-addressed JSON file plus an optional atomic pointer to
+the latest structurally accepted generation.  Artifact integrity and freshness
+are deliberately separate: historical accepted evidence remains verifiable
+after its original validity window closes, but callers must explicitly require
+freshness before using it for a fresh-only decision.
 """
 
 from __future__ import annotations
 
 import argparse
 from collections import Counter
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import fcntl
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tempfile
 from typing import Any, Iterable
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import build_observed_value_board as builder
-import publish_radar_dashboard as publisher
-import source_identity
+try:
+    from . import build_observed_value_board as builder
+    from . import publish_radar_dashboard as publisher
+    from . import source_identity
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import build_observed_value_board as builder
+    import publish_radar_dashboard as publisher
+    import source_identity
 
 
-CONTRACT = "radar-rank-baseline-v1"
-SCHEMA_VERSION = 1
+CONTRACT = "radar-rank-baseline-v2"
+LATEST_ACCEPTED_POINTER_CONTRACT = "radar-rank-baseline-latest-accepted-v2"
+SCHEMA_VERSION = 2
 MAX_SELECTION = 10_000
 MIN_SELECTION = 50
 MAX_RANKED_POOL = 100_000
@@ -38,6 +52,7 @@ VALIDITY = timedelta(hours=8)
 FUTURE_SKEW = timedelta(minutes=5)
 HEX_16 = re.compile(r"^[0-9a-f]{16}$")
 HEX_64 = re.compile(r"^[0-9a-f]{64}$")
+STORE_LOCK_FILENAME = ".radar-rank-baseline.lock"
 
 RANK_TUPLE_FIELDS = (
     "-conservative_discount_bps",
@@ -64,8 +79,19 @@ TOP_FIELDS = frozenset(
     {
         "contract", "schema_version", "algorithm", "generation_id",
         "data_generated_at_utc", "valid_until_utc", "ranking_contract",
-        "source_family_contract", "proof", "hashes", "cutoffs",
-        "peer_stats", "published_selection", "artifact_payload_sha256",
+        "source_family_contract", "proof", "hashes", "code_provenance",
+        "cutoffs", "peer_stats", "published_selection",
+        "artifact_payload_sha256",
+    }
+)
+LATEST_ACCEPTED_POINTER_FIELDS = frozenset(
+    {
+        "contract", "schema_version", "generation_id",
+        "data_generated_at_utc", "valid_until_utc", "artifact_file",
+        "artifact_sha256", "artifact_payload_sha256",
+        "source_board_sha256", "publication_manifest_sha256",
+        "live_convergence_audit_sha256", "selected_fields_sha256",
+        "ranking_contract_sha256", "pointer_payload_sha256",
     }
 )
 PROOF_FIELDS = frozenset(
@@ -89,8 +115,13 @@ HASH_FIELDS = frozenset(
         "candidate_fields_sha256", "selected_fields_sha256",
         "ranking_contract_sha256", "source_family_contract_sha256",
         "peer_method_sha256", "peer_stats_sha256",
-        "published_selection_sha256", "builder_code_sha256",
-        "publisher_code_sha256", "exporter_code_sha256",
+        "published_selection_sha256",
+    }
+)
+CODE_PROVENANCE_FIELDS = frozenset(
+    {
+        "builder_code_sha256", "publisher_code_sha256",
+        "exporter_code_sha256",
     }
 )
 CUTOFF_FIELDS = frozenset({"rank_50", "rank_horizon"})
@@ -241,6 +272,155 @@ class BaselineError(RuntimeError):
     """The baseline or one of its generation-bound inputs is invalid."""
 
 
+@dataclass(frozen=True)
+class BaselineStoreLock:
+    """An exclusive lock bound to one canonical artifact-directory inode."""
+
+    artifact_dir: Path
+    artifact_dir_fd: int
+    artifact_device: int
+    artifact_inode: int
+    lock_path: Path
+    lock_parent_fd: int
+    lock_fd: int
+    lock_device: int
+    lock_inode: int
+
+    def assert_current(self) -> None:
+        """Fail closed if either directory entry was substituted after open."""
+        directory = os.lstat(self.artifact_dir)
+        opened_directory = os.fstat(self.artifact_dir_fd)
+        if (
+            not stat.S_ISDIR(directory.st_mode)
+            or directory.st_dev != self.artifact_device
+            or directory.st_ino != self.artifact_inode
+            or opened_directory.st_dev != self.artifact_device
+            or opened_directory.st_ino != self.artifact_inode
+        ):
+            raise BaselineError("baseline artifact directory changed while locked")
+        lock_entry = os.stat(
+            self.lock_path.name,
+            dir_fd=self.lock_parent_fd,
+            follow_symlinks=False,
+        )
+        opened_lock = os.fstat(self.lock_fd)
+        for observed in (lock_entry, opened_lock):
+            if (
+                not stat.S_ISREG(observed.st_mode)
+                or observed.st_nlink != 1
+                or stat.S_IMODE(observed.st_mode) != 0o600
+                or observed.st_uid != os.geteuid()
+                or observed.st_dev != self.lock_device
+                or observed.st_ino != self.lock_inode
+            ):
+                raise BaselineError("baseline store lock changed while held")
+
+
+def _open_canonical_directory(
+    path: Path, label: str, *, create: bool = False,
+) -> tuple[Path, int, os.stat_result]:
+    absolute = Path(os.path.abspath(os.fspath(path)))
+    if create:
+        absolute.mkdir(parents=True, exist_ok=True)
+    try:
+        resolved = absolute.resolve(strict=True)
+    except OSError as exc:
+        raise BaselineError(f"{label} is unavailable") from exc
+    if resolved != absolute:
+        raise BaselineError(f"{label} contains a symlink or path alias")
+    metadata = os.lstat(absolute)
+    if not stat.S_ISDIR(metadata.st_mode):
+        raise BaselineError(f"{label} is not a directory")
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags |= getattr(os, "O_CLOEXEC", 0)
+    descriptor = os.open(absolute, flags)
+    opened = os.fstat(descriptor)
+    if (
+        not stat.S_ISDIR(opened.st_mode)
+        or opened.st_dev != metadata.st_dev
+        or opened.st_ino != metadata.st_ino
+    ):
+        os.close(descriptor)
+        raise BaselineError(f"{label} changed while opening")
+    return absolute, descriptor, opened
+
+
+def canonical_store_lock_path(artifact_dir: Path) -> Path:
+    """Return the single lock path used by exporter and retention."""
+    absolute = Path(os.path.abspath(os.fspath(artifact_dir)))
+    return absolute.parent / STORE_LOCK_FILENAME
+
+
+@contextmanager
+def exclusive_store_lock(
+    artifact_dir: Path, *, create_artifact_dir: bool = False,
+) -> Iterable[BaselineStoreLock]:
+    """Hold the canonical exclusive store lock and stable directory descriptors."""
+    directory_fd = -1
+    parent_fd = -1
+    lock_fd = -1
+    created = False
+    try:
+        directory, directory_fd, directory_metadata = _open_canonical_directory(
+            artifact_dir,
+            "baseline artifact directory",
+            create=create_artifact_dir,
+        )
+        parent, parent_fd, _ = _open_canonical_directory(
+            directory.parent, "baseline lock parent directory"
+        )
+        lock_path = parent / STORE_LOCK_FILENAME
+        flags = os.O_RDWR | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+        try:
+            lock_fd = os.open(
+                lock_path.name,
+                flags | os.O_CREAT | os.O_EXCL,
+                0o600,
+                dir_fd=parent_fd,
+            )
+            created = True
+        except FileExistsError:
+            lock_fd = os.open(lock_path.name, flags, dir_fd=parent_fd)
+        lock_metadata = os.fstat(lock_fd)
+        if (
+            not stat.S_ISREG(lock_metadata.st_mode)
+            or lock_metadata.st_nlink != 1
+            or stat.S_IMODE(lock_metadata.st_mode) != 0o600
+            or lock_metadata.st_uid != os.geteuid()
+            or lock_metadata.st_size != 0
+        ):
+            raise BaselineError("baseline store lock is not a private empty regular file")
+        if created:
+            os.fsync(lock_fd)
+            fsync_directory(parent)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        held = BaselineStoreLock(
+            artifact_dir=directory,
+            artifact_dir_fd=directory_fd,
+            artifact_device=directory_metadata.st_dev,
+            artifact_inode=directory_metadata.st_ino,
+            lock_path=lock_path,
+            lock_parent_fd=parent_fd,
+            lock_fd=lock_fd,
+            lock_device=lock_metadata.st_dev,
+            lock_inode=lock_metadata.st_ino,
+        )
+        held.assert_current()
+        yield held
+    except OSError as exc:
+        raise BaselineError(f"cannot acquire canonical baseline store lock: {exc}") from exc
+    finally:
+        if lock_fd >= 0:
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            finally:
+                os.close(lock_fd)
+        if parent_fd >= 0:
+            os.close(parent_fd)
+        if directory_fd >= 0:
+            os.close(directory_fd)
+
+
 def _object_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     value: dict[str, Any] = {}
     for key, item in pairs:
@@ -303,6 +483,20 @@ def file_sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def current_code_provenance() -> dict[str, str]:
+    """Return hashes for the code bytes used by this process.
+
+    These hashes describe provenance; they are not part of timeless structural
+    validity.  A caller that needs to reproduce an artifact with the exact same
+    implementation can opt into :func:`require_current_code_compatibility`.
+    """
+    return {
+        "builder_code_sha256": file_sha256(Path(builder.__file__).resolve()),
+        "publisher_code_sha256": file_sha256(Path(publisher.__file__).resolve()),
+        "exporter_code_sha256": file_sha256(Path(__file__).resolve()),
+    }
 
 
 def require_hash(value: Any, label: str, *, nullable: bool = False) -> str | None:
@@ -638,12 +832,9 @@ def build_baseline(
     ):
         raise BaselineError("ranked/source data timestamp mismatch")
     validation_generated = parse_utc(validation.get("generated_at"), "validation generated_at")
+    if validation_generated < generated:
+        raise BaselineError("validation predates its ranked data")
     valid_until = min(generated + VALIDITY, validation_generated + VALIDITY)
-    current = (now or datetime.now(UTC)).astimezone(UTC)
-    if current < generated - FUTURE_SKEW:
-        raise BaselineError("baseline generation is too far in the future")
-    if current >= valid_until:
-        raise BaselineError("baseline generation is expired")
 
     shared = (
         "algorithm", "data_generated_at_utc", "snapshot_eligible_sha256",
@@ -841,9 +1032,6 @@ def build_baseline(
         "peer_method_sha256": canonical_sha256(ranked["peer_method"]),
         "peer_stats_sha256": canonical_sha256(peers),
         "published_selection_sha256": canonical_sha256(selection),
-        "builder_code_sha256": file_sha256(Path(builder.__file__).resolve()),
-        "publisher_code_sha256": file_sha256(Path(publisher.__file__).resolve()),
-        "exporter_code_sha256": file_sha256(Path(__file__).resolve()),
     }
     cutoff = lambda row: {
         "rank": row["rank"],
@@ -861,6 +1049,7 @@ def build_baseline(
         "source_family_contract": family_contract,
         "proof": proof,
         "hashes": hashes,
+        "code_provenance": current_code_provenance(),
         "cutoffs": {
             "rank_50": cutoff(selection[49]),
             "rank_horizon": cutoff(selection[-1]),
@@ -869,13 +1058,12 @@ def build_baseline(
         "published_selection": selection,
     }
     payload["artifact_payload_sha256"] = canonical_sha256(payload)
-    validate_baseline(payload, now=current)
+    require_exportable_baseline(payload, now=now)
     return payload
 
 
-def validate_baseline(
-    baseline: dict[str, Any], *, now: datetime | None = None,
-) -> dict[str, Any]:
+def validate_baseline_structure(baseline: dict[str, Any]) -> dict[str, Any]:
+    """Validate immutable artifact structure without making a freshness claim."""
     if not isinstance(baseline, dict):
         raise BaselineError("baseline is not an object")
     require_fields(baseline, TOP_FIELDS, "baseline")
@@ -894,13 +1082,8 @@ def validate_baseline(
     valid_until = parse_utc(baseline.get("valid_until_utc"), "baseline valid-until")
     if baseline["data_generated_at_utc"] != format_utc(generated) or baseline["valid_until_utc"] != format_utc(valid_until):
         raise BaselineError("baseline timestamps are not canonical UTC")
-    current = (now or datetime.now(UTC)).astimezone(UTC)
-    if current < generated - FUTURE_SKEW:
-        raise BaselineError("baseline is timestamped too far in the future")
     if valid_until <= generated or valid_until > generated + VALIDITY:
         raise BaselineError("baseline validity window is invalid")
-    if current >= valid_until:
-        raise BaselineError("baseline is expired")
     if baseline.get("ranking_contract") != RANKING_CONTRACT:
         raise BaselineError("ranking contract differs from this validator")
     if baseline.get("source_family_contract") != source_family_contract():
@@ -908,26 +1091,29 @@ def validate_baseline(
 
     proof = baseline.get("proof")
     hashes = baseline.get("hashes")
+    code_provenance = baseline.get("code_provenance")
     cutoffs = baseline.get("cutoffs")
     peers = baseline.get("peer_stats")
     selection = baseline.get("published_selection")
-    if not isinstance(proof, dict) or not isinstance(hashes, dict) or not isinstance(cutoffs, dict):
+    if (
+        not isinstance(proof, dict)
+        or not isinstance(hashes, dict)
+        or not isinstance(code_provenance, dict)
+        or not isinstance(cutoffs, dict)
+    ):
         raise BaselineError("baseline nested contracts are invalid")
     require_fields(proof, PROOF_FIELDS, "baseline proof")
     require_fields(hashes, HASH_FIELDS, "baseline hashes")
+    require_fields(code_provenance, CODE_PROVENANCE_FIELDS, "baseline code provenance")
     require_fields(cutoffs, CUTOFF_FIELDS, "baseline cutoffs")
     for key, value in hashes.items():
         require_hash(value, f"baseline hashes.{key}", nullable=(key == "quarantine_manifest_sha256"))
+    for key, value in code_provenance.items():
+        require_hash(value, f"baseline code_provenance.{key}")
     if hashes["ranking_contract_sha256"] != canonical_sha256(RANKING_CONTRACT):
         raise BaselineError("ranking contract hash mismatch")
     if hashes["source_family_contract_sha256"] != canonical_sha256(source_family_contract()):
         raise BaselineError("source-family contract hash mismatch")
-    if hashes["builder_code_sha256"] != file_sha256(Path(builder.__file__).resolve()):
-        raise BaselineError("builder code hash mismatch")
-    if hashes["publisher_code_sha256"] != file_sha256(Path(publisher.__file__).resolve()):
-        raise BaselineError("publisher code hash mismatch")
-    if hashes["exporter_code_sha256"] != file_sha256(Path(__file__).resolve()):
-        raise BaselineError("baseline exporter code hash mismatch")
 
     count = require_int(
         proof.get("published_verified_count"), "published_verified_count",
@@ -1067,16 +1253,177 @@ def validate_baseline(
     if cutoffs["rank_50"] != expected_50 or cutoffs["rank_horizon"] != expected_horizon:
         raise BaselineError("rank cutoffs do not bind the selection")
     return {
-        "result": "RADAR_RANK_BASELINE_V1_PASS",
+        "result": "RADAR_RANK_BASELINE_V2_STRUCTURE_PASS",
         "generation_id": baseline["generation_id"],
         "published_verified_count": count,
         "peer_stat_count": len(peers),
+        "data_generated_at_utc": baseline["data_generated_at_utc"],
+        "valid_until_utc": baseline["valid_until_utc"],
         "artifact_payload_sha256": baseline["artifact_payload_sha256"],
+    }
+
+
+def assess_freshness_window(
+    data_generated_at_utc: Any,
+    valid_until_utc: Any,
+    *,
+    now: datetime | None = None,
+    label: str = "baseline",
+) -> dict[str, Any]:
+    """Assess a canonical sealed time window with an exact five-minute skew."""
+    generated = parse_utc(data_generated_at_utc, f"{label} data timestamp")
+    valid_until = parse_utc(valid_until_utc, f"{label} valid-until")
+    if data_generated_at_utc != format_utc(generated) or valid_until_utc != format_utc(valid_until):
+        raise BaselineError(f"{label} timestamps are not canonical UTC")
+    if valid_until <= generated or valid_until > generated + VALIDITY:
+        raise BaselineError(f"{label} validity window is invalid")
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    if current < generated - FUTURE_SKEW:
+        status = "future"
+    elif current >= valid_until:
+        status = "expired"
+    else:
+        status = "fresh"
+    return {
+        "freshness_status": status,
+        "fresh": status == "fresh",
+        "evaluated_at_utc": format_utc(current),
+        "data_generated_at_utc": format_utc(generated),
+        "valid_until_utc": format_utc(valid_until),
+        "age_seconds": math.floor((current - generated).total_seconds()),
+    }
+
+
+def assess_baseline_freshness(
+    baseline: dict[str, Any], *, now: datetime | None = None,
+) -> dict[str, Any]:
+    """Report freshness without changing historical structural validity."""
+    validate_baseline_structure(baseline)
+    return assess_freshness_window(
+        baseline["data_generated_at_utc"], baseline["valid_until_utc"], now=now
+    )
+
+
+def require_exportable_baseline(
+    baseline: dict[str, Any], *, now: datetime | None = None,
+) -> dict[str, Any]:
+    """Accept fresh or expired evidence, but reject clock-skew poisoning."""
+    structure = validate_baseline_structure(baseline)
+    freshness = assess_baseline_freshness(baseline, now=now)
+    if freshness["freshness_status"] == "future":
+        raise BaselineError("baseline generation is too far in the future")
+    return {
+        **structure,
+        **freshness,
+        "result": "RADAR_RANK_BASELINE_V2_EXPORTABLE",
+    }
+
+
+def require_fresh_baseline(
+    baseline: dict[str, Any], *, now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate structure and reject any artifact that is not fresh now."""
+    structure = validate_baseline_structure(baseline)
+    freshness = assess_baseline_freshness(baseline, now=now)
+    if freshness["freshness_status"] == "future":
+        raise BaselineError("baseline is timestamped too far in the future")
+    if freshness["freshness_status"] == "expired":
+        raise BaselineError("baseline is expired")
+    return {**structure, **freshness, "result": "RADAR_RANK_BASELINE_V2_FRESH_PASS"}
+
+
+def assess_code_provenance(
+    baseline: dict[str, Any],
+    *,
+    artifact_path: Path | None = None,
+    trusted_artifact_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Assess declared code hashes only after optional external byte anchoring.
+
+    The artifact's own seal cannot make its code-hash declarations trusted.  A
+    caller must supply both the artifact path and a SHA-256 obtained from a
+    separately trusted source before this function can report compatibility.
+    """
+    structure = validate_baseline_structure(baseline)
+    observed = baseline["code_provenance"]
+    current = current_code_provenance()
+    mismatches = sorted(
+        key for key in CODE_PROVENANCE_FIELDS if observed[key] != current[key]
+    )
+    if artifact_path is None and trusted_artifact_sha256 is None:
+        return {
+            **structure,
+            "result": "RADAR_RANK_BASELINE_V2_CODE_PROVENANCE_DECLARED",
+            "code_provenance_status": "declared_unanchored",
+        }
+    if artifact_path is None or trusted_artifact_sha256 is None:
+        raise BaselineError("trusted code compatibility requires a complete artifact anchor")
+    trusted = require_hash(trusted_artifact_sha256, "trusted artifact SHA-256")
+    if artifact_path.is_symlink() or not artifact_path.is_file():
+        raise BaselineError("anchored baseline artifact is not a regular file")
+    actual = file_sha256(artifact_path)
+    if actual != trusted:
+        raise BaselineError("baseline artifact differs from its trusted SHA-256 anchor")
+    anchored = load_object(artifact_path, TOP_FIELDS, "anchored baseline artifact")
+    validate_baseline_structure(anchored)
+    if canonical_bytes(anchored) != canonical_bytes(baseline):
+        raise BaselineError("trusted artifact anchor does not bind this baseline")
+    return {
+        **structure,
+        "result": "RADAR_RANK_BASELINE_V2_CODE_PROVENANCE_ANCHORED",
+        "code_provenance_status": (
+            "compatible_anchored" if not mismatches else "historical_anchored"
+        ),
+        "trusted_artifact_sha256": trusted,
+    }
+
+
+def require_current_code_compatibility(
+    baseline: dict[str, Any],
+    *,
+    artifact_path: Path | None = None,
+    trusted_artifact_sha256: str | None = None,
+) -> dict[str, Any]:
+    """Require an external byte anchor and exact current code provenance."""
+    assessment = assess_code_provenance(
+        baseline,
+        artifact_path=artifact_path,
+        trusted_artifact_sha256=trusted_artifact_sha256,
+    )
+    if assessment["code_provenance_status"] == "declared_unanchored":
+        raise BaselineError("current code compatibility requires a trusted artifact anchor")
+    if assessment["code_provenance_status"] != "compatible_anchored":
+        observed = baseline["code_provenance"]
+        current = current_code_provenance()
+        mismatches = sorted(
+            key for key in CODE_PROVENANCE_FIELDS if observed[key] != current[key]
+        )
+        raise BaselineError(f"current code provenance mismatch: {mismatches}")
+    return {
+        **assessment,
+        "result": "RADAR_RANK_BASELINE_V2_CODE_COMPATIBLE_ANCHORED",
     }
 
 
 def artifact_bytes(baseline: dict[str, Any]) -> bytes:
     return canonical_bytes(baseline) + b"\n"
+
+
+def reconstruction_payload(baseline: dict[str, Any]) -> dict[str, Any]:
+    """Return evidence-bound bytes while excluding historical code provenance."""
+    return {
+        key: value for key, value in baseline.items()
+        if key not in {"artifact_payload_sha256", "code_provenance"}
+    }
+
+
+def fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def write_content_addressed(output_dir: Path, baseline: dict[str, Any]) -> tuple[Path, str]:
@@ -1085,6 +1432,8 @@ def write_content_addressed(output_dir: Path, baseline: dict[str, Any]) -> tuple
     target = output_dir / f"{CONTRACT}.{digest}.json"
     output_dir.mkdir(parents=True, exist_ok=True)
     if target.exists():
+        if target.is_symlink() or not target.is_file():
+            raise BaselineError("content-addressed target is not a regular file")
         if target.read_bytes() != data:
             raise BaselineError("content-addressed target exists with different bytes")
         return target, digest
@@ -1098,10 +1447,239 @@ def write_content_addressed(output_dir: Path, baseline: dict[str, Any]) -> tuple
         os.chmod(temporary, 0o600)
         os.replace(temporary, target)
         temporary = None
+        fsync_directory(output_dir)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
     return target, digest
+
+
+def build_latest_accepted_pointer(
+    baseline: dict[str, Any], artifact_path: Path, artifact_sha256: str,
+    *, now: datetime | None = None,
+) -> dict[str, Any]:
+    require_exportable_baseline(baseline, now=now)
+    require_hash(artifact_sha256, "artifact SHA-256")
+    expected_name = f"{CONTRACT}.{artifact_sha256}.json"
+    if artifact_path.name != expected_name:
+        raise BaselineError("artifact filename is not content-addressed")
+    if artifact_path.is_symlink() or not artifact_path.is_file():
+        raise BaselineError("baseline artifact is not a regular file")
+    if file_sha256(artifact_path) != artifact_sha256:
+        raise BaselineError("baseline artifact hash mismatch")
+    hashes = baseline["hashes"]
+    core = {
+        "contract": LATEST_ACCEPTED_POINTER_CONTRACT,
+        "schema_version": SCHEMA_VERSION,
+        "generation_id": baseline["generation_id"],
+        "data_generated_at_utc": baseline["data_generated_at_utc"],
+        "valid_until_utc": baseline["valid_until_utc"],
+        "artifact_file": artifact_path.name,
+        "artifact_sha256": artifact_sha256,
+        "artifact_payload_sha256": baseline["artifact_payload_sha256"],
+        "source_board_sha256": hashes["source_board_sha256"],
+        "publication_manifest_sha256": hashes["publication_manifest_sha256"],
+        "live_convergence_audit_sha256": hashes["live_convergence_audit_sha256"],
+        "selected_fields_sha256": hashes["selected_fields_sha256"],
+        "ranking_contract_sha256": hashes["ranking_contract_sha256"],
+    }
+    return {**core, "pointer_payload_sha256": canonical_sha256(core)}
+
+
+def validate_latest_accepted_pointer_envelope(pointer: dict[str, Any]) -> str:
+    """Validate the sealed pointer itself and return its artifact SHA-256."""
+    if not isinstance(pointer, dict):
+        raise BaselineError("latest-accepted pointer is not an object")
+    require_fields(pointer, LATEST_ACCEPTED_POINTER_FIELDS, "latest-accepted pointer")
+    if (
+        pointer["contract"] != LATEST_ACCEPTED_POINTER_CONTRACT
+        or pointer["schema_version"] != SCHEMA_VERSION
+    ):
+        raise BaselineError("latest-accepted pointer contract is unsupported")
+    core = {
+        key: value for key, value in pointer.items()
+        if key != "pointer_payload_sha256"
+    }
+    if pointer["pointer_payload_sha256"] != canonical_sha256(core):
+        raise BaselineError("latest-accepted pointer payload hash mismatch")
+    artifact_sha256 = require_hash(pointer["artifact_sha256"], "pointer artifact SHA-256")
+    expected_name = f"{CONTRACT}.{artifact_sha256}.json"
+    if pointer["artifact_file"] != expected_name:
+        raise BaselineError("latest-accepted pointer artifact filename is invalid")
+    return str(artifact_sha256)
+
+
+def validate_latest_accepted_anchor(
+    pointer: dict[str, Any],
+    baseline: dict[str, Any],
+    artifact_sha256: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate that a trusted pointer anchors these exact artifact bytes."""
+    pointer_sha256 = validate_latest_accepted_pointer_envelope(pointer)
+    actual_sha256 = require_hash(artifact_sha256, "observed artifact SHA-256")
+    if pointer_sha256 != actual_sha256:
+        raise BaselineError("latest-accepted pointer artifact SHA-256 mismatch")
+    result = require_exportable_baseline(baseline, now=now)
+    freshness = assess_baseline_freshness(baseline, now=now)
+    hashes = baseline["hashes"]
+    expected = {
+        "generation_id": baseline["generation_id"],
+        "data_generated_at_utc": baseline["data_generated_at_utc"],
+        "valid_until_utc": baseline["valid_until_utc"],
+        "artifact_payload_sha256": baseline["artifact_payload_sha256"],
+        "source_board_sha256": hashes["source_board_sha256"],
+        "publication_manifest_sha256": hashes["publication_manifest_sha256"],
+        "live_convergence_audit_sha256": hashes["live_convergence_audit_sha256"],
+        "selected_fields_sha256": hashes["selected_fields_sha256"],
+        "ranking_contract_sha256": hashes["ranking_contract_sha256"],
+    }
+    for key, value in expected.items():
+        if pointer[key] != value:
+            raise BaselineError(f"latest-accepted pointer mismatch at {key}")
+    return {
+        **result,
+        **freshness,
+        "result": "RADAR_RANK_BASELINE_LATEST_ACCEPTED_V2_PASS",
+        "artifact_sha256": actual_sha256,
+        "pointer_payload_sha256": pointer["pointer_payload_sha256"],
+    }
+
+
+def validate_latest_accepted_pointer(
+    pointer: dict[str, Any], output_dir: Path, *, now: datetime | None = None,
+) -> dict[str, Any]:
+    artifact_sha256 = validate_latest_accepted_pointer_envelope(pointer)
+    artifact_path = output_dir / pointer["artifact_file"]
+    if artifact_path.is_symlink() or not artifact_path.is_file():
+        raise BaselineError("latest-accepted pointer artifact is unavailable")
+    if file_sha256(artifact_path) != artifact_sha256:
+        raise BaselineError("latest-accepted pointer artifact hash mismatch")
+    baseline = load_object(artifact_path, TOP_FIELDS, "latest-accepted baseline artifact")
+    return validate_latest_accepted_anchor(
+        pointer, baseline, artifact_sha256, now=now
+    )
+
+
+def write_latest_accepted_pointer(
+    path: Path, pointer: dict[str, Any], *, now: datetime | None = None,
+) -> bool:
+    require_fields(pointer, LATEST_ACCEPTED_POINTER_FIELDS, "latest-accepted pointer")
+    if (
+        pointer["contract"] != LATEST_ACCEPTED_POINTER_CONTRACT
+        or pointer["schema_version"] != SCHEMA_VERSION
+    ):
+        raise BaselineError("refusing to write an unsupported latest-accepted pointer")
+    core = {
+        key: value for key, value in pointer.items()
+        if key != "pointer_payload_sha256"
+    }
+    if pointer["pointer_payload_sha256"] != canonical_sha256(core):
+        raise BaselineError("refusing to write an unsealed latest-accepted pointer")
+    freshness = assess_freshness_window(
+        pointer["data_generated_at_utc"],
+        pointer["valid_until_utc"],
+        now=now,
+        label="latest-accepted pointer",
+    )
+    if freshness["freshness_status"] == "future":
+        raise BaselineError("refusing a future latest-accepted pointer")
+    data = canonical_bytes(pointer) + b"\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        if path.is_symlink() or not path.is_file():
+            raise BaselineError("latest-accepted pointer target is not a regular file")
+        prior_raw = path.read_bytes()
+        if prior_raw == data:
+            return False
+        prior = loads_strict(prior_raw, "existing latest-accepted pointer")
+        if not isinstance(prior, dict):
+            raise BaselineError("existing latest-accepted pointer is not an object")
+        require_fields(prior, LATEST_ACCEPTED_POINTER_FIELDS, "existing latest-accepted pointer")
+        if (
+            prior["contract"] != LATEST_ACCEPTED_POINTER_CONTRACT
+            or prior["schema_version"] != SCHEMA_VERSION
+        ):
+            raise BaselineError("existing latest-accepted pointer contract is unsupported")
+        prior_core = {
+            key: value for key, value in prior.items()
+            if key != "pointer_payload_sha256"
+        }
+        if prior["pointer_payload_sha256"] != canonical_sha256(prior_core):
+            raise BaselineError("existing latest-accepted pointer payload hash mismatch")
+        prior_time = parse_utc(
+            prior["data_generated_at_utc"], "existing pointer data timestamp"
+        )
+        candidate_time = parse_utc(
+            pointer["data_generated_at_utc"], "candidate pointer data timestamp"
+        )
+        if candidate_time < prior_time:
+            raise BaselineError("refusing to regress the latest-accepted baseline pointer")
+        if candidate_time == prior_time:
+            if pointer["generation_id"] != prior["generation_id"]:
+                raise BaselineError("conflicting generation at latest-accepted pointer timestamp")
+            raise BaselineError("latest-accepted generation differs from its prior seal")
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=f".{path.name}.", delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+        temporary = None
+        fsync_directory(path.parent)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return True
+
+
+def export_accepted_baseline(
+    output_dir: Path,
+    expected: dict[str, Any],
+    *,
+    latest_accepted_manifest: Path | None = None,
+    now: datetime | None = None,
+) -> tuple[
+    dict[str, Any], Path, str, dict[str, Any] | None, bool | None, dict[str, Any]
+]:
+    """Write one accepted export while excluding concurrent retention."""
+    exportability = require_exportable_baseline(expected, now=now)
+    with exclusive_store_lock(output_dir, create_artifact_dir=True) as held:
+        held.assert_current()
+        path, digest = write_content_addressed(held.artifact_dir, expected)
+        held.assert_current()
+        pointer: dict[str, Any] | None = None
+        pointer_updated: bool | None = None
+        if latest_accepted_manifest is not None:
+            pointer = build_latest_accepted_pointer(
+                expected, path, digest, now=now
+            )
+            validate_latest_accepted_pointer(pointer, held.artifact_dir, now=now)
+            held.assert_current()
+            pointer_updated = write_latest_accepted_pointer(
+                latest_accepted_manifest, pointer, now=now
+            )
+            held.assert_current()
+        lock_evidence = {
+            "path": str(held.lock_path),
+            "device": held.lock_device,
+            "inode": held.lock_inode,
+            "exclusive": True,
+        }
+    return (
+        exportability,
+        path,
+        digest,
+        pointer,
+        pointer_updated,
+        lock_evidence,
+    )
 
 
 def _input_arguments(parser: argparse.ArgumentParser) -> None:
@@ -1118,12 +1696,17 @@ def _input_arguments(parser: argparse.ArgumentParser) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    export = commands.add_parser("export", help="build a fresh content-addressed baseline")
+    export = commands.add_parser("export", help="build an accepted content-addressed baseline")
     _input_arguments(export)
     export.add_argument("--output-dir", type=Path, required=True)
+    export.add_argument("--latest-accepted-manifest", type=Path)
     validate = commands.add_parser("validate", help="validate an artifact against all source evidence")
     _input_arguments(validate)
     validate.add_argument("--artifact", type=Path, required=True)
+    anchor = validate.add_mutually_exclusive_group()
+    anchor.add_argument("--trusted-artifact-sha256")
+    anchor.add_argument("--trusted-latest-accepted-manifest", type=Path)
+    validate.add_argument("--require-current-code-compatibility", action="store_true")
     return parser.parse_args(argv)
 
 
@@ -1145,22 +1728,99 @@ def main(argv: list[str] | None = None) -> int:
     try:
         expected = _build_from_args(args)
         if args.command == "export":
-            path, digest = write_content_addressed(args.output_dir, expected)
+            (
+                exportability,
+                path,
+                digest,
+                pointer,
+                pointer_updated,
+                lock_evidence,
+            ) = export_accepted_baseline(
+                args.output_dir,
+                expected,
+                latest_accepted_manifest=args.latest_accepted_manifest,
+            )
+            structure = validate_baseline_structure(expected)
+            freshness = {
+                key: exportability[key]
+                for key in (
+                    "freshness_status", "fresh", "evaluated_at_utc",
+                    "data_generated_at_utc", "valid_until_utc", "age_seconds",
+                )
+            }
             print(json.dumps({
-                **validate_baseline(expected),
+                **freshness,
+                "result": "RADAR_RANK_BASELINE_V2_ACCEPTED",
+                "structural_validation": structure["result"],
+                "generation_id": structure["generation_id"],
+                "published_verified_count": structure["published_verified_count"],
+                "peer_stat_count": structure["peer_stat_count"],
+                "artifact_payload_sha256": structure["artifact_payload_sha256"],
                 "artifact_path": str(path),
                 "artifact_sha256": digest,
+                "latest_accepted_manifest_path": (
+                    str(args.latest_accepted_manifest)
+                    if args.latest_accepted_manifest is not None else None
+                ),
+                "latest_accepted_pointer_payload_sha256": (
+                    pointer["pointer_payload_sha256"] if pointer is not None else None
+                ),
+                "latest_accepted_updated": pointer_updated,
+                "store_lock": lock_evidence,
+                "incremental_advancement": False,
             }, sort_keys=True))
             return 0
         observed = load_object(args.artifact, TOP_FIELDS, "baseline artifact")
-        result = validate_baseline(observed)
-        if canonical_bytes(observed) != canonical_bytes(expected):
+        structure = validate_baseline_structure(observed)
+        freshness = assess_baseline_freshness(observed)
+        if canonical_bytes(reconstruction_payload(observed)) != canonical_bytes(
+            reconstruction_payload(expected)
+        ):
             raise BaselineError("artifact differs from the exact source-evidence reconstruction")
-        result["artifact_sha256"] = file_sha256(args.artifact)
+        artifact_sha256 = file_sha256(args.artifact)
+        trusted_sha256: str | None = None
+        anchor_status = "unanchored"
+        if args.trusted_artifact_sha256 is not None:
+            trusted_sha256 = str(
+                require_hash(
+                    args.trusted_artifact_sha256, "trusted artifact SHA-256"
+                )
+            )
+            anchor_status = "trusted_sha256"
+        elif args.trusted_latest_accepted_manifest is not None:
+            pointer = load_object(
+                args.trusted_latest_accepted_manifest,
+                LATEST_ACCEPTED_POINTER_FIELDS,
+                "trusted latest-accepted pointer",
+            )
+            validate_latest_accepted_anchor(
+                pointer, observed, artifact_sha256
+            )
+            trusted_sha256 = pointer["artifact_sha256"]
+            anchor_status = "latest_accepted_pointer"
+        provenance = assess_code_provenance(
+            observed,
+            artifact_path=args.artifact if trusted_sha256 is not None else None,
+            trusted_artifact_sha256=trusted_sha256,
+        )
+        if args.require_current_code_compatibility:
+            require_current_code_compatibility(
+                observed,
+                artifact_path=args.artifact if trusted_sha256 is not None else None,
+                trusted_artifact_sha256=trusted_sha256,
+            )
+        result = {
+            **structure,
+            **freshness,
+            "result": "RADAR_RANK_BASELINE_V2_RECONSTRUCTION_PASS",
+            "artifact_sha256": artifact_sha256,
+            "artifact_anchor_status": anchor_status,
+            "code_provenance_status": provenance["code_provenance_status"],
+        }
         print(json.dumps(result, sort_keys=True))
         return 0
     except (BaselineError, OSError) as exc:
-        print(f"RADAR_RANK_BASELINE_V1_FAIL: {exc}", file=sys.stderr)
+        print(f"RADAR_RANK_BASELINE_V2_FAIL: {exc}", file=sys.stderr)
         return 1
 
 
