@@ -55,12 +55,12 @@ def make_db(rows):
     return con
 
 
-def frow(source, lid, url, end=None, price=5000, raw=None, last_seen="2026-08-17T02:00:00Z"):
+def frow(source, lid, url, end=None, price=5000, raw=None, last_seen="2026-08-17T02:00:00Z", year=2024):
     rj = {"auction_end_at": end} if end is not None else {}
     if raw:
         rj.update(raw)
     return (source, lid, url, f"{source} {lid}", "volkswagen golf", "DE",
-            price, 2018, 120000, "petrol", "public", last_seen, json.dumps(rj))
+            price, year, 120000, "petrol", "public", last_seen, json.dumps(rj))
 
 
 def run(rows, regular_ids=frozenset(), regular_urls=frozenset(), now=NOW):
@@ -105,7 +105,7 @@ excluded = [
     ("zero price excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=end_future, price=0), "hidden_or_missing_price"),
     ("negative price excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=end_future, price=-5), "hidden_or_missing_price"),
     ("non-numeric price excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=end_future, price="hidden"), "hidden_or_missing_price"),
-    ("malformed raw_json excluded", ("zoll-auktion", "z", "https://www.zoll-auktion.de/x", "t", "m", "DE", 5000, 2018, 100, "petrol", "p", "2026-08-17T02:00:00Z", '{"auction_end_at": "2026-08-18T10:00:00Z", broken'), "malformed_raw_json"),
+    ("malformed raw_json excluded", ("zoll-auktion", "z", "https://www.zoll-auktion.de/x", "t", "m", "DE", 5000, 2024, 100, "petrol", "p", "2026-08-17T02:00:00Z", '{"auction_end_at": "2026-08-18T10:00:00Z", broken'), "malformed_raw_json"),
 ]
 for name, row, reason in excluded:
     lane, counts = run([row])
@@ -150,6 +150,66 @@ check("public-id form shared with regular lane excluded",
 lane, counts = run(rows, regular_ids=frozenset({bab.public_offer_id("zoll-auktion", "other")}))
 check("unrelated regular public id does not exclude row", len(lane) == 1)
 
+
+# ---------- founder year policy (mgr-fb1670...): 2023-2026, day+month for 2023
+end_future = "2026-08-18T10:00:00+02:00"
+f_rows = [
+    frow("zoll-auktion", "y2023d", "https://www.zoll-auktion.de/y2023d", end=end_future,
+         raw={"first_registration_date": "15.11.2023"}),
+    frow("zoll-auktion", "y2024", "https://www.zoll-auktion.de/y2024", end=end_future),
+    frow("zoll-auktion", "y2025", "https://www.zoll-auktion.de/y2025", end=end_future),
+    frow("zoll-auktion", "y2026", "https://www.zoll-auktion.de/y2026", end=end_future),
+]
+lane, counts = run(f_rows)
+check("founder: 2023 with full day+month enters lane",
+      any(r["id"].endswith(":y2023d") for r in lane))
+check("founder: 2024 enters lane", any(r["id"].endswith(":y2024") for r in lane))
+check("founder: 2025 enters lane", any(r["id"].endswith(":y2025") for r in lane))
+check("founder: 2026 enters lane", any(r["id"].endswith(":y2026") for r in lane))
+
+# negative controls: every founder violation must be excluded with its code
+f_bad = [
+    ("year outside range (2018) excluded", frow("zoll-auktion", "old", "https://www.zoll-auktion.de/old", end=end_future, year=2018),
+     "year_outside_2023_2026"),
+    ("year beyond range (2030) excluded", frow("zoll-auktion", "new", "https://www.zoll-auktion.de/new", end=end_future, year=2030), "year_outside_2023_2026"),
+    ("unknown year (0) excluded", frow("zoll-auktion", "z0", "https://www.zoll-auktion.de/z0", end=end_future, year=0), "year_outside_2023_2026"),
+    ("2023 without registration date excluded",
+     frow("zoll-auktion", "noreg", "https://www.zoll-auktion.de/noreg", end=end_future, year=2023),
+     "year_2023_without_day_month"),
+    ("2023 with year-only date excluded",
+     frow("zoll-auktion", "yearonly", "https://www.zoll-auktion.de/yearonly", end=end_future, year=2023,
+          raw={"first_registration_date": "2023"}),
+     "year_2023_without_day_month"),
+    ("2023 with malformed date excluded",
+     frow("zoll-auktion", "badreg", "https://www.zoll-auktion.de/badreg", end=end_future, year=2023,
+          raw={"first_registration_date": "2023-15-11"}),
+     "year_2023_without_day_month"),
+]
+for name, row, reason in f_bad:
+    lane, counts = run([row])
+    check(name, len(lane) == 0 and counts.get(reason, 0) == 1, negative=True)
+
+# boundary: 2023 with day+month but malformed raw_json falls back to exclusion
+lane, counts = run([frow("zoll-auktion", "badjson", "https://www.zoll-auktion.de/badjson",
+                         end=end_future, raw=None)])
+check("2024 rows need no registration date", len(lane) == 1)
+
+# mutation gate: a seeded defect that skips the founder filter must flip a test
+import build_auction_board as bab3
+orig_eligible = bab3.founder_eligible
+bab3.founder_eligible = lambda year, raw_json: (True, "")
+mutant_lane, _ = run([frow("zoll-auktion", "old", "https://www.zoll-auktion.de/old", end=end_future, year=2018)])
+bab3.founder_eligible = orig_eligible
+check("mutation gate: skipping founder filter lets 2018 row in",
+      len(mutant_lane) == 1, negative=True)
+# second mutant: 2023 rows never require day+month
+bab3.founder_eligible = lambda year, raw_json: (True, "")
+mutant_lane, _ = run([frow("zoll-auktion", "noreg2", "https://www.zoll-auktion.de/noreg2", end=end_future, year=2023)])
+bab3.founder_eligible = orig_eligible
+check("mutation gate: dropping 2023 date rule lets no-reg 2023 row in",
+      len(mutant_lane) == 1, negative=True)
+
+
 # ---------- load_regular_board: real accepted board shape --------------------
 import json as _json
 board_fixture = {
@@ -188,8 +248,8 @@ with _tf.TemporaryDirectory() as _td:
         " country, price_eur, year, mileage_km, fuel, seller_type, last_seen_at, raw_json)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ("zoll-auktion", "z1", "https://www.zoll-auktion.de/z1", "t", "m", "DE", 5000,
-         2018, 100, "petrol", "p", "2026-08-17T02:00:00Z",
-         _json.dumps({"auction_end_at": "2026-08-18T10:00:00Z"})))
+         2024, 100, "petrol", "p", "2026-08-17T02:00:00Z",
+         _json.dumps({"auction_end_at": "2030-01-01T10:00:00Z"})))
     con.commit(); con.close()
     payload = bab.build_lane(_db, cutoff="2026-01-01T00:00:00Z",
                              regular_lane_ids=frozenset(), regular_lane_urls=frozenset(),

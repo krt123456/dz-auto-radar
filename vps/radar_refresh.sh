@@ -197,6 +197,14 @@ python3 "$RANKER" \
   --validation-report "$ROOT/top400_validation.json" \
   --top-n "$RANKED_POOL_LIMIT"
 
+PHASE="auction_fetch"
+ZOLL_FETCHER="${RADAR_ZOLL_FETCHER:-/home/krt/car_deal_finder/zoll_auktion_fetcher.py}"
+ZOLL_CSV="${RADAR_ZOLL_CSV:-/home/krt/eu_harvest/zoll_auktion_live.csv}"
+IMPORTER="${RADAR_UNIVERSE_IMPORTER:-/home/krt/car_deal_finder/import_live_offers_to_universe.py}"
+notify running "$PHASE" "يجلب مزادات زول الرسمية (قابل للاستئناف: listing_id الموجودة تُتخطى)"
+python3 "$ZOLL_FETCHER" --out "$ZOLL_CSV"
+python3 "$IMPORTER" --input-csv "$ZOLL_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+
 PHASE="auction_lane"
 notify running "$PHASE" "يبني مسار المزادات الموثق من الكون المقبول (fail-closed)"
 python3 "$LANE_BUILDER" \

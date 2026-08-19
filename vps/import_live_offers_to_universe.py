@@ -70,6 +70,7 @@ def raw_payload(row: dict[str, str], source_listing_id: str) -> dict[str, object
     payload: dict[str, object] = {
         "listing_id": source_listing_id,
         "model_key": row.get("model_key", ""),
+        "first_registration_date": clean_text(row.get("first_registration_date")),
         "auction_end_at": row.get("auction_end_at", ""),
         "sale_term_code": row.get("sale_term_code", ""),
         "sale_certainty": row.get("sale_certainty", ""),

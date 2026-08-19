@@ -53,6 +53,13 @@ def public_offer_id(source: Any, native_listing_id: Any) -> str:
 
 END_SOON_HOURS = 24
 UTC = dt.timezone.utc
+# Founder directive (mgr-fb167017e21a4f598f763b1211af2888): the auction lane
+# shows ONLY model years 2023-2026 (cars eligible for import to Algeria in
+# 2026, i.e. not more than ~3 years old), and year 2023 rows additionally
+# require a full day+month registration date.
+FOUNDER_MIN_YEAR = 2023
+FOUNDER_MAX_YEAR = 2026
+_REG_DATE_RE = re.compile(r"^\s*\d{1,2}\.\d{1,2}\.\d{4}\s*$")
 _ISO_RE = re.compile(
     r"^\s*(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?"
     r"(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?\s*$"
@@ -85,6 +92,34 @@ def parse_canonical_end(value: Any) -> Optional[dt.datetime]:
     except ValueError:
         return None
 
+
+
+
+def founder_eligible(year: Any, raw_json: str) -> tuple[bool, str]:
+    """Founder lane policy (mgr-fb1670...): years 2023-2026 only; year 2023
+    additionally requires a full day+month registration date.
+
+    Reason codes (never silently dropped, never labelled invalid):
+      year_outside_2023_2026      - missing/zero year or outside 2023-2026
+      year_2023_without_day_month - year 2023 but first_registration_date is
+                                    absent or not a full DD.MM.YYYY date
+    """
+    try:
+        y = int(year)
+    except (TypeError, ValueError):
+        return False, "year_outside_2023_2026"
+    if y < FOUNDER_MIN_YEAR or y > FOUNDER_MAX_YEAR:
+        return False, "year_outside_2023_2026"
+    if y == 2023:
+        reg = ""
+        if raw_json:
+            try:
+                reg = str(json.loads(raw_json).get("first_registration_date") or "")
+            except (ValueError, TypeError):
+                reg = ""
+        if not _REG_DATE_RE.match(reg):
+            return False, "year_2023_without_day_month"
+    return True, ""
 
 def lane_query() -> str:
     return """
@@ -156,6 +191,10 @@ def auction_rows(
             continue
         if bid <= 0:
             excluded("hidden_or_missing_price")
+            continue
+        ok_year, year_reason = founder_eligible(year, raw_json)
+        if not ok_year:
+            excluded(year_reason)
             continue
         origin = (source, listing_id)
         if origin in seen_origins:
