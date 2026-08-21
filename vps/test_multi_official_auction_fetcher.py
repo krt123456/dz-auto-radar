@@ -65,6 +65,32 @@ class GenericOfficialAuctionTests(unittest.TestCase):
         }
         self.assertIsNone(module._ovm_detail_to_row(detail, now=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)))
 
+    def test_domaine_public_active_vehicle_is_admitted(self) -> None:
+        item = {
+            "id": 304166, "auction_type": "1", "professional_only": 0,
+            "start_auction_lot_at": "2026-01-01T10:00:00+00:00",
+            "end_auction_lot_at": "2030-01-02T10:00:00+00:00", "last_bid": 8750,
+            "name": "DS DS4", "url_key": "ds-ds4-304166",
+            "short_description": {"html": "<p>Essence, 1ère mise en circulation le 15/05/2024, 12 345 km.</p>"},
+        }
+        row = module._domaine_item_to_row(item, now=dt.datetime(2026, 1, 1, 12, tzinfo=dt.timezone.utc))
+        self.assertIsNotNone(row)
+        self.assertEqual(row["first_registration_date"], "15/05/2024")
+        self.assertEqual(row["price_eur"], "8750.00")
+
+    def test_domaine_rejects_upcoming_or_professional_only(self) -> None:
+        item = {
+            "id": 1, "auction_type": "1", "professional_only": 0,
+            "start_auction_lot_at": "2030-01-01T10:00:00+00:00",
+            "end_auction_lot_at": "2030-01-02T10:00:00+00:00", "price_auction": 5000,
+            "name": "Renault Clio", "url_key": "clio-1",
+            "short_description": {"html": "1ère mise en circulation 15/05/2024"},
+        }
+        now = dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+        self.assertIsNone(module._domaine_item_to_row(item, now=now))
+        item["start_auction_lot_at"] = "2025-01-01T10:00:00+00:00"; item["professional_only"] = 1
+        self.assertIsNone(module._domaine_item_to_row(item, now=now))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -104,6 +104,10 @@ OVM_LIST_URL = "https://onlineveilingmeester.nl/rest/nl/v2/kavels"
 OVM_DETAIL_URL = "https://onlineveilingmeester.nl/rest/nl/v2/veilingen/{auction_id}/kavels/{lot_number}"
 OVM_PUBLIC_URL = "https://onlineveilingmeester.nl/nl/veilingen/{auction_id}/kavels/{lot_number}"
 OVM_VEHICLE_CATEGORIES = {10, 11}  # Personenauto's, Bedrijfsauto's
+DOMAINE_GRAPHQL_URL = "https://encheres-domaine.gouv.fr/gateway/magento/graphql/"
+DOMAINE_PUBLIC_URL = "https://encheres-domaine.gouv.fr/lot/{url_key}.html"
+DOMAINE_CATEGORY_UID = "NQ=="  # Véhicules de tourisme, resolved from the official category API.
+DOMAINE_QUERY = """query getCategoryLots($currentPage:Int $filter:ProductAttributeFilterInput! $pageSize:Int){products(currentPage:$currentPage filter:$filter pageSize:$pageSize sort:{start_auction_lot_at:ASC}){items{auction auction_type end_auction_lot_at id last_bid lot_number lot_status name price_auction professional_only short_description{html} start_auction_lot_at url_key} page_info{total_pages} total_count}}"""
 
 
 def plain(value: Any) -> str:
@@ -281,6 +285,76 @@ def harvest_onlineveilingmeester(session: requests.Session, *, timeout: int) -> 
     }
 
 
+def _domaine_item_to_row(item: dict[str, Any], *, now: dt.datetime) -> dict[str, str] | None:
+    """Convert one official Domaine API item, enforcing public/active/vehicle gates."""
+    if item.get("professional_only") not in (0, False, "0") or str(item.get("auction_type")) != "1":
+        return None
+    start = parse_iso_utc(item.get("start_auction_lot_at")); end = parse_iso_utc(item.get("end_auction_lot_at"))
+    if start is None or end is None or not (start <= now < end):
+        return None
+    description = BeautifulSoup(str((item.get("short_description") or {}).get("html") or ""), "html.parser").get_text(" ", strip=True)
+    registration_match = re.search(
+        r"(?:1\s*(?:ère|ere)|premi[eè]re)\s+mise\s+en\s+c[io]rculation(?:\s+le)?\s*:?[ ]*"
+        r"(\d{1,2}[/-]\d{1,2}[/-]20\d{2})", description, re.I,
+    )
+    if not registration_match:
+        return None
+    registration = registration_match.group(1)
+    year_match = re.search(r"20\d{2}", registration)
+    year = int(year_match.group(0)) if year_match else 0
+    try:
+        price = float(item.get("last_bid") or item.get("price_auction") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not 2023 <= year <= 2026 or price <= 0:
+        return None
+    item_id = str(item.get("id") or ""); url_key = str(item.get("url_key") or "").strip()
+    if not item_id.isdigit() or not url_key:
+        return None
+    title = plain(item.get("name")); mileage_match = re.search(r"([\d .]{2,})\s*km\b", description, re.I)
+    fuel_match = re.search(r"\b(gazole|diesel|essence|hybride|[ée]lectri(?:que|cit[ée]))\b", description, re.I)
+    return {
+        "listing_id": item_id, "model_key": re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:80],
+        "title": title, "source": "encheres-du-domaine",
+        "source_url": DOMAINE_PUBLIC_URL.format(url_key=url_key), "first_registration_date": registration,
+        "fuel": plain(fuel_match.group(1)) if fuel_match else "", "engine_cc": "",
+        "mileage_km": re.sub(r"\D", "", mileage_match.group(1)) if mileage_match else "",
+        "price_eur": f"{int(round(price))}.00", "seller_type": "government_auction",
+        "accident_free": "unknown", "service_history": "unknown", "transmission": "", "country": "FR",
+        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction", "sale_certainty": "auction",
+        "sale_certainty_note": "French Domaine government auction; official API confirms a live public lot not restricted to automotive professionals. Verify export papers, fees and condition.",
+    }
+
+
+def harvest_domaine(session: requests.Session, *, timeout: int) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    now = dt.datetime.now(UTC); errors: list[str] = []; items: dict[str, dict[str, Any]] = {}
+    # Establish the anti-bot session cookie using the portal's own redirect.
+    try:
+        request_html(session, "https://encheres-domaine.gouv.fr/", timeout)
+    except requests.RequestException as exc:
+        return [], {"discovered": 0, "accepted": 0, "errors": [f"{type(exc).__name__}:{str(exc)[:120]}"]}
+    for page in range(1, 101):
+        variables = {"currentPage": page, "pageSize": 100,
+                     "filter": {"category_uid": {"eq": DOMAINE_CATEGORY_UID}, "lot_status": {"in": ["13", "14"]}}}
+        try:
+            response = session.get(DOMAINE_GRAPHQL_URL, params={"query": DOMAINE_QUERY,
+                                   "operationName": "getCategoryLots",
+                                   "variables": json.dumps(variables, separators=(",", ":"))},
+                                   headers=HEADERS, timeout=timeout)
+            response.raise_for_status(); products = response.json()["data"]["products"]
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            errors.append(f"{type(exc).__name__}:{str(exc)[:120]}"); break
+        for item in products.get("items") or []:
+            if isinstance(item, dict) and item.get("id") is not None:
+                items[str(item["id"])] = item
+        if page >= int((products.get("page_info") or {}).get("total_pages") or 1):
+            break
+    rows = [row for item in items.values() if (row := _domaine_item_to_row(item, now=now))]
+    unique = {row["source_url"]: row for row in rows}
+    return list(unique.values()), {"discovered": len(items), "accepted": len(unique), "errors": errors[:20],
+                                  "evidence": "Official French Domaine Magento GraphQL catalogue; public active lots only"}
+
+
 def harvest_vebeg(source: Source, session: requests.Session, *, timeout: int) -> tuple[list[dict[str, str]], dict[str, Any]]:
     """Harvest VEBEG live vehicle auctions (not opaque tender sales)."""
     now = dt.datetime.now(UTC); errors: list[str] = []
@@ -456,6 +530,8 @@ def discover(session: requests.Session, source: Source, timeout: int, browser: b
 
 def harvest(source: Source, session: requests.Session, rates: dict[str, float], *, timeout: int,
             browser: bool, max_candidates: int, sleep_seconds: float) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    if source.key == "encheres-du-domaine":
+        return harvest_domaine(session, timeout=timeout)
     if source.key == "onlineveilingmeester":
         return harvest_onlineveilingmeester(session, timeout=timeout)
     if source.key == "vebeg":
