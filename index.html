@@ -763,7 +763,7 @@ function boot(payload){
   const auctionWrap=$("auctionToggleWrap");
   if(AUCTION_LANE){
     auctionWrap.hidden=false;
-    $("fauction").checked=false;
+    $("fauction").checked=true;
     $("fauction").addEventListener("change",()=>{
       if($("fauction").checked){
         const saved=$("fs").value;
@@ -788,6 +788,7 @@ function boot(payload){
     auctionWrap.hidden=true;
   }
   restoreNavigationState(navigationState);
+  if(AUCTION_LANE)$("fauction").checked=true;
   if($("fauction").checked&&AUCTION_LANE){
     $("fauction").dispatchEvent(new Event("change"));
   }else{

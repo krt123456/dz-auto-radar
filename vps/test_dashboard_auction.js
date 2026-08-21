@@ -24,6 +24,7 @@ function makeStorage(initial = {}) {
 
 function stubElement(id) {
   const classes = new Set();
+  const listeners = new Map();
   return {
     value: "",
     checked: id === "flive",
@@ -45,7 +46,14 @@ function stubElement(id) {
       },
       contains(name) { return classes.has(name); },
     },
-    addEventListener() {},
+    addEventListener(type, handler) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(handler);
+    },
+    dispatchEvent(event) {
+      for (const handler of listeners.get(event.type) || []) handler.call(this, event);
+      return true;
+    },
   };
 }
 
@@ -239,7 +247,7 @@ try {
   const withLane = makeSandbox({ local });
   bootWith(withLane, payload);
   check(withLane.document.getElementById("auctionToggleWrap").hidden === false, "toggle must be visible when the lane is present");
-  check(withLane.document.getElementById("fauction").checked === false, "toggle must default to unchecked when the lane is present");
+  check(withLane.document.getElementById("fauction").checked === true, "auction lane must be selected by default when present");
   check(evaluate(withLane, "AUCTION_LANE.length") === 3, "lane rows must be loaded into state");
   evaluate(withLane, "populateFilterOptions(true)");
   const sourceOptions = withLane.document.getElementById("fsrc").innerHTML;
@@ -252,6 +260,7 @@ try {
   }
 
   // unchecked: regular offers only
+  withLane.document.getElementById("fauction").checked = false;
   evaluate(withLane, "apply();");
   check(evaluate(withLane, "VIEW.every(o=>typeof o.sv === 'number')"), "unchecked toggle shows regular offers only");
 
