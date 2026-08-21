@@ -114,6 +114,10 @@ class ClockIntegrityError(Exception):
     """A monotonic clock sample was invalid or moved backwards."""
 
 
+class AuctionLaneDeploymentPending(Exception):
+    """The selection generation is current but its auction lane is still cached."""
+
+
 @dataclass(frozen=True)
 class ProbeResult:
     state: str
@@ -277,19 +281,19 @@ def validate_payload_against_sealed_evidence(
     remote_lane = payload.get("auction_lane")
     if sealed_lane is None:
         if remote_lane is not None:
-            raise AssertionError("remote payload carries an unsealed auction lane")
+            raise AuctionLaneDeploymentPending
         return
     if not isinstance(remote_lane, dict):
-        raise AssertionError("remote payload is missing the sealed auction lane")
+        raise AuctionLaneDeploymentPending
     if selection_audit.canonical_json_sha256(remote_lane) != sealed_lane:
-        raise AssertionError("remote auction lane does not match the sealed lane")
+        raise AuctionLaneDeploymentPending
     if (
         payload.get("auction_lane", {}).get("bound_generation_id")
         != evidence.generation_id
         or payload.get("auction_lane", {}).get("lane_count")
         != evidence.pass_report.get("auction_lane_count")
     ):
-        raise AssertionError("remote auction lane binding differs from sealed evidence")
+        raise AuctionLaneDeploymentPending
 
 
 def cache_busted_url(url: str, expected_generation: str, attempt: int) -> str:
@@ -471,20 +475,31 @@ def safe_pending_report(
     expected_generation: str,
 ) -> dict[str, Any] | None:
     observed = report.get("observed_generation") if isinstance(report, dict) else None
+    pending_component = report.get("pending_component") if isinstance(report, dict) else None
     if (
         not isinstance(report, dict)
         or report.get("result") != "DEPLOYMENT_PENDING"
         or report.get("expected_generation") != expected_generation
         or not isinstance(observed, str)
         or not HEX_16.fullmatch(observed)
-        or observed == expected_generation
+        or (
+            observed == expected_generation
+            and pending_component != "auction_lane"
+        )
+        or (
+            observed != expected_generation
+            and pending_component is not None
+        )
     ):
         return None
-    return {
+    safe = {
         "result": "DEPLOYMENT_PENDING",
         "expected_generation": expected_generation,
         "observed_generation": observed,
     }
+    if pending_component == "auction_lane":
+        safe["pending_component"] = "auction_lane"
+    return safe
 
 
 def finite_number(value: Any, *, lower: float, upper: float) -> bool:
@@ -569,6 +584,16 @@ def classify_blob(
         )
     try:
         validate_payload_against_sealed_evidence(payload, sealed_evidence)
+    except AuctionLaneDeploymentPending:
+        return ProbeResult(
+            "pending",
+            {
+                "result": "DEPLOYMENT_PENDING",
+                "expected_generation": expected_generation,
+                "observed_generation": observed_generation,
+                "pending_component": "auction_lane",
+            },
+        )
     except (AssertionError, KeyError, TypeError, ValueError):
         return ProbeResult(
             "fatal",

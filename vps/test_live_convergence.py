@@ -313,6 +313,65 @@ class SameGenerationEvidenceTest(unittest.TestCase):
         self.assertEqual(result.state, "pass")
         self.assertEqual(result.report["universe_unique_offers"], 3)
 
+    def test_same_generation_stale_auction_lane_retries_then_passes(self) -> None:
+        expected = copy.deepcopy(self.payload)
+        expected["auction_lane"] = {
+            "schema_version": 1,
+            "lane": "auction",
+            "registry_digest": "fixture-registry-v1",
+            "generated_at_utc": self.board["data_generated_at_utc"],
+            "bound_generation_id": self.generation,
+            "bound_data_generated_at_utc": self.board["data_generated_at_utc"],
+            "lane_count": 0,
+            "rows": [],
+        }
+        audit = selection_audit.audit_payload(
+            root=self.root,
+            payload=expected,
+            top_n=1,
+            per_country_min=1,
+            per_source_min=1,
+        )
+        self.audit_path.write_text(json.dumps(audit), encoding="utf-8")
+        evidence = live_audit.load_sealed_generation_evidence(
+            manifest_path=self.manifest_path,
+            audit_path=self.audit_path,
+            expected_generation=self.generation,
+        )
+
+        def classify(payload: dict[str, object]) -> live_audit.ProbeResult:
+            with patch.object(
+                live_audit.selection_audit, "decrypt_blob", return_value=payload
+            ):
+                return live_audit.classify_blob(
+                    blob=b"encrypted-fixture",
+                    pin="not-used-by-mock",
+                    expected_generation=self.generation,
+                    root=self.root,
+                    top_n=1,
+                    per_country_min=1,
+                    per_source_min=1,
+                    sealed_evidence=evidence,
+                )
+
+        stale = classify(copy.deepcopy(self.payload))
+        self.assertEqual(stale.state, "pending")
+        self.assertEqual(stale.report["pending_component"], "auction_lane")
+        now = [0.0]
+        payloads = iter((copy.deepcopy(self.payload), expected))
+        exit_code, report = live_audit.wait_for_convergence(
+            expected_generation=self.generation,
+            probe=lambda _attempt, _remaining: classify(next(payloads)),
+            deadline_sec=10,
+            initial_backoff_sec=1,
+            max_backoff_sec=1,
+            max_network_errors=0,
+            clock=lambda: now[0],
+            sleeper=lambda delay: now.__setitem__(0, now[0] + delay),
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(report["attempts"], 2)
+
     def test_manifest_payload_universe_mismatch_still_fails(self) -> None:
         mismatched = copy.deepcopy(self.payload)
         mismatched["universe_unique_offers"] = 2

@@ -917,7 +917,7 @@ def audit_payload(
         upper=MAX_CONNECTED_COUNT,
     )
 
-    return {
+    report = {
         "schema_version": 1,
         "result": "BEST_SELECTION_AUDIT_PASS",
         "generation_id": payload.get("generation_id"),
