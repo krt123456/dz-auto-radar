@@ -246,7 +246,7 @@ try {
   for (const source of [
     "Zoll-Auktion", "Les Enchères du Domaine", "Justiz-Auktion", "BOE Subastas",
     "Kronofogden Auktionstorget", "Portale delle Vendite Pubbliche", "Fin Shop",
-    "Domeinen Roerende Zaken", "e-Leilões", "Licytacje Komornicze",
+    "Domeinen Roerende Zaken", "e-Leilões", "Licytacje Komornicze", "VEBEG Federal Surplus",
   ]) {
     check(sourceOptions.includes(source), `${source} must always appear in the auction source filter`);
   }
