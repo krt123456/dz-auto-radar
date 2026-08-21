@@ -95,7 +95,15 @@ SOURCES = (
            ("https://www.e-leiloes.pt/",), ("e-leiloes.pt",)),
     Source("licytacje-komornik", "PL", "PLN", "Europe/Warsaw",
            ("https://licytacje.komornik.pl/",), ("licytacje.komornik.pl",)),
+    Source("vebeg", "DE", "EUR", "Europe/Berlin",
+           ("https://www.vebeg.de/de/auktionen/auktionen_suchen.htm?DO_SUCHE=1&SUCH_MATGRUPPE=1000",),
+           ("vebeg.de",)),
 )
+
+OVM_LIST_URL = "https://onlineveilingmeester.nl/rest/nl/v2/kavels"
+OVM_DETAIL_URL = "https://onlineveilingmeester.nl/rest/nl/v2/veilingen/{auction_id}/kavels/{lot_number}"
+OVM_PUBLIC_URL = "https://onlineveilingmeester.nl/nl/veilingen/{auction_id}/kavels/{lot_number}"
+OVM_VEHICLE_CATEGORIES = {10, 11}  # Personenauto's, Bedrijfsauto's
 
 
 def plain(value: Any) -> str:
@@ -154,6 +162,170 @@ def parse_end(match: re.Match[str], timezone: str) -> dt.datetime | None:
                            tzinfo=ZoneInfo(timezone)).astimezone(UTC)
     except ValueError:
         return None
+
+
+def parse_iso_utc(value: Any) -> dt.datetime | None:
+    try:
+        parsed = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed.astimezone(UTC) if parsed.tzinfo else None
+    except (TypeError, ValueError):
+        return None
+
+
+def first_date(value: Any) -> str:
+    """Return an exact source date only; never manufacture a day/month."""
+    text = plain(value)
+    for pattern in (r"\b(20\d{2}-\d{2}-\d{2})\b", r"\b(\d{1,2}[./-]\d{1,2}[./-]20\d{2})\b"):
+        match = re.search(pattern, text)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _ovm_detail_to_row(detail: dict[str, Any], *, now: dt.datetime) -> dict[str, str] | None:
+    auction = detail.get("veiling") or {}
+    data = detail.get("kavelData") or {}
+    category = detail.get("categorie") or {}
+    end = parse_iso_utc(detail.get("sluitingsDatumISO"))
+    if (
+        auction.get("type") != "DRZ"
+        or not auction.get("isGeopend")
+        or detail.get("isClosed")
+        or not detail.get("zichtbaar", True)
+        or not detail.get("buitenlandseBiederToegestaan")
+        or category.get("id") not in OVM_VEHICLE_CATEGORIES
+        or data.get("kavelDataType") != "AUTO"
+        or end is None or end <= now
+    ):
+        return None
+    try:
+        year = int(data.get("bouwjaar") or 0)
+        price = float(detail.get("hoogsteBod") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not 2023 <= year <= 2026 or price <= 0:
+        return None
+    specifications = BeautifulSoup(str(data.get("specificaties") or ""), "html.parser").get_text(" ", strip=True)
+    international = re.search(r"Eerste toelating internationaal\s*:\s*([^;|]+)", specifications, re.I)
+    registration = first_date(data.get("registratiedatum")) or first_date(international.group(1) if international else "")
+    if year == 2023 and not registration:
+        return None
+    auction_id = str(auction.get("id") or "")
+    lot_number = str(detail.get("volgNummer") or "")
+    item_id = str(detail.get("id") or "")
+    if not (auction_id.isdigit() and lot_number and item_id.isdigit()):
+        return None
+    title = plain(data.get("naam") or detail.get("naam") or f"DRZ vehicle {item_id}")
+    model_key = "_".join(filter(None, [plain(data.get("merk")).lower(), plain(data.get("model") or data.get("productType")).lower()]))
+    return {
+        "listing_id": item_id,
+        "model_key": re.sub(r"[^a-z0-9]+", "_", model_key).strip("_")[:80],
+        "title": title, "source": "onlineveilingmeester",
+        "source_url": OVM_PUBLIC_URL.format(auction_id=auction_id, lot_number=lot_number),
+        "first_registration_date": registration or str(year),
+        "fuel": plain(data.get("brandstof")),
+        "engine_cc": re.sub(r"\D", "", str(data.get("motorinhoud") or "")),
+        "mileage_km": re.sub(r"\D", "", str(data.get("kilometerstand") or "")),
+        "price_eur": f"{int(round(price))}.00", "seller_type": "government_auction",
+        "accident_free": "unknown", "service_history": "unknown",
+        "transmission": plain(data.get("transmissie") or data.get("versnellingsbak")), "country": "NL",
+        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction",
+        "sale_certainty": "auction",
+        "sale_certainty_note": "DRZ government-property auction; official API confirms an open lot and foreign bidders are allowed. Verify export papers, fees and condition before bidding.",
+    }
+
+
+def harvest_onlineveilingmeester(session: requests.Session, *, timeout: int) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Use OVM's own structured API and admit DRZ government lots only."""
+    now = dt.datetime.now(UTC)
+    summaries: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    for page in range(100):
+        try:
+            response = session.get(OVM_LIST_URL, params={"page": page, "size": 100}, headers=HEADERS, timeout=timeout)
+            response.raise_for_status(); payload = response.json()
+        except (requests.RequestException, ValueError) as exc:
+            errors.append(f"{type(exc).__name__}:{str(exc)[:120]}")
+            break
+        for item in payload.get("content") or []:
+            if isinstance(item, dict) and item.get("id") is not None:
+                summaries[str(item["id"])] = item
+        if payload.get("last") or page + 1 >= min(int(payload.get("totalPages") or 1), 100):
+            break
+    candidates: list[dict[str, Any]] = []
+    for item in summaries.values():
+        auction = item.get("veiling") or {}; category = item.get("categorie") or {}
+        end = parse_iso_utc(item.get("sluitingsDatumISO"))
+        if (
+            auction.get("type") == "DRZ" and auction.get("isGeopend")
+            and item.get("buitenlandseBiederToegestaan")
+            and category.get("id") in OVM_VEHICLE_CATEGORIES
+            and end is not None and end > now and float(item.get("hoogsteBod") or 0) > 0
+            and re.search(r"\b202[3-6]\b", plain(item.get("naam")))
+        ):
+            candidates.append(item)
+    rows: list[dict[str, str]] = []
+    for item in candidates:
+        auction_id = (item.get("veiling") or {}).get("id"); lot_number = item.get("volgNummer")
+        try:
+            response = session.get(OVM_DETAIL_URL.format(auction_id=auction_id, lot_number=lot_number), headers=HEADERS, timeout=timeout)
+            response.raise_for_status(); row = _ovm_detail_to_row(response.json(), now=now)
+            if row:
+                rows.append(row)
+        except (requests.RequestException, ValueError) as exc:
+            errors.append(f"{type(exc).__name__}:{str(exc)[:120]}")
+    unique = {row["source_url"]: row for row in rows}
+    return list(unique.values()), {
+        "discovered": len(summaries), "eligible_candidates": len(candidates), "accepted": len(unique),
+        "errors": errors[:20], "evidence": "Official OVM REST API; veiling.type=DRZ; foreign bidder=true",
+    }
+
+
+def harvest_vebeg(source: Source, session: requests.Session, *, timeout: int) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Harvest VEBEG live vehicle auctions (not opaque tender sales)."""
+    now = dt.datetime.now(UTC); errors: list[str] = []
+    try:
+        markup = request_html(session, source.discovery_urls[0], timeout)
+    except requests.RequestException as exc:
+        return [], {"discovered": 0, "accepted": 0, "errors": [f"{type(exc).__name__}:{str(exc)[:120]}"]}
+    soup = BeautifulSoup(markup, "html.parser"); urls: list[str] = []
+    for anchor in soup.select("a[href]"):
+        url = urljoin(source.discovery_urls[0], str(anchor.get("href") or ""))
+        if official_url(url, source) and "SHOW_AUS=" in url and "SHOW_LOS=" in url and url not in urls:
+            urls.append(url)
+    rows: list[dict[str, str]] = []
+    for url in urls:
+        try:
+            text = plain(BeautifulSoup(request_html(session, url, timeout), "html.parser").get_text(" ", strip=True))
+            title_match = re.search(r"Auktion/Los:\s*\d+[.]\d+\s+(.+?)\s+(?:Motorleistung|Daten\s+Erstzulassung)", text, re.I)
+            lot_match = re.search(r"Auktion/Los:\s*(\d+[.]\d+)", text, re.I)
+            reg_match = re.search(r"Erstzulassung:\s*(\d{1,2})/(\d{2,4})", text, re.I)
+            end_match = re.search(r"Gebotstermin:\s*(\d{1,2}[.]\d{1,2}[.]20\d{2}),\s*(\d{1,2}):(\d{2})", text, re.I)
+            price_match = re.search(r"(?:Aktuelles Gebot|Startpreis):\s*EUR\s*([\d.]+(?:,\d{2})?)", text, re.I)
+            if not (title_match and lot_match and reg_match and end_match and price_match):
+                continue
+            year = int(reg_match.group(2)); year = year + 2000 if year < 100 else year
+            if not 2024 <= year <= 2026:
+                continue
+            end = dt.datetime.strptime(f"{end_match.group(1)} {end_match.group(2)}:{end_match.group(3)}", "%d.%m.%Y %H:%M").replace(tzinfo=ZoneInfo(source.timezone)).astimezone(UTC)
+            price = parse_amount(price_match.group(1), "EUR", {"EUR": 1.0})
+            if end <= now or price <= 0:
+                continue
+            mileage_match = re.search(r"Laufleistung:\s*ca[.]?\s*([\d.]+)\s*km", text, re.I); title = plain(title_match.group(1))
+            rows.append({
+                "listing_id": lot_match.group(1), "model_key": re.sub(r"[^a-z0-9]+", "_", title.lower()).strip("_")[:80],
+                "title": title, "source": "vebeg", "source_url": url, "first_registration_date": str(year),
+                "fuel": "", "engine_cc": "", "mileage_km": re.sub(r"\D", "", mileage_match.group(1)) if mileage_match else "",
+                "price_eur": f"{price}.00", "seller_type": "government_auction", "accident_free": "unknown",
+                "service_history": "unknown", "transmission": "", "country": "DE",
+                "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction", "sale_certainty": "auction",
+                "sale_certainty_note": "VEBEG is wholly owned by the Federal Republic of Germany. Live auction price and end are explicit; verify bidder-account eligibility, export papers, VAT and condition.",
+            })
+        except (requests.RequestException, ValueError) as exc:
+            errors.append(f"{type(exc).__name__}:{str(exc)[:120]}")
+    unique = {row["source_url"]: row for row in rows}
+    return list(unique.values()), {"discovered": len(urls), "accepted": len(unique), "errors": errors[:20],
+                                  "evidence": "VEBEG official live-auction pages; federally owned company"}
 
 
 def listing_id(url: str) -> str:
@@ -284,6 +456,10 @@ def discover(session: requests.Session, source: Source, timeout: int, browser: b
 
 def harvest(source: Source, session: requests.Session, rates: dict[str, float], *, timeout: int,
             browser: bool, max_candidates: int, sleep_seconds: float) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    if source.key == "onlineveilingmeester":
+        return harvest_onlineveilingmeester(session, timeout=timeout)
+    if source.key == "vebeg":
+        return harvest_vebeg(source, session, timeout=timeout)
     urls, errors = discover(session, source, timeout, browser, max_candidates)
     rows: list[dict[str, str]] = []
     browser_attempts = 0
