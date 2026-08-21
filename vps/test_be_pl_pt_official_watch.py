@@ -160,6 +160,38 @@ class PolandTests(unittest.TestCase):
         )
         self.assertIsNone(row)
 
+    def test_poland_page_retries_ssl_and_connection_errors_then_succeeds(self):
+        failures = [
+            requests.exceptions.SSLError("temporary TLS close"),
+            requests.exceptions.ConnectionError("connection reset"),
+            requests.exceptions.ConnectionError("connection reset again"),
+        ]
+
+        class Session:
+            calls = 0
+
+            def get(self, url, headers, timeout):
+                self.calls += 1
+                if failures:
+                    raise failures.pop(0)
+                return FakeResponse(text=PolandTests.nuxt_markup(), url=url)
+
+        session = Session()
+        with mock.patch.object(module.time, "sleep") as sleep:
+            items, links, advertised, pages = module.fetch_poland_category(
+                session, category="CARS", timeout=5,
+            )
+
+        self.assertEqual(session.calls, 4)
+        self.assertEqual([item["id"] for item in items], [80055])
+        self.assertIn(80055, links)
+        self.assertEqual(advertised, 1)
+        self.assertEqual(pages, 1)
+        self.assertEqual(
+            [call.args[0] for call in sleep.call_args_list],
+            [0.2, 0.4, 0.8],
+        )
+
 
 class ELeiloesTests(unittest.TestCase):
     @staticmethod
@@ -293,6 +325,27 @@ class ELeiloesTests(unittest.TestCase):
 
 
 class CombinedTests(unittest.TestCase):
+    @staticmethod
+    def row(source: str, row_id: str, *, seen: str, end: str = "2026-08-22T18:00:00+00:00"):
+        return {
+            "id": row_id,
+            "source": source,
+            "source_key": source,
+            "last_seen_at": seen,
+            "canonical_end_utc": end,
+        }
+
+    @staticmethod
+    def payload(*, generated: str, rows, reports):
+        return {
+            "schema_version": 1,
+            "lane": "official_auction_watch",
+            "generated_at_utc": generated,
+            "row_count": len(rows),
+            "rows": rows,
+            "source_reports": reports,
+        }
+
     def test_blocked_sources_are_reported_as_zero_without_fabrication(self):
         class Session:
             def get(self, url, **kwargs):
@@ -325,6 +378,96 @@ class CombinedTests(unittest.TestCase):
             module.write_payload(path, payload)
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), payload)
             self.assertFalse(path.with_suffix(".json.tmp").exists())
+
+    def test_fallback_retains_only_the_failed_source_and_preserves_timestamp(self):
+        now = dt.datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+        seen = "2026-08-21T10:30:00+00:00"
+        previous_rows = [
+            self.row("finshop", "finshop:old", seen=seen),
+            self.row("licytacje-komornik", "licytacje-komornik:old", seen=seen),
+        ]
+        previous = self.payload(
+            generated="2026-08-21T10:30:00+00:00",
+            rows=previous_rows,
+            reports={
+                "finshop": {"status": "ok", "current_or_future_rows": 1},
+                "licytacje-komornik": {"status": "ok", "current_or_future_rows": 1},
+            },
+        )
+        new_poland = self.row(
+            "licytacje-komornik", "licytacje-komornik:new",
+            seen=now.isoformat(),
+        )
+        current = self.payload(
+            generated=now.isoformat(),
+            rows=[new_poland],
+            reports={
+                "finshop": {
+                    "status": "error", "current_or_future_rows": 0,
+                    "error": "ConnectTimeout: upstream unavailable",
+                },
+                "licytacje-komornik": {"status": "ok", "current_or_future_rows": 1},
+            },
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "watch.json"
+            path.write_text(json.dumps(previous), encoding="utf-8")
+            result = module.apply_previous_snapshot_fallback(current, path, now=now)
+
+        self.assertEqual(
+            {row["id"] for row in result["rows"]},
+            {"finshop:old", "licytacje-komornik:new"},
+        )
+        retained = next(row for row in result["rows"] if row["id"] == "finshop:old")
+        self.assertEqual(retained["last_seen_at"], seen)
+        report = result["source_reports"]["finshop"]
+        self.assertEqual(report["status"], "partial")
+        self.assertEqual(report["current_or_future_rows"], 1)
+        self.assertEqual(report["connector_error"]["status"], "error")
+        self.assertTrue(report["fallback"]["used"])
+        self.assertTrue(report["fallback"]["row_timestamps_preserved"])
+
+    def test_stale_previous_snapshot_is_rejected(self):
+        now = dt.datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+        old = self.payload(
+            generated="2026-08-21T03:59:59+00:00",
+            rows=[self.row("finshop", "finshop:old", seen="2026-08-21T03:59:59+00:00")],
+            reports={"finshop": {"status": "ok", "current_or_future_rows": 1}},
+        )
+        current = self.payload(
+            generated=now.isoformat(), rows=[],
+            reports={"finshop": {
+                "status": "error", "current_or_future_rows": 0, "error": "timeout",
+            }},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "watch.json"
+            path.write_text(json.dumps(old), encoding="utf-8")
+            result = module.apply_previous_snapshot_fallback(current, path, now=now)
+
+        self.assertEqual(result["rows"], [])
+        self.assertEqual(result["source_reports"]["finshop"]["status"], "error")
+
+    def test_successful_fresh_source_replaces_previous_rows(self):
+        now = dt.datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+        previous = self.payload(
+            generated="2026-08-21T11:00:00+00:00",
+            rows=[self.row("finshop", "finshop:old", seen="2026-08-21T11:00:00+00:00")],
+            reports={"finshop": {"status": "ok", "current_or_future_rows": 1}},
+        )
+        fresh = self.row("finshop", "finshop:new", seen=now.isoformat())
+        current = self.payload(
+            generated=now.isoformat(), rows=[fresh],
+            reports={"finshop": {"status": "ok", "current_or_future_rows": 1}},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "watch.json"
+            path.write_text(json.dumps(previous), encoding="utf-8")
+            result = module.apply_previous_snapshot_fallback(current, path, now=now)
+
+        self.assertEqual([row["id"] for row in result["rows"]], ["finshop:new"])
+        self.assertNotIn("fallback", result["source_reports"]["finshop"])
 
 
 if __name__ == "__main__":

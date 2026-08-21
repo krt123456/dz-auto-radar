@@ -24,6 +24,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import unicodedata
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
@@ -77,6 +78,9 @@ SOURCE_NAMES = {
     "e-leiloes": "e-Leiloes (OSAE Portugal)",
 }
 SOURCE_CHOICES = tuple(SOURCE_NAMES)
+PREVIOUS_SNAPSHOT_MAX_AGE = dt.timedelta(hours=8)
+POLAND_PAGE_RETRIES = 3
+POLAND_RETRY_BASE_DELAY_SECONDS = 0.2
 
 
 class _CentralEuropeFallback(dt.tzinfo):
@@ -639,12 +643,23 @@ def fetch_poland_category(
             f"{POLAND_SEARCH_URL}?mainCategory=MOVABLE&subCategory={category}"
             f"&limit={page_size}&offset={offset}"
         )
-        markup = _official_response_text(
-            session,
-            query,
-            allowed_hosts={"licytacje.komornik.pl"},
-            timeout=timeout,
-        )
+        # The official Polish endpoint intermittently drops TLS connections.
+        # Retry only transport-level SSL/connection failures; HTTP errors and
+        # parser/schema failures remain visible immediately.  This deliberately
+        # keeps normal certificate and hostname verification enabled.
+        for retry_number in range(POLAND_PAGE_RETRIES + 1):
+            try:
+                markup = _official_response_text(
+                    session,
+                    query,
+                    allowed_hosts={"licytacje.komornik.pl"},
+                    timeout=timeout,
+                )
+                break
+            except (requests.exceptions.SSLError, requests.exceptions.ConnectionError):
+                if retry_number >= POLAND_PAGE_RETRIES:
+                    raise
+                time.sleep(POLAND_RETRY_BASE_DELAY_SECONDS * (2 ** retry_number))
         page_items, count, page_links = parse_poland_search_page(markup, category=category)
         pages += 1
         if advertised_count is None:
@@ -1247,6 +1262,142 @@ def build_watch(
     }
 
 
+def _fresh_previous_snapshot(
+    path: Path,
+    *,
+    now: dt.datetime,
+    max_age: dt.timedelta = PREVIOUS_SNAPSHOT_MAX_AGE,
+) -> dict[str, Any] | None:
+    """Load a structurally valid recent connector snapshot, if one exists."""
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("schema_version") != 1 or payload.get("lane") != "official_auction_watch":
+        return None
+    rows = payload.get("rows")
+    reports = payload.get("source_reports")
+    if not isinstance(rows, list) or not isinstance(reports, dict):
+        return None
+    if payload.get("row_count") != len(rows):
+        return None
+    generated_at = parse_iso(payload.get("generated_at_utc"))
+    if generated_at is None:
+        return None
+    age = now - generated_at
+    if age < dt.timedelta(0) or age > max_age:
+        return None
+    for row in rows:
+        if not isinstance(row, dict) or not clean(row.get("id")):
+            return None
+        source = row.get("source_key") or row.get("source")
+        if source not in SOURCE_CHOICES:
+            return None
+    return payload
+
+
+def apply_previous_snapshot_fallback(
+    payload: dict[str, Any],
+    previous_path: Path,
+    *,
+    now: dt.datetime | None = None,
+    max_age: dt.timedelta = PREVIOUS_SNAPSHOT_MAX_AGE,
+) -> dict[str, Any]:
+    """Retain recent rows only for a source whose new connector run failed.
+
+    The fallback is intentionally applied at the CLI snapshot boundary rather
+    than inside ``build_watch``.  Row timestamps are never rewritten, so an
+    outage cannot keep an old offer alive indefinitely.
+    """
+    if now is None:
+        now = parse_iso(payload.get("generated_at_utc"))
+    if now is None or now.tzinfo is None:
+        return payload
+    now = now.astimezone(UTC).replace(microsecond=0)
+    previous = _fresh_previous_snapshot(previous_path, now=now, max_age=max_age)
+    if previous is None:
+        return payload
+
+    rows = payload.get("rows")
+    reports = payload.get("source_reports")
+    if not isinstance(rows, list) or not isinstance(reports, dict):
+        return payload
+
+    current_source_counts: dict[str, int] = {source: 0 for source in SOURCE_CHOICES}
+    existing_ids = {
+        str(row.get("id"))
+        for row in rows
+        if isinstance(row, dict) and row.get("id") is not None
+    }
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        source = row.get("source_key") or row.get("source")
+        if source in current_source_counts:
+            current_source_counts[source] += 1
+
+    previous_generated_at = str(previous["generated_at_utc"])
+    previous_reports = previous.get("source_reports", {})
+    for source, report in list(reports.items()):
+        if source not in SOURCE_CHOICES or not isinstance(report, dict):
+            continue
+        try:
+            reported_rows = int(report.get("current_or_future_rows", 0))
+        except (TypeError, ValueError):
+            reported_rows = -1
+        if (
+            report.get("status") != "error"
+            or reported_rows != 0
+            or current_source_counts.get(source, 0) != 0
+        ):
+            continue
+
+        retained: list[dict[str, Any]] = []
+        for row in previous["rows"]:
+            row_source = row.get("source_key") or row.get("source")
+            if row_source != source or str(row.get("id")) in existing_ids:
+                continue
+            last_seen = parse_iso(row.get("last_seen_at"))
+            end_at = parse_iso(row.get("canonical_end_utc") or row.get("sale_end_at"))
+            if last_seen is None or not dt.timedelta(0) <= now - last_seen <= max_age:
+                continue
+            if end_at is not None and end_at <= now:
+                continue
+            retained.append(row)
+            existing_ids.add(str(row["id"]))
+        if not retained:
+            continue
+
+        rows.extend(retained)
+        reports[source] = {
+            **report,
+            "status": "partial",
+            "current_or_future_rows": len(retained),
+            "connector_error": dict(report),
+            "fallback": {
+                "used": True,
+                "reason": "connector_error_zero_rows",
+                "retained_rows": len(retained),
+                "snapshot_generated_at_utc": previous_generated_at,
+                "max_age_hours": max_age.total_seconds() / 3600,
+                "row_timestamps_preserved": True,
+                "previous_source_status": (
+                    previous_reports.get(source, {}).get("status")
+                    if isinstance(previous_reports.get(source), dict)
+                    else None
+                ),
+            },
+        }
+
+    rows.sort(key=lambda row: (row.get("canonical_end_utc") or "9999", row["id"]))
+    payload["row_count"] = len(rows)
+    return payload
+
+
 def write_payload(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -1282,6 +1433,7 @@ def main() -> int:
         timeout=max(3, args.timeout),
         e_leiloes_intermediate_ca=args.e_leiloes_intermediate_ca,
     )
+    apply_previous_snapshot_fallback(payload, args.out)
     write_payload(args.out, payload)
     print(json.dumps({
         "row_count": payload["row_count"],
