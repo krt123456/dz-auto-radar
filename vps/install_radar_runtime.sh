@@ -36,6 +36,7 @@ install -m 0755 "$SOURCE/auction_refresh.sh" /opt/sonardeals-radar/auction_refre
 install -m 0755 "$SOURCE/justiz_auktion_fetcher.py" /opt/sonardeals-radar/justiz_auktion_fetcher.py
 install -m 0755 "$SOURCE/multi_official_auction_fetcher.py" /opt/sonardeals-radar/multi_official_auction_fetcher.py
 install -m 0755 "$SOURCE/enrich_auction_ouedkniss.py" /opt/sonardeals-radar/enrich_auction_ouedkniss.py
+install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" "$ROOT/zoll_auktion_fetcher.py"
 install -m 0755 "$SOURCE/publish_radar_dashboard.py" /opt/sonardeals-radar/publish_radar_dashboard.py
 install -m 0755 "$SOURCE/audit_best_selection.py" /opt/sonardeals-radar/audit_best_selection.py
 install -m 0755 "$SOURCE/audit_live_convergence.py" /opt/sonardeals-radar/audit_live_convergence.py
