@@ -200,10 +200,20 @@ python3 "$RANKER" \
 PHASE="auction_fetch"
 ZOLL_FETCHER="${RADAR_ZOLL_FETCHER:-/home/krt/car_deal_finder/zoll_auktion_fetcher.py}"
 ZOLL_CSV="${RADAR_ZOLL_CSV:-/home/krt/eu_harvest/zoll_auktion_live.csv}"
+JUSTIZ_FETCHER="${RADAR_JUSTIZ_FETCHER:-/opt/sonardeals-radar/justiz_auktion_fetcher.py}"
+JUSTIZ_CSV="${RADAR_JUSTIZ_CSV:-/home/krt/eu_harvest/justiz_auktion_live.csv}"
+MULTI_AUCTION_FETCHER="${RADAR_MULTI_AUCTION_FETCHER:-/opt/sonardeals-radar/multi_official_auction_fetcher.py}"
+MULTI_AUCTION_CSV="${RADAR_MULTI_AUCTION_CSV:-/home/krt/eu_harvest/official_auction_live.csv}"
 IMPORTER="${RADAR_UNIVERSE_IMPORTER:-/home/krt/car_deal_finder/import_live_offers_to_universe.py}"
-notify running "$PHASE" "يجلب مزادات زول الرسمية (قابل للاستئناف: listing_id الموجودة تُتخطى)"
+notify running "$PHASE" "يجلب مزادات زول ووزارة العدل الرسمية"
 python3 "$ZOLL_FETCHER" --out "$ZOLL_CSV"
 python3 "$IMPORTER" --input-csv "$ZOLL_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+python3 "$JUSTIZ_FETCHER" --out "$JUSTIZ_CSV" --report "$STATE/justiz_auction_fetch_report.json"
+python3 "$IMPORTER" --input-csv "$JUSTIZ_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+python3 "$MULTI_AUCTION_FETCHER" --out "$MULTI_AUCTION_CSV" \
+  --report "$STATE/official_auction_fetch_report.json" \
+  --max-candidates "${RADAR_AUCTION_MAX_CANDIDATES_PER_SOURCE:-40}"
+python3 "$IMPORTER" --input-csv "$MULTI_AUCTION_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
 
 PHASE="auction_lane"
 notify running "$PHASE" "يبني مسار المزادات الموثق من الكون المقبول (fail-closed)"
@@ -212,6 +222,12 @@ python3 "$LANE_BUILDER" \
   --board "$ROOT/mobile_site_local/board.json" \
   --generated-at "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["data_generated_at_utc"])' "$ROOT/mobile_site_local/board.json")" \
   --output "$ROOT/mobile_site_local/auction_lane.json"
+python3 /opt/sonardeals-radar/enrich_auction_ouedkniss.py \
+  --lane "$ROOT/mobile_site_local/auction_lane.json" \
+  --cache "$STATE/runtime/ouedkniss_auction_reference_cache.json" \
+  --ttl-hours "${RADAR_OUEDKNISS_REFERENCE_TTL_HOURS:-6}" \
+  --max-queries "${RADAR_OUEDKNISS_MAX_QUERIES:-80}" \
+  || echo "RADAR_OUEDKNISS_REFERENCE_SKIPPED keeping auction rows without a local-market reference"
 
 PHASE="publication_audit"
 notify running "$PHASE" "يدقق مستقلًا أن المنشور هو الأفضل من كامل الكون المؤهل"

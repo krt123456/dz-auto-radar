@@ -1,0 +1,11 @@
+[Unit]
+Description=Update official vehicle auctions every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=3min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

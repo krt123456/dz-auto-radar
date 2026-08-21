@@ -32,6 +32,10 @@ if [[ ! -d "$SITE/.git" ]]; then
 fi
 
 install -m 0755 "$SOURCE/radar_refresh.sh" /opt/sonardeals-radar/radar_refresh.sh
+install -m 0755 "$SOURCE/auction_refresh.sh" /opt/sonardeals-radar/auction_refresh.sh
+install -m 0755 "$SOURCE/justiz_auktion_fetcher.py" /opt/sonardeals-radar/justiz_auktion_fetcher.py
+install -m 0755 "$SOURCE/multi_official_auction_fetcher.py" /opt/sonardeals-radar/multi_official_auction_fetcher.py
+install -m 0755 "$SOURCE/enrich_auction_ouedkniss.py" /opt/sonardeals-radar/enrich_auction_ouedkniss.py
 install -m 0755 "$SOURCE/publish_radar_dashboard.py" /opt/sonardeals-radar/publish_radar_dashboard.py
 install -m 0755 "$SOURCE/audit_best_selection.py" /opt/sonardeals-radar/audit_best_selection.py
 install -m 0755 "$SOURCE/audit_live_convergence.py" /opt/sonardeals-radar/audit_live_convergence.py
@@ -70,7 +74,8 @@ done
 systemctl daemon-reload
 if [[ "${INSTALL_ENABLE:-0}" == "1" ]]; then
   systemctl enable sonardeals-radar-poller.service \
-    sonardeals-radar-smart-refresh.timer sonardeals-radar-full-refresh.timer
+    sonardeals-radar-smart-refresh.timer sonardeals-radar-full-refresh.timer \
+    sonardeals-auction-refresh.timer
 fi
 
 if [[ "${INSTALL_START:-0}" == "1" ]]; then
@@ -79,7 +84,8 @@ if [[ "${INSTALL_START:-0}" == "1" ]]; then
     exit 64
   fi
   systemctl restart sonardeals-radar-poller.service
-  systemctl start sonardeals-radar-smart-refresh.timer sonardeals-radar-full-refresh.timer
+  systemctl start sonardeals-radar-smart-refresh.timer sonardeals-radar-full-refresh.timer \
+    sonardeals-auction-refresh.timer
 fi
 
 echo "RADAR_RUNTIME_INSTALL_PASS"

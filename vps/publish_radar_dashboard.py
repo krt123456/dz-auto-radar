@@ -467,6 +467,7 @@ AUCTION_LANE_REQUIRED_FIELDS = frozenset({
     "current_bid_eur", "canonical_end_utc", "ends_soon", "first_seen_at",
     "last_seen_at", "access_sale_note", "evidence",
 })
+AUCTION_LANE_OPTIONAL_FIELDS = frozenset({"ouedkniss_reference"})
 
 
 def validate_auction_lane(lane: Any) -> None:
@@ -497,8 +498,11 @@ def validate_auction_lane(lane: Any) -> None:
         for index, row in enumerate(rows):
             if not isinstance(row, dict):
                 raise RuntimeError(f"auction lane row {index} is not an object")
-            if set(row) != AUCTION_LANE_REQUIRED_FIELDS:
-                raise RuntimeError(f"auction lane row {index} does not have the exact lane fields")
+            fields = set(row)
+            if not AUCTION_LANE_REQUIRED_FIELDS.issubset(fields) or fields - (
+                AUCTION_LANE_REQUIRED_FIELDS | AUCTION_LANE_OPTIONAL_FIELDS
+            ):
+                raise RuntimeError(f"auction lane row {index} does not have the accepted lane fields")
             row_id = str(row.get("id") or "").strip()
             url = str(row.get("url") or "").strip()
             if not row_id or not url:
@@ -520,6 +524,19 @@ def validate_auction_lane(lane: Any) -> None:
                 raise RuntimeError(f"auction lane row {index} has an invalid registry priority")
             if not isinstance(row.get("evidence"), str) or not row["evidence"]:
                 raise RuntimeError(f"auction lane row {index} is missing source evidence")
+            reference = row.get("ouedkniss_reference")
+            if reference is not None:
+                if not isinstance(reference, dict):
+                    raise RuntimeError(f"auction lane row {index} has an invalid Ouedkniss reference")
+                if (
+                    type(reference.get("average_dzd")) is not int
+                    or reference["average_dzd"] <= 0
+                    or type(reference.get("sample_count")) is not int
+                    or reference["sample_count"] < 2
+                    or reference.get("source") != "Ouedkniss"
+                    or not valid_timestamp(reference.get("observed_at_utc"))
+                ):
+                    raise RuntimeError(f"auction lane row {index} has an invalid Ouedkniss reference")
 
 
 def embed_auction_lane(

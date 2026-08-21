@@ -216,7 +216,9 @@ try {
   const futureIso = new Date(Date.now() + 3600_000).toISOString();
   const pastIso = new Date(Date.now() - 3600_000).toISOString();
   const rows = [
-    lane(futureIso, 4000, 1, "2026-08-14T14:00:00Z", "a-1"),
+    { ...lane(futureIso, 4000, 1, "2026-08-14T14:00:00Z", "a-1"),
+      ouedkniss_reference: { average_dzd: 5_100_000, sample_count: 3,
+        observed_at_utc: nowIso, source: "Ouedkniss" } },
     lane(futureIso, 9000, 2, "2026-08-14T14:00:00Z", "a-2"),
     lane(pastIso, 7000, 3, "2026-08-14T14:00:00Z", "a-ended"),
   ];
@@ -269,10 +271,17 @@ try {
   check(evaluate(withLane, "VIEW.map(o=>o.id)").join(",") === "a-2", "auction search must filter lane rows");
   withLane.document.getElementById("q").value = "";
 
+  // normal filters must also apply inside the auction lane
+  withLane.document.getElementById("fsrc").value = "missing-source";
+  evaluate(withLane, "apply();");
+  check(evaluate(withLane, "VIEW.length") === 0, "auction source filter must filter lane rows");
+  withLane.document.getElementById("fsrc").value = "";
+
   // auction card must not claim ROI/profit and must show the bid and end
   evaluate(withLane, "apply();");
   const firstCard = evaluate(withLane, "cardForTest=auctionCard(VIEW[0]); cardForTest");
   check(firstCard.includes("المزايدة الحالية") && !/roi|profit|ربح|عائد/i.test(firstCard), "auction card must show bid without profit claims");
+  check(firstCard.includes("واد كنيس") && firstCard.includes("إعلانات مشابهة"), "auction card must show a validated Ouedkniss average");
 
   // cross-lane isolation: toggle off restores regular lane
   withLane.document.getElementById("fauction").checked = false;
@@ -289,6 +298,9 @@ try {
     ["bad bid", { ...payload.auction_lane, rows: [{ ...rows[0], current_bid_eur: 0 }] }],
     ["missing url", { ...payload.auction_lane, rows: [{ ...rows[0], url: "" }] }],
     ["bad registry digest", { ...payload.auction_lane, registry_digest: "" }],
+    ["bad Ouedkniss sample", { ...payload.auction_lane, lane_count: 1, rows: [{ ...rows[0],
+      ouedkniss_reference: { average_dzd: 5_100_000, sample_count: 1,
+        observed_at_utc: nowIso, source: "Ouedkniss" } }] }],
   ];
   for (const [name, laneMutant] of mutants) {
     const bad = makeSandbox({ local });
