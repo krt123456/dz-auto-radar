@@ -109,7 +109,9 @@ def import_eligible_fuel(value: Any) -> bool:
 
 
 
-def founder_eligible(year: Any, raw_json: str) -> tuple[bool, str]:
+def founder_eligible(
+    year: Any, raw_json: str, *, now: Optional[dt.datetime] = None
+) -> tuple[bool, str]:
     """Founder lane policy (mgr-fb1670...): years 2023-2026 only; year 2023
     additionally requires a full day+month registration date.
 
@@ -117,6 +119,8 @@ def founder_eligible(year: Any, raw_json: str) -> tuple[bool, str]:
       year_outside_2023_2026      - missing/zero year or outside 2023-2026
       year_2023_without_day_month - year 2023 but first_registration_date is
                                     absent or not a full DD.MM.YYYY date
+      registration_older_than_three_years - exact registration exceeds the
+                                            rolling three-year legal limit
     """
     try:
         y = int(year)
@@ -125,6 +129,7 @@ def founder_eligible(year: Any, raw_json: str) -> tuple[bool, str]:
     if y < FOUNDER_MIN_YEAR or y > FOUNDER_MAX_YEAR:
         return False, "year_outside_2023_2026"
     if y == 2023:
+        now = now or dt.datetime.now(UTC)
         reg = ""
         if raw_json:
             try:
@@ -133,6 +138,17 @@ def founder_eligible(year: Any, raw_json: str) -> tuple[bool, str]:
                 reg = ""
         if not _REG_DATE_RE.match(reg):
             return False, "year_2023_without_day_month"
+        try:
+            registered = dt.datetime.strptime(reg.strip(), "%d.%m.%Y").date()
+        except ValueError:
+            return False, "year_2023_without_day_month"
+        today = now.astimezone(UTC).date()
+        try:
+            cutoff = today.replace(year=today.year - 3)
+        except ValueError:  # 29 February -> 28 February three years earlier
+            cutoff = today.replace(year=today.year - 3, day=28)
+        if registered < cutoff:
+            return False, "registration_older_than_three_years"
     return True, ""
 
 def lane_query() -> str:
@@ -206,7 +222,7 @@ def auction_rows(
         if bid <= 0:
             excluded("hidden_or_missing_price")
             continue
-        ok_year, year_reason = founder_eligible(year, raw_json)
+        ok_year, year_reason = founder_eligible(year, raw_json, now=now)
         if not ok_year:
             excluded(year_reason)
             continue

@@ -192,6 +192,14 @@ f_bad = [
      frow("zoll-auktion", "badreg", "https://www.zoll-auktion.de/badreg", end=end_future, year=2023,
           raw={"first_registration_date": "2023-15-11"}),
      "year_2023_without_day_month"),
+    ("2023 with impossible calendar date excluded",
+     frow("zoll-auktion", "impossible-reg", "https://www.zoll-auktion.de/impossible-reg",
+          end=end_future, year=2023, raw={"first_registration_date": "31.02.2023"}),
+     "year_2023_without_day_month"),
+    ("2023 registration older than rolling three years excluded",
+     frow("zoll-auktion", "too-old-by-day", "https://www.zoll-auktion.de/too-old-by-day",
+          end=end_future, year=2023, raw={"first_registration_date": "16.08.2023"}),
+     "registration_older_than_three_years"),
 ]
 for name, row, reason in f_bad:
     lane, counts = run([row])
@@ -205,13 +213,13 @@ check("2024 rows need no registration date", len(lane) == 1)
 # mutation gate: a seeded defect that skips the founder filter must flip a test
 import build_auction_board as bab3
 orig_eligible = bab3.founder_eligible
-bab3.founder_eligible = lambda year, raw_json: (True, "")
+bab3.founder_eligible = lambda year, raw_json, **kwargs: (True, "")
 mutant_lane, _ = run([frow("zoll-auktion", "old", "https://www.zoll-auktion.de/old", end=end_future, year=2018)])
 bab3.founder_eligible = orig_eligible
 check("mutation gate: skipping founder filter lets 2018 row in",
       len(mutant_lane) == 1, negative=True)
 # second mutant: 2023 rows never require day+month
-bab3.founder_eligible = lambda year, raw_json: (True, "")
+bab3.founder_eligible = lambda year, raw_json, **kwargs: (True, "")
 mutant_lane, _ = run([frow("zoll-auktion", "noreg2", "https://www.zoll-auktion.de/noreg2", end=end_future, year=2023)])
 bab3.founder_eligible = orig_eligible
 check("mutation gate: dropping 2023 date rule lets no-reg 2023 row in",
