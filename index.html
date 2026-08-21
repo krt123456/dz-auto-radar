@@ -87,6 +87,14 @@ header{padding:22px 0 12px}
 .secondary-filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px}
 @media(min-width:760px){.secondary-filters{grid-template-columns:repeat(3,max-content);justify-content:start}}
 .check{display:flex;gap:8px;align-items:center;cursor:pointer}
+#auctionToggleWrap{display:none!important}
+.mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
+.mode-tab{border:1px solid var(--line);border-radius:14px;padding:13px 16px;cursor:pointer;
+  background:var(--card2);color:var(--mut);font-weight:800;font-size:.95rem}
+.mode-tab.active{border-color:rgba(34,211,165,.65);color:var(--txt);
+  background:linear-gradient(135deg,rgba(34,211,165,.22),rgba(56,189,248,.16));
+  box-shadow:0 0 0 1px rgba(34,211,165,.12)}
+.mode-tab[hidden]{display:none}
 
 /* ---------- cards ---------- */
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:12px}
@@ -190,6 +198,10 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
   </header>
 
   <section id="filters" aria-label="تصفية وترتيب العروض">
+    <div class="mode-tabs" role="tablist" aria-label="اختيار قسم العروض">
+      <button class="mode-tab active" id="regularModeBtn" type="button" role="tab" aria-selected="true">🚘 إعلانات السيارات الأوروبية</button>
+      <button class="mode-tab" id="auctionModeBtn" type="button" role="tab" aria-selected="false" hidden>🏛️ المزادات الرسمية <span id="auctionTabCount"></span></button>
+    </div>
     <div class="frow">
       <label class="sr-only" for="q">البحث في الموديل أو عنوان الإعلان</label>
       <input class="f" id="q" type="search" aria-label="البحث في الموديل أو عنوان الإعلان" placeholder="🔍 ابحث: موديل، عنوان…">
@@ -761,10 +773,22 @@ function boot(payload){
   ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
   ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
   const auctionWrap=$("auctionToggleWrap");
+  const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
+  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");
+  const paintModeTabs=auctionMode=>{
+    regularModeBtn.classList.toggle("active",!auctionMode);
+    auctionModeBtn.classList.toggle("active",auctionMode);
+    regularModeBtn.setAttribute("aria-selected",String(!auctionMode));
+    auctionModeBtn.setAttribute("aria-selected",String(auctionMode));
+  };
   if(AUCTION_LANE){
     auctionWrap.hidden=false;
+    auctionModeBtn.hidden=false;
+    $("auctionTabCount").textContent=`(${nf.format(AUCTION_LANE.length)})`;
     $("fauction").checked=true;
     $("fauction").addEventListener("change",()=>{
+      clearSectionFilters();
+      paintModeTabs($("fauction").checked);
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
@@ -784,8 +808,12 @@ function boot(payload){
       }
       page=1;apply();saveNavigationState();
     });
+    regularModeBtn.addEventListener("click",()=>{$("fauction").checked=false;$("fauction").dispatchEvent(new Event("change"));});
+    auctionModeBtn.addEventListener("click",()=>{$("fauction").checked=true;$("fauction").dispatchEvent(new Event("change"));});
   }else{
     auctionWrap.hidden=true;
+    auctionModeBtn.hidden=true;
+    paintModeTabs(false);
   }
   restoreNavigationState(navigationState);
   if(AUCTION_LANE)$("fauction").checked=true;

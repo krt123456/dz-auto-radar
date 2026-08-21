@@ -25,6 +25,7 @@ function makeStorage(initial = {}) {
 function stubElement(id) {
   const classes = new Set();
   const listeners = new Map();
+  const attributes = new Map();
   return {
     value: "",
     checked: id === "flive",
@@ -54,6 +55,8 @@ function stubElement(id) {
       for (const handler of listeners.get(event.type) || []) handler.call(this, event);
       return true;
     },
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    getAttribute(name) { return attributes.has(name) ? attributes.get(name) : null; },
   };
 }
 
@@ -245,9 +248,14 @@ try {
   };
 
   const withLane = makeSandbox({ local });
+  withLane.document.getElementById("fy").value = "2025";
+  withLane.document.getElementById("fp").value = "0-10000";
   bootWith(withLane, payload);
   check(withLane.document.getElementById("auctionToggleWrap").hidden === false, "toggle must be visible when the lane is present");
   check(withLane.document.getElementById("fauction").checked === true, "auction lane must be selected by default when present");
+  check(withLane.document.getElementById("auctionModeBtn").hidden === false, "separate auction tab must be visible when the lane is present");
+  check(withLane.document.getElementById("auctionModeBtn").classList.contains("active"), "separate auction tab must be active by default");
+  check(withLane.document.getElementById("fy").value === "" && withLane.document.getElementById("fp").value === "", "entering the auction section must clear regular-lane filters");
   check(evaluate(withLane, "AUCTION_LANE.length") === 3, "lane rows must be loaded into state");
   evaluate(withLane, "populateFilterOptions(true)");
   const sourceOptions = withLane.document.getElementById("fsrc").innerHTML;
