@@ -453,15 +453,6 @@ function validateAuctionLane(payload){
        typeof row.ends_soon!=="boolean"||typeof row.registry_priority!=="number"){
       throw contractFailure();
     }
-    const ref=row.ouedkniss_reference;
-    if(ref!==undefined&&ref!==null&&(
-       typeof ref!=="object"||Array.isArray(ref)||
-       !Number.isInteger(ref.average_dzd)||ref.average_dzd<=0||
-       !Number.isInteger(ref.sample_count)||ref.sample_count<2||
-       typeof ref.observed_at_utc!=="string"||!Number.isFinite(timestampMs(ref.observed_at_utc))||
-       ref.source!=="Ouedkniss")){
-      throw contractFailure();
-    }
   }
   return lane.rows;
 }
@@ -476,7 +467,7 @@ const DATA_MAX_AGE_MS=8*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
 const NAV_KEY="dzr-navigation-v2";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
-const NAV_CHECK_IDS=["flive","fnew","funseen","fauction"];
+const NAV_CHECK_IDS=["flive","fnew","funseen"];
 const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null;
 const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
@@ -524,28 +515,6 @@ function restoreNavigationState(state){
   const restoredPage=Number(state.page);
   page=Number.isInteger(restoredPage)&&restoredPage>0?restoredPage:1;
   return true;
-}
-
-function populateFilterOptions(auctionMode){
-  const rows=auctionMode?(AUCTION_LANE||[]):DATA;
-  const countryOf=o=>auctionMode?o.country:o.c;
-  const sourceOf=o=>auctionMode?o.source:o.s;
-  const fuelOf=o=>auctionMode?o.fuel:o.f;
-  const yearOf=o=>auctionMode?o.year:o.y;
-  const setOptions=(id,emptyLabel,values,labeler=value=>value)=>{
-    const select=$(id),previous=select.value;
-    select.innerHTML=`<option value="">${emptyLabel}</option>`+values.map(value=>
-      `<option value="${esc(value)}">${labeler(value)}</option>`).join("");
-    select.value=values.some(value=>String(value)===previous)?previous:"";
-  };
-  const countries=[...new Set(rows.map(countryOf).filter(Boolean))].sort();
-  setOptions("fc","كل الدول",countries,c=>`${FLAGS[c]||"🌍"} ${esc(CN[c]||c)}`);
-  const sources=[...new Set(rows.map(sourceOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  setOptions("fsrc","كل المصادر",sources,s=>esc(s));
-  const fuels=[...new Set(rows.map(fuelOf).filter(Boolean))].sort();
-  setOptions("ff","كل الوقود",fuels,f=>esc(FUEL_AR(f)));
-  const years=[...new Set(rows.map(yearOf).filter(y=>y>2000))].sort((a,b)=>b-a);
-  setOptions("fy","كل السنوات",years,y=>String(y));
 }
 
 function normalizeSearchText(value){
@@ -738,7 +707,15 @@ function boot(payload){
     `<div class="stat">لقطة البيانات<b>${fmtTime(dataTimestamp)}</b></div>`+
     `<div class="stat">بناء اللوحة<b>${fmtTime(boardTimestamp)}</b></div>`;
   updateHistoryStats();
-  populateFilterOptions(false);
+  const countries=[...new Set(DATA.map(o=>o.c))].sort();
+  $("fc").innerHTML='<option value="">كل الدول</option>'+countries.map(c=>
+    `<option value="${esc(c)}">${FLAGS[c]||"🌍"} ${esc(CN[c]||c)}</option>`).join("");
+  const sources=[...new Set(DATA.map(o=>o.s))].sort((a,b)=>a.localeCompare(b));
+  $("fsrc").innerHTML='<option value="">كل المصادر</option>'+sources.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join("");
+  const fs=[...new Set(DATA.map(o=>o.f))].sort();
+  $("ff").innerHTML='<option value="">كل الوقود</option>'+fs.map(f=>`<option value="${esc(f)}">${esc(FUEL_AR(f))}</option>`).join("");
+  const ys=[...new Set(DATA.map(o=>o.y).filter(y=>y>2000))].sort((a,b)=>b-a);
+  $("fy").innerHTML='<option value="">كل السنوات</option>'+ys.map(y=>`<option>${y}</option>`).join("");
   ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
   ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
   const auctionWrap=$("auctionToggleWrap");
@@ -753,7 +730,6 @@ function boot(payload){
           '<option value="auction_bid">💶 أقل مزايدة حاليًا باليورو</option>'+
           '<option value="auction_vetted">🛡️ أحدث مصدر موثق</option>';
         $("fs").value="auction_soon";
-        populateFilterOptions(true);
       }else{
         $("fs").innerHTML='<option value="ranked">✨ أفضل قيمة مرصودة ضمن روابط متحقق منها</option>'+
           '<option value="price">💶 الأقل سعراً باليورو</option>'+
@@ -761,7 +737,6 @@ function boot(payload){
           '<option value="recent">🕒 الأحدث رصدًا</option>'+
           '<option value="km">🛣️ الأقل كيلومترات</option>';
         $("fs").value=normalizeSortMode($("fs").dataset.regularSort||"ranked");
-        populateFilterOptions(false);
       }
       page=1;apply();saveNavigationState();
     });
@@ -769,11 +744,7 @@ function boot(payload){
     auctionWrap.hidden=true;
   }
   restoreNavigationState(navigationState);
-  if($("fauction").checked&&AUCTION_LANE){
-    $("fauction").dispatchEvent(new Event("change"));
-  }else{
-    $("fs").value=normalizeSortMode($("fs").value);
-  }
+  $("fs").value=normalizeSortMode($("fs").value);
   $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
@@ -826,18 +797,11 @@ function apply(){
   render();
 }
 function applyAuction(){
-  const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,
-        f=$("ff").value,y=$("fy").value,p=$("fp").value;
+  const q=normalizeSearchText($("q").value);
   const s=normalizeAuctionSortMode($("fs").value);
   const nowMs=Date.now();
-  let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
   VIEW=AUCTION_LANE.filter(row=>{
     if(!(timestampMs(row.canonical_end_utc)>nowMs))return false;
-    if(c&&row.country!==c)return false;
-    if(src&&row.source!==src)return false;
-    if(f&&row.fuel!==f)return false;
-    if(y&&String(row.year)!==y)return false;
-    if(!(row.current_bid_eur>=pmin&&row.current_bid_eur<=pmax))return false;
     if(!q)return true;
     const haystack=normalizeSearchText([row.title,row.model,row.country,CN[row.country]||"",row.source,row.registry_key].join(" "));
     return q.split(" ").every(token=>haystack.includes(token));
@@ -857,8 +821,6 @@ function auctionCard(row){
   const countryName=CN[row.country]||row.country;
   const endMs=timestampMs(row.canonical_end_utc);
   const soonBadge=row.ends_soon?'<span class="badge b-live">تنتهي قريبًا ⏳</span>':'';
-  const ref=row.ouedkniss_reference;
-  const ouedReference=ref?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`:"";
   const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="فتح المزاد: ${esc(row.title)}">فتح المزاد ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
   return `<article class="card auction" role="listitem">
@@ -878,7 +840,6 @@ function auctionCard(row){
       <div>🏛️ المصدر الرسمي <b>${esc(row.source)}</b></div>
     </div>
     <div class="recency">نهاية المزاد: <b>${fmtTime(endMs)}</b> · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
-    ${ouedReference}
     <div class="evidence">شروط الدخول: ${esc(row.access_sale_note)}</div>
     <div class="foot">
       <span class="verification">دليل المصدر: ${esc(row.evidence)}</span>
