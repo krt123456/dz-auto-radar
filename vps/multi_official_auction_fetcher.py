@@ -210,6 +210,13 @@ def _ovm_detail_to_row(detail: dict[str, Any], *, now: dt.datetime) -> dict[str,
     if not 2023 <= year <= 2026 or price <= 0:
         return None
     specifications = BeautifulSoup(str(data.get("specificaties") or ""), "html.parser").get_text(" ", strip=True)
+    condition_text = plain(" ".join([specifications, str(data.get("perceivedDeficiencies") or "")])).casefold()
+    document_or_condition_blocks = (
+        "kentekenbewijs ontbreekt", "registratiebewijs ontbreekt", "cvo dient nog", "niet rijvaardig",
+        "niet verkeersveilig", "start niet", "motorschade", "versnellingsbak defect", "total loss",
+    )
+    if detail.get("heeftGeenAfgifte") or any(marker in condition_text for marker in document_or_condition_blocks):
+        return None
     international = re.search(r"Eerste toelating internationaal\s*:\s*([^;|]+)", specifications, re.I)
     registration = first_date(data.get("registratiedatum")) or first_date(international.group(1) if international else "")
     if year == 2023 and not registration:
@@ -235,7 +242,7 @@ def _ovm_detail_to_row(detail: dict[str, Any], *, now: dt.datetime) -> dict[str,
         "transmission": plain(data.get("transmissie") or data.get("versnellingsbak")), "country": "NL",
         "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction",
         "sale_certainty": "auction",
-        "sale_certainty_note": "DRZ government-property auction; official API confirms an open lot and foreign bidders are allowed. Verify export papers, fees and condition before bidding.",
+        "sale_certainty_note": "DRZ government-property auction; official API confirms an open lot, foreign bidders, registration evidence and no explicit missing-document or major-condition marker. Verify export papers, fees and expert condition before bidding.",
     }
 
 

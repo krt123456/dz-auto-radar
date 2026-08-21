@@ -55,12 +55,13 @@ def make_db(rows):
     return con
 
 
-def frow(source, lid, url, end=None, price=5000, raw=None, last_seen="2026-08-17T02:00:00Z", year=2024):
+def frow(source, lid, url, end=None, price=5000, raw=None, last_seen="2026-08-17T02:00:00Z", year=2024,
+         fuel="petrol"):
     rj = {"auction_end_at": end} if end is not None else {}
     if raw:
         rj.update(raw)
     return (source, lid, url, f"{source} {lid}", "volkswagen golf", "DE",
-            price, year, 120000, "petrol", "public", last_seen, json.dumps(rj))
+            price, year, 120000, fuel, "public", last_seen, json.dumps(rj))
 
 
 def run(rows, regular_ids=frozenset(), regular_urls=frozenset(), now=NOW):
@@ -93,6 +94,12 @@ rows = [frow("zoll-auktion", "z-1", "https://www.zoll-auktion.de/x", end=end_fut
 lane, counts = run(rows)
 check("positive zoll row enters lane", len(lane) == 1)
 check("canonical end is UTC iso", lane[0]["canonical_end_utc"] == "2026-08-18T08:00:00+00:00")
+check("fuel: petrol allowed", bab.import_eligible_fuel("petrol"))
+check("fuel: electric allowed", bab.import_eligible_fuel("Elektro"))
+check("fuel: petrol hybrid allowed", bab.import_eligible_fuel("Hybrid (Benzin/Elektro)"))
+check("fuel: diesel rejected", not bab.import_eligible_fuel("diesel"), negative=True)
+check("fuel: diesel hybrid rejected", not bab.import_eligible_fuel("Hybrid (Diesel/Elektro)"), negative=True)
+check("fuel: ambiguous hybrid rejected", not bab.import_eligible_fuel("hybrid"), negative=True)
 
 # ---------- negative controls: every exclusion must fire --------------------
 excluded = [
@@ -105,6 +112,7 @@ excluded = [
     ("zero price excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=end_future, price=0), "hidden_or_missing_price"),
     ("negative price excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=end_future, price=-5), "hidden_or_missing_price"),
     ("non-numeric price excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=end_future, price="hidden"), "hidden_or_missing_price"),
+    ("diesel excluded by Algeria import rules", frow("zoll-auktion", "d", "https://www.zoll-auktion.de/d", end=end_future, fuel="diesel"), "fuel_not_import_eligible"),
     ("malformed raw_json excluded", ("zoll-auktion", "z", "https://www.zoll-auktion.de/x", "t", "m", "DE", 5000, 2024, 100, "petrol", "p", "2026-08-17T02:00:00Z", '{"auction_end_at": "2026-08-18T10:00:00Z", broken'), "malformed_raw_json"),
 ]
 for name, row, reason in excluded:

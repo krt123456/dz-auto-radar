@@ -65,6 +65,16 @@ class GenericOfficialAuctionTests(unittest.TestCase):
         }
         self.assertIsNone(module._ovm_detail_to_row(detail, now=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)))
 
+    def test_ovm_rejects_missing_registration_document(self) -> None:
+        detail = {
+            "id": 1, "volgNummer": "1", "sluitingsDatumISO": "2030-08-26T17:36:44Z", "hoogsteBod": 100,
+            "isClosed": False, "zichtbaar": True, "buitenlandseBiederToegestaan": True,
+            "categorie": {"id": 10}, "veiling": {"id": 2, "type": "DRZ", "isGeopend": True},
+            "kavelData": {"kavelDataType": "AUTO", "bouwjaar": "2024", "naam": "Volkswagen Golf 2024",
+                          "specificaties": "Eerste toelating internationaal: 18-03-2024. Het Duitse kentekenbewijs ontbreekt."},
+        }
+        self.assertIsNone(module._ovm_detail_to_row(detail, now=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)))
+
     def test_domaine_public_active_vehicle_is_admitted(self) -> None:
         item = {
             "id": 304166, "auction_type": "1", "professional_only": 0,

@@ -197,6 +197,51 @@ def parse_model_key(make: str, model: str, title: str) -> str:
     return "_".join(parts)[:80]
 
 
+def corrected_registration(page_text: str, labelled_registration: str) -> str:
+    """Use the oldest explicit registration date when a summary contradicts the description."""
+    candidates = [labelled_registration]
+    candidates.extend(re.findall(r"Erstzulassung\s*:\s*(\d{1,2}\.\d{1,2}\.\d{4})", strip_tags(page_text), re.I))
+    parsed = []
+    for value in candidates:
+        try:
+            parsed.append((datetime.strptime(value.strip(), "%d.%m.%Y"), value.strip()))
+        except (TypeError, ValueError):
+            pass
+    return min(parsed, key=lambda item: item[0])[1] if parsed else ""
+
+
+def import_condition_eligible(page_text: str, row: AuctionRow, *, now: Optional[datetime] = None) -> bool:
+    """Fail-closed precheck for decree 23-74 good-running-condition requirements."""
+    now = now or datetime.now(UTC)
+    text = strip_tags(page_text).casefold()
+    fuel = str(row.get("fuel") or "").casefold()
+    if any(token in fuel for token in ("diesel", "gazole", "tdi", "cdi")):
+        return False
+    if not (
+        any(token in fuel for token in ("electric", "elektro", "petrol", "benzin"))
+        and ("hybrid" not in fuel or any(token in fuel for token in ("petrol", "benzin")))
+    ):
+        return False
+    negative_markers = (
+        "bastlerfahrzeug", "ersatzteilspender", "unfallfahrzeug", "unfallschaden", "totalschaden",
+        "nicht fahrbereit", "nicht betriebs- und verkehrssicher", "nicht verkehrssicher",
+        "motorschaden", "getriebeschaden", "motor startet nicht", "fahrzeug startet nicht",
+        "nicht funktionsfähig", "erhebliche mängel", "gefährliche mängel",
+        "zulassungsbescheinigung fehlt", "fahrzeugpapiere fehlen", "papiere nicht vorhanden",
+    )
+    if any(marker in text for marker in negative_markers):
+        return False
+    if not re.search(r"unfallfrei\s*:\s*ja\b", text, re.I):
+        return False
+    hu_match = re.search(r"\bHU\s*:\s*(\d{1,2})[./](\d{4})", strip_tags(page_text), re.I)
+    if not hu_match:
+        return False
+    hu_month, hu_year = int(hu_match.group(1)), int(hu_match.group(2))
+    if not 1 <= hu_month <= 12 or (hu_year, hu_month) < (now.year, now.month):
+        return False
+    return True
+
+
 def parse_product_page(text: str, product_path: str) -> Optional[AuctionRow]:
     listing_match = LISTING_ID_RE.search(text)
     if not listing_match:
@@ -230,7 +275,7 @@ def parse_product_page(text: str, product_path: str) -> Optional[AuctionRow]:
     mileage_match = re.search(r"([\d.]+)", fields.get("Kilometerstand", ""))
     if mileage_match:
         mileage = int(mileage_match.group(1).replace(".", ""))
-    registration = fields.get("Erstzulassung", "") or ""
+    registration = corrected_registration(text, fields.get("Erstzulassung", "") or "")
 
     row: AuctionRow = {
         "listing_id": listing_id,
@@ -251,10 +296,7 @@ def parse_product_page(text: str, product_path: str) -> Optional[AuctionRow]:
         "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sale_term_code": "auction",
         "sale_certainty": "auction",
-        "sale_certainty_note": (
-            "Official customs auction (Zoll-Auktion); registration/bidding "
-            "details on the venue account."
-        ),
+        "sale_certainty_note": "Official Zoll-Auktion; Algeria import precheck passed for fuel, exact registration, accident-free evidence, current HU and no major/critical condition marker. Verify the expert inspection before bidding.",
     }
     log.info(
         "lot %s %s bid=%s end=%s",
@@ -301,6 +343,8 @@ def main() -> None:
 
     rows: List[AuctionRow] = []
     excluded_unparseable = 0
+    excluded_import_ineligible = 0
+    parsed_products = 0
     fetch_errors = 0
     seen = set()
 
@@ -323,12 +367,16 @@ def main() -> None:
             if row is None:
                 excluded_unparseable += 1
                 continue
+            parsed_products += 1
+            if not import_condition_eligible(text, row):
+                excluded_import_ineligible += 1
+                continue
             rows.append(row)
 
     # A broken category response must not erase the last good hourly snapshot.
-    if not seen or len(rows) < max(1, len(seen) // 2):
+    if not seen or parsed_products < max(1, len(seen) // 2):
         raise RuntimeError(
-            f"refusing incomplete Zoll snapshot: discovered={len(seen)} parsed={len(rows)}"
+            f"refusing incomplete Zoll snapshot: discovered={len(seen)} parsed={parsed_products}"
         )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     temporary = out_path.with_suffix(out_path.suffix + ".tmp")
@@ -343,6 +391,7 @@ def main() -> None:
         "refreshed_rows": len(rows),
         "discovered_listing_ids": len(seen),
         "excluded_unparseable": excluded_unparseable,
+        "excluded_import_ineligible": excluded_import_ineligible,
         "fetch_errors": fetch_errors,
         "atomic_snapshot": True,
     }

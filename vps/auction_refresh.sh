@@ -20,7 +20,7 @@ fi
 exec > >(tee -a "$STATE/logs/auction-refresh-$(date -u +%Y%m%d).log") 2>&1
 echo "AUCTION_REFRESH_START at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-python3 /home/krt/car_deal_finder/zoll_auktion_fetcher.py \
+python3 /opt/sonardeals-radar/zoll_auktion_fetcher.py \
   --out /home/krt/eu_harvest/zoll_auktion_live.csv
 python3 "$IMPORTER" --input-csv /home/krt/eu_harvest/zoll_auktion_live.csv \
   --db "$AUCTION_DATABASE" --batch-size 5000

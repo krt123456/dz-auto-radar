@@ -93,6 +93,20 @@ def parse_canonical_end(value: Any) -> Optional[dt.datetime]:
         return None
 
 
+def import_eligible_fuel(value: Any) -> bool:
+    """Algeria decree 23-74: electric, petrol, or petrol/electric hybrid only."""
+    fuel = str(value or "").strip().casefold()
+    if not fuel:
+        return False
+    if any(token in fuel for token in ("diesel", "gazole", "gasóleo", "tdi", "cdi")):
+        return False
+    if any(token in fuel for token in ("electric", "elektro", "électri", "electri")):
+        if "hybrid" in fuel or "hybride" in fuel:
+            return any(token in fuel for token in ("petrol", "benzin", "essence", "gasoline"))
+        return True
+    return any(token in fuel for token in ("petrol", "benzin", "essence", "gasoline"))
+
+
 
 
 def founder_eligible(year: Any, raw_json: str) -> tuple[bool, str]:
@@ -195,6 +209,9 @@ def auction_rows(
         ok_year, year_reason = founder_eligible(year, raw_json)
         if not ok_year:
             excluded(year_reason)
+            continue
+        if not import_eligible_fuel(fuel):
+            excluded("fuel_not_import_eligible")
             continue
         origin = (source, listing_id)
         if origin in seen_origins:
