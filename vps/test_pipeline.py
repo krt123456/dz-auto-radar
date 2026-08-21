@@ -433,6 +433,52 @@ class PipelineTest(unittest.TestCase):
                 len({offer["s"] for offer in payload["offers"]}),
             )
 
+    def test_auction_lane_content_changes_generation_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = self.write_v7_fixture(Path(directory))
+            baseline, _ = publisher.build_payload(fixture["args"])
+            lane_path = Path(directory) / "auction_lane.json"
+            fixture["args"].auction_lane = lane_path
+            lane = {
+                "schema_version": 1,
+                "lane": "auction",
+                "registry_digest": "fixture-registry-v1",
+                "generated_at_utc": fixture["board"]["data_generated_at_utc"],
+                "lane_count": 1,
+                "rows": [{
+                    "id": "zoll-auktion:fixture-1",
+                    "source": "Zoll-Auktion",
+                    "source_key": "zoll-auktion",
+                    "registry_key": "zoll-auktion",
+                    "registry_priority": 1,
+                    "url": "https://www.zoll-auktion.de/auction/fixture-1",
+                    "title": "Volkswagen Golf",
+                    "model": "volkswagen golf",
+                    "country": "DE",
+                    "year": 2025,
+                    "mileage": 10000,
+                    "fuel": "petrol",
+                    "seller": "public",
+                    "current_bid_eur": 12000,
+                    "canonical_end_utc": "2026-09-01T10:00:00+00:00",
+                    "ends_soon": False,
+                    "first_seen_at": "2026-08-20T10:00:00+00:00",
+                    "last_seen_at": "2026-08-21T10:00:00+00:00",
+                    "access_sale_note": "official public auction",
+                    "evidence": "official fixture",
+                }],
+            }
+            lane_path.write_text(json.dumps(lane), encoding="utf-8")
+            first, _ = publisher.build_payload(fixture["args"])
+            lane["rows"][0]["current_bid_eur"] += 500
+            lane_path.write_text(json.dumps(lane), encoding="utf-8")
+            second, _ = publisher.build_payload(fixture["args"])
+            self.assertNotEqual(baseline["generation_id"], first["generation_id"])
+            self.assertNotEqual(first["generation_id"], second["generation_id"])
+            self.assertEqual(
+                first["auction_lane"]["bound_generation_id"], first["generation_id"]
+            )
+
     def test_publisher_rejects_stale_missing_or_future_validation(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = self.write_v7_fixture(Path(directory))

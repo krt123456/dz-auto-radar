@@ -688,12 +688,33 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
     selected_hash = digest_ids(selected)
     candidate_fields_hash = digest_fields(candidates)
     selected_fields_hash = digest_fields(selected)
-    generation_id = hashlib.sha256(
-        (
-            f"{ALGORITHM_VERSION}\n{data_generated_at}\n"
-            f"{candidate_fields_hash}\n{selected_fields_hash}\n"
-        ).encode("utf-8")
-    ).hexdigest()[:16]
+    published_ids = {str(offer.get("id") or "") for offer in selected}
+    published_urls = {str(offer.get("u") or "") for offer in selected}
+    auction_lane_source: dict[str, Any] | None = None
+    auction_lane_input_sha256: str | None = None
+    auction_lane_path = getattr(args, "auction_lane", None)
+    if auction_lane_path is not None and auction_lane_path.is_file():
+        try:
+            lane = json.loads(auction_lane_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise RuntimeError(f"auction lane file is unreadable: {exc}") from exc
+        validate_auction_lane(lane)
+        for row in lane["rows"]:
+            if (
+                str(row.get("id") or "") in published_ids
+                or str(row.get("url") or "") in published_urls
+            ):
+                raise RuntimeError("auction lane row overlaps the regular lane")
+        auction_lane_source = lane
+        auction_lane_input_sha256 = canonical_json_sha256(lane)
+
+    generation_material = (
+        f"{ALGORITHM_VERSION}\n{data_generated_at}\n"
+        f"{candidate_fields_hash}\n{selected_fields_hash}\n"
+    )
+    if auction_lane_input_sha256 is not None:
+        generation_material += f"auction:{auction_lane_input_sha256}\n"
+    generation_id = hashlib.sha256(generation_material.encode("utf-8")).hexdigest()[:16]
 
     payload = {key: value for key, value in board.items() if key != "offers"}
     payload.update(
@@ -736,18 +757,15 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
             "offers": selected,
         }
     )
-    published_ids = {str(offer.get("id") or "") for offer in selected}
-    published_urls = {str(offer.get("u") or "") for offer in selected}
     auction_lane_block: dict[str, Any] | None = None
     auction_lane_sha256: str | None = None
-    auction_lane_path = getattr(args, "auction_lane", None)
-    if auction_lane_path is not None and auction_lane_path.is_file():
-        try:
-            lane = json.loads(auction_lane_path.read_text(encoding="utf-8"))
-        except (ValueError, OSError) as exc:
-            raise RuntimeError(f"auction lane file is unreadable: {exc}") from exc
+    if auction_lane_source is not None:
         auction_lane_block = embed_auction_lane(
-            lane, data_generated_at, generation_id, published_ids, published_urls,
+            auction_lane_source,
+            data_generated_at,
+            generation_id,
+            published_ids,
+            published_urls,
         )
         auction_lane_sha256 = canonical_json_sha256(auction_lane_block)
         payload["auction_lane"] = auction_lane_block
