@@ -481,6 +481,20 @@ const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null;
 const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
 const AUCTION_SORT_MODES=new Set(["auction_soon","auction_bid","auction_vetted"]);
+const AUCTION_SOURCE_CATALOG=Object.freeze([
+  ["zoll-auktion","Zoll-Auktion · DE"],
+  ["encheres-du-domaine","Les Enchères du Domaine · FR"],
+  ["justiz-auktion","Justiz-Auktion · DE/AT"],
+  ["boe-subastas","BOE Subastas · ES"],
+  ["kronofogden","Kronofogden Auktionstorget · SE"],
+  ["pvp-giustizia","Portale delle Vendite Pubbliche · IT"],
+  ["finshop","Fin Shop · BE"],
+  ["onlineveilingmeester","Domeinen Roerende Zaken / Onlineveilingmeester · NL"],
+  ["e-leiloes","e-Leilões · PT"],
+  ["licytacje-komornik","Licytacje Komornicze · PL"]
+]);
+const AUCTION_SOURCE_LABELS=new Map(AUCTION_SOURCE_CATALOG);
+const auctionSourceLabel=value=>AUCTION_SOURCE_LABELS.get(String(value||""))||String(value||"");
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
 const normalizeAuctionSortMode=value=>AUCTION_SORT_MODES.has(String(value||""))?String(value):"auction_soon";
 const SORT_HELP={
@@ -540,8 +554,12 @@ function populateFilterOptions(auctionMode){
   };
   const countries=[...new Set(rows.map(countryOf).filter(Boolean))].sort();
   setOptions("fc","كل الدول",countries,c=>`${FLAGS[c]||"🌍"} ${esc(CN[c]||c)}`);
-  const sources=[...new Set(rows.map(sourceOf).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
-  setOptions("fsrc","كل المصادر",sources,s=>esc(s));
+  const observedSources=[...new Set(rows.map(sourceOf).filter(Boolean))];
+  const sources=auctionMode
+    ? [...AUCTION_SOURCE_CATALOG.map(item=>item[0]),
+       ...observedSources.filter(source=>!AUCTION_SOURCE_LABELS.has(String(source)))]
+    : observedSources.sort((a,b)=>a.localeCompare(b));
+  setOptions("fsrc","كل المصادر",sources,s=>esc(auctionMode?auctionSourceLabel(s):s));
   const fuels=[...new Set(rows.map(fuelOf).filter(Boolean))].sort();
   setOptions("ff","كل الوقود",fuels,f=>esc(FUEL_AR(f)));
   const years=[...new Set(rows.map(yearOf).filter(y=>y>2000))].sort((a,b)=>b-a);
@@ -839,7 +857,7 @@ function applyAuction(){
     if(y&&String(row.year)!==y)return false;
     if(!(row.current_bid_eur>=pmin&&row.current_bid_eur<=pmax))return false;
     if(!q)return true;
-    const haystack=normalizeSearchText([row.title,row.model,row.country,CN[row.country]||"",row.source,row.registry_key].join(" "));
+    const haystack=normalizeSearchText([row.title,row.model,row.country,CN[row.country]||"",row.source,auctionSourceLabel(row.source),row.registry_key].join(" "));
     return q.split(" ").every(token=>haystack.includes(token));
   });
   const auctionSorts={
@@ -875,7 +893,7 @@ function auctionCard(row){
       <div>🛣️ العداد <b>${row.mileage?nf.format(row.mileage)+" كم":"—"}</b></div>
       <div>⛽ الوقود <b>${row.fuel?FUEL_AR(row.fuel):"—"}</b></div>
       <div>🌍 الدولة <b>${esc(countryName)}</b></div>
-      <div>🏛️ المصدر الرسمي <b>${esc(row.source)}</b></div>
+      <div>🏛️ المصدر الرسمي <b>${esc(auctionSourceLabel(row.source))}</b></div>
     </div>
     <div class="recency">نهاية المزاد: <b>${fmtTime(endMs)}</b> · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
     ${ouedReference}

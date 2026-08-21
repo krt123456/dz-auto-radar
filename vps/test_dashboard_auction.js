@@ -241,6 +241,15 @@ try {
   check(withLane.document.getElementById("auctionToggleWrap").hidden === false, "toggle must be visible when the lane is present");
   check(withLane.document.getElementById("fauction").checked === false, "toggle must default to unchecked when the lane is present");
   check(evaluate(withLane, "AUCTION_LANE.length") === 3, "lane rows must be loaded into state");
+  evaluate(withLane, "populateFilterOptions(true)");
+  const sourceOptions = withLane.document.getElementById("fsrc").innerHTML;
+  for (const source of [
+    "Zoll-Auktion", "Les Enchères du Domaine", "Justiz-Auktion", "BOE Subastas",
+    "Kronofogden Auktionstorget", "Portale delle Vendite Pubbliche", "Fin Shop",
+    "Domeinen Roerende Zaken", "e-Leilões", "Licytacje Komornicze",
+  ]) {
+    check(sourceOptions.includes(source), `${source} must always appear in the auction source filter`);
+  }
 
   // unchecked: regular offers only
   evaluate(withLane, "apply();");
