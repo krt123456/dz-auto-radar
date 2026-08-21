@@ -23,7 +23,7 @@ import json
 import re
 import sqlite3
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from auction_registry import (
     auction_source_by_key,
@@ -43,6 +43,16 @@ def canonical_sha256(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def atomic_write_json(path: Path, value: Any) -> None:
+    """Publish JSON snapshots atomically so the dashboard never reads a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
 def public_offer_id(source: Any, native_listing_id: Any) -> str:
     """The same public ID the regular lane would mint for this listing."""
     identity = [
@@ -53,6 +63,22 @@ def public_offer_id(source: Any, native_listing_id: Any) -> str:
 
 END_SOON_HOURS = 24
 UTC = dt.timezone.utc
+MONITORED_SCHEMA_VERSION = 1
+MONITORED_LANE = "official_auction_watch"
+MONITORED_MAX_AGE = dt.timedelta(hours=8)
+MONITORED_PRICE_KINDS = frozenset({
+    "current_bid", "starting_bid", "minimum_bid", "guide_price",
+    "sealed_bid", "hidden", "unknown", "minimum_offer", "base_price",
+})
+MONITORED_ELIGIBILITY = frozenset({
+    "eligible", "review_required", "not_eligible", "conditional", "unknown",
+})
+SCHENGEN_COUNTRIES = frozenset({
+    "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI",
+    "FR", "GR", "HR", "HU", "IS", "IT", "LI", "LT", "LU", "LV",
+    "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
+})
+SOURCE_COUNTRY_OVERRIDES = {"justiz-auktion": frozenset({"DE", "AT"})}
 # Founder directive (mgr-fb167017e21a4f598f763b1211af2888): the auction lane
 # shows ONLY model years 2023-2026 (cars eligible for import to Algeria in
 # 2026, i.e. not more than ~3 years old), and year 2023 rows additionally
@@ -201,16 +227,22 @@ def auction_rows(
         if reg is None:
             excluded("not_in_registry")
             continue
-        if auction_source_for_url(url) is None:
+        matched_reg = auction_source_for_url(url)
+        if matched_reg is None or matched_reg.key != reg.key:
             excluded("domain_mismatch")
             continue
         if not source_has_explicit_auction_semantics(source, raw_json):
             excluded("no_explicit_auction_semantics")
             continue
         raw_end = None
+        raw_payload: Dict[str, Any] = {}
         if raw_json:
             try:
-                raw_end = json.loads(raw_json).get("auction_end_at")
+                parsed_payload = json.loads(raw_json)
+                if not isinstance(parsed_payload, dict):
+                    raise TypeError("raw payload is not an object")
+                raw_payload = parsed_payload
+                raw_end = raw_payload.get("auction_end_at")
             except (ValueError, TypeError):
                 excluded("malformed_raw_json")
                 continue
@@ -220,6 +252,9 @@ def auction_rows(
             continue
         if end <= now:
             excluded("already_ended")
+            continue
+        if raw_payload.get("sale_term_code") != "auction-current-bid":
+            excluded("not_confirmed_current_bid")
             continue
         try:
             bid = int(price)
@@ -304,6 +339,329 @@ def _lane_sort_key(row: Dict[str, Any]) -> tuple:
     )
 
 
+def _positive_number(value: Any) -> Optional[int | float]:
+    """Return a finite positive price without turning a hidden price into zero."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not (number > 0 and number < float("inf")):
+        return None
+    return int(number) if number.is_integer() else number
+
+
+def _strict_monitored_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Project a strict row into the broader monitored-auction display contract."""
+    return {
+        **row,
+        "price_eur": row["current_bid_eur"],
+        "price_kind": "current_bid",
+        "price_currency": "EUR",
+        "price_amount": row["current_bid_eur"],
+        "price_label": "current bid",
+        "bid_visibility": "public",
+        "registration_date": "",
+        "sale_end_utc": row["canonical_end_utc"],
+        "eligibility_status": "eligible",
+        "eligibility_reason": (
+            "Passed the strict source, live-price, end-time, age, fuel, and "
+            "cross-lane gates; final bidder/lot checks still apply."
+        ),
+    }
+
+
+def _normalize_monitored_row(
+    value: Any,
+    *,
+    generated_at: dt.datetime,
+) -> tuple[Optional[Dict[str, Any]], str]:
+    """Validate a broad-watch row while refusing to promote it to strict eligible.
+
+    Connector assertions are useful evidence, but only ``auction_rows`` owns the
+    strict-eligible decision.  A broad row may therefore remain review-required
+    or explicitly not eligible; an input claim of ``eligible`` is downgraded.
+    """
+    if not isinstance(value, dict):
+        return None, "not_an_object"
+    source = " ".join(str(value.get("source_key") or value.get("source") or "").split())
+    row_id = str(value.get("id") or "").strip()
+    url = str(value.get("url") or "").strip()
+    title = " ".join(str(value.get("title") or "").split())
+    if not source or not row_id or not url or not title:
+        return None, "missing_identity"
+    registry = auction_source_by_key(source)
+    matched_registry = auction_source_for_url(url)
+    if registry is None:
+        return None, "not_in_registry"
+    if matched_registry is None or matched_registry.key != registry.key:
+        return None, "domain_mismatch"
+    country = str(value.get("country") or registry.country).strip().upper()
+    allowed_countries = SOURCE_COUNTRY_OVERRIDES.get(
+        registry.key, frozenset({registry.country.upper()})
+    )
+    if country not in SCHENGEN_COUNTRIES or country not in allowed_countries:
+        return None, "country_mismatch"
+
+    input_price_kind = str(value.get("price_kind") or "unknown").strip().lower()
+    if input_price_kind not in MONITORED_PRICE_KINDS:
+        return None, "bad_price_kind"
+    price_kind = {
+        "minimum_offer": "minimum_bid",
+        "base_price": "starting_bid",
+    }.get(input_price_kind, input_price_kind)
+    price_currency = str(value.get("price_currency") or "EUR").strip().upper()
+    price_amount = _positive_number(value.get("price_amount"))
+    price = _positive_number(value.get("price_eur"))
+    if price is None and price_currency == "EUR":
+        price = price_amount
+    if price_kind in {"current_bid", "starting_bid", "minimum_bid", "guide_price"} and price is None:
+        return None, "priced_kind_without_price"
+    if price_kind in {"hidden", "unknown"}:
+        price = None
+
+    raw_end = (
+        value.get("canonical_end_utc")
+        or value.get("sale_end_utc")
+        or value.get("sale_end_at")
+        or value.get("sale_end")
+    )
+    end = parse_canonical_end(raw_end) if raw_end not in (None, "") else None
+    if raw_end not in (None, "") and end is None:
+        return None, "bad_end"
+    if end is not None and end <= generated_at:
+        return None, "already_ended"
+
+    last_seen = parse_canonical_end(value.get("last_seen_at") or value.get("observed_at_utc"))
+    if last_seen is None:
+        return None, "bad_last_seen"
+    if last_seen > generated_at + dt.timedelta(minutes=5):
+        return None, "future_last_seen"
+    if generated_at - last_seen > MONITORED_MAX_AGE:
+        return None, "stale_last_seen"
+    input_status = str(value.get("eligibility_status") or "review_required").strip().lower()
+    if input_status not in MONITORED_ELIGIBILITY:
+        return None, "bad_eligibility_status"
+    status = {
+        "conditional": "review_required",
+        "unknown": "review_required",
+    }.get(input_status, input_status)
+    if status == "eligible":
+        status = "review_required"
+    reason = " ".join(str(value.get("eligibility_reason") or "").split())
+    if not reason:
+        reason = "Strict Algerian import and bidder eligibility have not both been verified."
+
+    def optional_int(key: str) -> Optional[int]:
+        raw = value.get(key)
+        if raw in (None, "") or isinstance(raw, bool):
+            return None
+        try:
+            number = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 0 else None
+
+    return {
+        "id": row_id,
+        "source": registry.key,
+        "source_key": registry.key,
+        "registry_key": registry.key,
+        "registry_priority": registry.priority,
+        "url": url,
+        "title": title,
+        "model": " ".join(str(value.get("model") or "").split()),
+        "country": country,
+        "year": optional_int("year"),
+        "mileage": optional_int("mileage") if value.get("mileage") not in (None, "") else optional_int("mileage_km"),
+        "fuel": " ".join(str(value.get("fuel") or "").split()),
+        "seller": " ".join(str(value.get("seller") or "").split()),
+        "price_eur": price,
+        "price_kind": price_kind,
+        "price_currency": price_currency,
+        "price_amount": price_amount if price_amount is not None else (
+            price if price_currency == "EUR" else None
+        ),
+        "price_label": " ".join(str(value.get("price_label") or "").split()),
+        "bid_visibility": " ".join(str(value.get("bid_visibility") or "").split()),
+        "registration_date": " ".join(str(value.get("registration_date") or "").split()),
+        "canonical_end_utc": end.isoformat() if end else None,
+        "sale_end_utc": end.isoformat() if end else None,
+        "ends_soon": bool(end and end - generated_at <= dt.timedelta(hours=END_SOON_HOURS)),
+        "first_seen_at": value.get("first_seen_at"),
+        "last_seen_at": last_seen.isoformat(),
+        "eligibility_status": status,
+        "eligibility_reason": reason,
+        "access_sale_note": " ".join(str(
+            value.get("access_sale_note") or _access_sale_note(registry.country)
+        ).split()),
+        "evidence": registry.evidence,
+    }, ""
+
+
+def monitored_rows(
+    strict_rows: Sequence[Dict[str, Any]],
+    input_paths: Sequence[Path],
+    *,
+    generated_at: str,
+) -> tuple[List[Dict[str, Any]], Dict[str, int]]:
+    """Merge strict rows with fail-closed broad-watch JSON connector outputs.
+
+    Input contract (one or more files): ``schema_version=1``, an aware
+    ``generated_at_utc``, ``row_count``, and ``rows``.  Strict rows always win
+    on duplicate id or URL, so a connector cannot weaken an eligibility label.
+    """
+    generated = parse_canonical_end(generated_at)
+    if generated is None:
+        raise RuntimeError("monitored auction generation timestamp is invalid")
+    output = [_strict_monitored_row(row) for row in strict_rows]
+    seen_ids = {str(row["id"]) for row in output}
+    seen_urls = {str(row["url"]) for row in output}
+    rejected: Dict[str, int] = {}
+
+    def reject(reason: str) -> None:
+        rejected[reason] = rejected.get(reason, 0) + 1
+
+    for path in input_paths:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            reject("input_unreadable")
+            continue
+        if (
+            not isinstance(document, dict)
+            or document.get("schema_version") != MONITORED_SCHEMA_VERSION
+            or document.get("lane") != MONITORED_LANE
+        ):
+            reject("input_bad_schema")
+            continue
+        source_generated = parse_canonical_end(document.get("generated_at_utc"))
+        raw_rows = document.get("rows")
+        if source_generated is None or not isinstance(raw_rows, list):
+            reject("input_bad_metadata")
+            continue
+        if document.get("row_count", len(raw_rows)) != len(raw_rows):
+            reject("input_count_mismatch")
+            continue
+        if source_generated > generated + dt.timedelta(minutes=5):
+            reject("input_future")
+            continue
+        if generated - source_generated > MONITORED_MAX_AGE:
+            reject("input_stale")
+            continue
+        for raw in raw_rows:
+            row, reason = _normalize_monitored_row(raw, generated_at=generated)
+            if row is None:
+                reject(reason)
+                continue
+            if row["id"] in seen_ids or row["url"] in seen_urls:
+                reject("duplicate")
+                continue
+            seen_ids.add(row["id"])
+            seen_urls.add(row["url"])
+            output.append(row)
+    output.sort(key=lambda row: (
+        0 if row["eligibility_status"] == "eligible" else
+        1 if row["eligibility_status"] == "review_required" else 2,
+        parse_canonical_end(row.get("canonical_end_utc")) or dt.datetime.max.replace(tzinfo=UTC),
+        row["registry_priority"],
+        row["id"],
+    ))
+    return output, rejected
+
+
+def build_monitored_watch(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    generated_at: str,
+    rejected_counts: Dict[str, int],
+    connector_reports: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Create the standalone same-origin broad-watch publication artifact."""
+    source_counts: Dict[str, Dict[str, int]] = {}
+    for row in rows:
+        source = str(row.get("source_key") or row.get("source") or "")
+        counters = source_counts.setdefault(
+            source, {"row_count": 0, "eligible": 0, "review_required": 0, "not_eligible": 0},
+        )
+        counters["row_count"] += 1
+        status = str(row.get("eligibility_status") or "review_required")
+        if status in counters:
+            counters[status] += 1
+    connector_reports = connector_reports or {}
+    all_sources = sorted(set(source_counts) | set(connector_reports))
+    reports = []
+    for source in all_sources:
+        counters = source_counts.get(
+            source,
+            {"row_count": 0, "eligible": 0, "review_required": 0, "not_eligible": 0},
+        )
+        reports.append({"source": source, **counters, **connector_reports.get(source, {})})
+    return {
+        "schema_version": MONITORED_SCHEMA_VERSION,
+        "lane": MONITORED_LANE,
+        "registry_digest": registry_digest_json(),
+        "generated_at_utc": generated_at,
+        "row_count": len(rows),
+        "source_reports": reports,
+        "rejected_counts": dict(sorted(rejected_counts.items())),
+        "rows": list(rows),
+    }
+
+
+def connector_report_summary(input_paths: Sequence[Path]) -> Dict[str, Dict[str, Any]]:
+    """Preserve a small public health summary, including zero/error sources."""
+    output: Dict[str, Dict[str, Any]] = {}
+    count_keys = (
+        "current_or_future_rows", "vehicle_rows", "current_or_future",
+        "accepted", "open_drz_vehicle_rows", "car_and_van_rows",
+    )
+    for path in input_paths:
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if not isinstance(document, dict):
+            continue
+        generated = document.get("generated_at_utc")
+        raw_reports = document.get("source_reports")
+        entries: List[tuple[str, Any]] = []
+        if isinstance(raw_reports, dict):
+            entries = [(str(key), value) for key, value in raw_reports.items()]
+        elif isinstance(raw_reports, list):
+            entries = [
+                (str(value.get("source") or ""), value)
+                for value in raw_reports if isinstance(value, dict)
+            ]
+        for source, raw in entries:
+            registry = auction_source_by_key(source)
+            if registry is None or not isinstance(raw, dict):
+                continue
+            error = str(raw.get("error") or "").strip()
+            errors = raw.get("errors")
+            if not error and isinstance(errors, list) and errors:
+                error = "; ".join(str(value) for value in errors[:2])
+            status = str(raw.get("status") or "").strip().lower()
+            if error:
+                status = "error"
+            elif status not in {"ok", "partial", "blocked", "error"}:
+                status = "ok"
+            declared_rows: Optional[int] = None
+            for key in count_keys:
+                value = raw.get(key)
+                if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                    declared_rows = value
+                    break
+            output[source] = {
+                "connector_status": status,
+                "connector_generated_at_utc": generated,
+                "connector_declared_rows": declared_rows,
+                "connector_error": error[:300] or None,
+            }
+    return output
+
+
 def build_lane(
     database: Path,
     *,
@@ -311,10 +669,14 @@ def build_lane(
     regular_lane_ids: frozenset[str],
     regular_lane_urls: frozenset[str],
     generated_at: Optional[str] = None,
+    monitored_generated_at: Optional[str] = None,
+    monitored_inputs: Sequence[Path] = (),
 ) -> Dict[str, Any]:
     """Read-only build: connect, read offers via registry lane, return payload."""
     if generated_at is None:
         generated_at = dt.datetime.now(UTC).isoformat()
+    if monitored_generated_at is None:
+        monitored_generated_at = generated_at
 
     def connect(path: Path) -> sqlite3.Connection:
         con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=120)
@@ -330,6 +692,9 @@ def build_lane(
         )
     finally:
         con.close()
+    broad_rows, broad_rejected = monitored_rows(
+        rows, monitored_inputs, generated_at=monitored_generated_at,
+    )
     return {
         "schema_version": 1,
         "lane": "auction",
@@ -338,6 +703,11 @@ def build_lane(
         "lane_count": len(rows),
         "excluded_counts": counts,
         "rows": rows,
+        "monitored_schema_version": MONITORED_SCHEMA_VERSION,
+        "monitored_generated_at_utc": monitored_generated_at,
+        "monitored_count": len(broad_rows),
+        "monitored_rejected_counts": broad_rejected,
+        "monitored_rows": broad_rows,
     }
 
 
@@ -390,6 +760,14 @@ def main() -> int:
                         help="bind the lane to this board generation (ISO)")
     parser.add_argument("--output", type=Path, default=Path("/tmp/auction_lane.json"))
     parser.add_argument("--max-observation-age-days", type=int, default=30)
+    parser.add_argument(
+        "--monitored-input", type=Path, action="append", default=[],
+        help="repeatable broad official-auction watch JSON (schema version 1)",
+    )
+    parser.add_argument(
+        "--monitored-output", type=Path, default=None,
+        help="standalone same-origin watch artifact; defaults beside --output",
+    )
     args = parser.parse_args()
 
     cutoff = args.cutoff or (
@@ -399,11 +777,28 @@ def main() -> int:
     payload = build_lane(args.database, cutoff=cutoff,
                          regular_lane_ids=regular_ids,
                          regular_lane_urls=regular_urls,
-                         generated_at=args.generated_at)
-    args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2))
+                         generated_at=args.generated_at,
+                         monitored_generated_at=dt.datetime.now(UTC).isoformat(),
+                         monitored_inputs=args.monitored_input)
+    atomic_write_json(args.output, payload)
+    # Legacy/main refresh callers build only the encrypted strict lane.  They
+    # must not overwrite a fresh broad snapshot with a strict-only file merely
+    # because they do not know about the new connector inputs yet.
+    if args.monitored_output is not None or args.monitored_input:
+        monitored_output = (
+            args.monitored_output or args.output.with_name("official_auction_watch.json")
+        )
+        watch = build_monitored_watch(
+            payload["monitored_rows"], generated_at=payload["monitored_generated_at_utc"],
+            rejected_counts=payload["monitored_rejected_counts"],
+            connector_reports=connector_report_summary(args.monitored_input),
+        )
+        atomic_write_json(monitored_output, watch)
     print(json.dumps({
         "lane_count": payload["lane_count"],
+        "monitored_count": payload["monitored_count"],
         "excluded_counts": payload["excluded_counts"],
+        "monitored_rejected_counts": payload["monitored_rejected_counts"],
     }, ensure_ascii=False))
     return 0
 

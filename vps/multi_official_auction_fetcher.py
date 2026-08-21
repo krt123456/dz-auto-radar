@@ -61,6 +61,12 @@ PRICE_LABEL = re.compile(
     r"offerta attuale|prezzo base|aktualna oferta|cena wywolawcza|hogsta bud|utrop|"
     r"hoogste bod|openingsbod|lance atual|valor base)\D{0,35}"
     r"([\d][\d\s.,]*)\s*(EUR|€|PLN|zł|SEK|kr)", re.I)
+CURRENT_PRICE_LABEL = re.compile(
+    r"\b(?:current bid|highest bid|aktuelles gebot|h[öo]chstgebot|"
+    r"enchere actuelle|prix actuel|puja actual|postura actual|offerta attuale|"
+    r"aktualna oferta|hogsta bud|hoogste bod|lance atual)\b",
+    re.I,
+)
 MILEAGE_LABEL = re.compile(
     r"(?:mileage|kilometerstand|kilometrage|kilométrage|kilometraje|chilometraggio|przebieg|"
     r"miltal|kilometerstand)\D{0,20}([\d .]+)\s*(?:km|kilometer)", re.I)
@@ -248,9 +254,10 @@ def _ovm_detail_to_row(detail: dict[str, Any], *, now: dt.datetime) -> dict[str,
     try:
         year = int(data.get("bouwjaar") or 0)
         price = float(detail.get("hoogsteBod") or 0)
+        bid_count = int(detail.get("aantalBiedingen") or 0)
     except (TypeError, ValueError):
         return None
-    if not 2023 <= year <= 2026 or price <= 0:
+    if not 2023 <= year <= 2026 or price <= 0 or bid_count <= 0:
         return None
     specifications = BeautifulSoup(str(data.get("specificaties") or ""), "html.parser").get_text(" ", strip=True)
     condition_text = plain(" ".join([specifications, str(data.get("perceivedDeficiencies") or "")])).casefold()
@@ -283,7 +290,8 @@ def _ovm_detail_to_row(detail: dict[str, Any], *, now: dt.datetime) -> dict[str,
         "price_eur": f"{int(round(price))}.00", "seller_type": "government_auction",
         "accident_free": "unknown", "service_history": "unknown",
         "transmission": plain(data.get("transmissie") or data.get("versnellingsbak")), "country": "NL",
-        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction",
+        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sale_term_code": "auction-current-bid",
         "sale_certainty": "auction",
         "sale_certainty_note": "DRZ government-property auction; official API confirms an open lot, foreign bidders, registration evidence and no explicit missing-document or major-condition marker. Verify export papers, fees and expert condition before bidding.",
     }
@@ -315,6 +323,7 @@ def harvest_onlineveilingmeester(session: requests.Session, *, timeout: int) -> 
             and item.get("buitenlandseBiederToegestaan")
             and category.get("id") in OVM_VEHICLE_CATEGORIES
             and end is not None and end > now and float(item.get("hoogsteBod") or 0) > 0
+            and int(item.get("aantalBiedingen") or 0) > 0
             and re.search(r"\b202[3-6]\b", plain(item.get("naam")))
         ):
             candidates.append(item)
@@ -353,7 +362,7 @@ def _domaine_item_to_row(item: dict[str, Any], *, now: dt.datetime) -> dict[str,
     year_match = re.search(r"20\d{2}", registration)
     year = int(year_match.group(0)) if year_match else 0
     try:
-        price = float(item.get("last_bid") or item.get("price_auction") or 0)
+        price = float(item.get("last_bid") or 0)
     except (TypeError, ValueError):
         return None
     if not 2023 <= year <= 2026 or price <= 0:
@@ -371,7 +380,8 @@ def _domaine_item_to_row(item: dict[str, Any], *, now: dt.datetime) -> dict[str,
         "mileage_km": re.sub(r"\D", "", mileage_match.group(1)) if mileage_match else "",
         "price_eur": f"{int(round(price))}.00", "seller_type": "government_auction",
         "accident_free": "unknown", "service_history": "unknown", "transmission": "", "country": "FR",
-        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction", "sale_certainty": "auction",
+        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sale_term_code": "auction-current-bid", "sale_certainty": "auction",
         "sale_certainty_note": "French Domaine government auction; official API confirms a live public lot not restricted to automotive professionals. Verify export papers, fees and condition.",
     }
 
@@ -555,7 +565,11 @@ def _czech_item_to_row(
         return None
 
     price = parse_amount(str(item.get("Price") or ""), "CZK", rates)
-    if price <= 0:
+    try:
+        bid_count = int(item.get("NbrOfBids") or 0)
+    except (TypeError, ValueError):
+        bid_count = 0
+    if price <= 0 or bid_count <= 0:
         return None
     mileage_match = re.search(r"(?:stav tachometru|najeto)\D{0,20}([\d .]+)\s*km", evidence_text, re.I)
     return {
@@ -567,7 +581,8 @@ def _czech_item_to_row(
         "mileage_km": re.sub(r"\D", "", mileage_match.group(1)) if mileage_match else "",
         "price_eur": f"{price}.00", "seller_type": "government_auction",
         "accident_free": "unknown", "service_history": "unknown", "transmission": "", "country": "CZ",
-        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction",
+        "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sale_term_code": "auction-current-bid",
         "sale_certainty": "auction",
         "sale_certainty_note": "Czech UZSVM state auction: official API current price and end, exact registration, eligible labelled fuel, explicit roadworthy statement and registration documents. Re-check the lot declaration and export before bidding.",
     }
@@ -859,7 +874,7 @@ def harvest_vebeg(source: Source, session: requests.Session, *, timeout: int) ->
             lot_match = re.search(r"Auktion/Los:\s*(\d+[.]\d+)", text, re.I)
             reg_match = re.search(r"Erstzulassung:\s*(\d{1,2})/(\d{2,4})", text, re.I)
             end_match = re.search(r"Gebotstermin:\s*(\d{1,2}[.]\d{1,2}[.]20\d{2}),\s*(\d{1,2}):(\d{2})", text, re.I)
-            price_match = re.search(r"(?:Aktuelles Gebot|Startpreis):\s*EUR\s*([\d.]+(?:,\d{2})?)", text, re.I)
+            price_match = re.search(r"Aktuelles Gebot:\s*EUR\s*([\d.]+(?:,\d{2})?)", text, re.I)
             if not (title_match and lot_match and reg_match and end_match and price_match):
                 continue
             year = int(reg_match.group(2)); year = year + 2000 if year < 100 else year
@@ -876,7 +891,8 @@ def harvest_vebeg(source: Source, session: requests.Session, *, timeout: int) ->
                 "fuel": "", "engine_cc": "", "mileage_km": re.sub(r"\D", "", mileage_match.group(1)) if mileage_match else "",
                 "price_eur": f"{price}.00", "seller_type": "government_auction", "accident_free": "unknown",
                 "service_history": "unknown", "transmission": "", "country": "DE",
-                "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"), "sale_term_code": "auction", "sale_certainty": "auction",
+                "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "sale_term_code": "auction-current-bid", "sale_certainty": "auction",
                 "sale_certainty_note": "VEBEG is wholly owned by the Federal Republic of Germany. Live auction price and end are explicit; verify bidder-account eligibility, export papers, VAT and condition.",
             })
         except (requests.RequestException, ValueError) as exc:
@@ -910,7 +926,7 @@ def parse_detail(markup: str, url: str, source: Source, rates: dict[str, float],
     if end is None or end <= now:
         return None
     price_match = PRICE_LABEL.search(text)
-    if not price_match:
+    if not price_match or not CURRENT_PRICE_LABEL.search(price_match.group(0)):
         return None
     token = price_match.group(2).lower()
     currency = "EUR" if token in {"eur", "€"} else "PLN" if token in {"pln", "zł"} else "SEK"
@@ -932,7 +948,7 @@ def parse_detail(markup: str, url: str, source: Source, rates: dict[str, float],
         "mileage_km": mileage, "price_eur": f"{price}.00", "seller_type": "auction",
         "accident_free": "unknown", "service_history": "unknown", "transmission": "",
         "country": source.country, "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "sale_term_code": "auction", "sale_certainty": "auction",
+        "sale_term_code": "auction-current-bid", "sale_certainty": "auction",
         "sale_certainty_note": f"Official {source.key} auction; verify registration, fees and lot conditions before bidding.",
     }
 

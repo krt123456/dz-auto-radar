@@ -257,6 +257,15 @@ def load_cache(path: Path) -> dict[str, Any]:
         return {}
 
 
+def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    temporary.replace(path)
+
+
 def enrich(lane: dict[str, Any], cache: dict[str, Any], *, ttl_hours: int,
            pages: int, timeout: int, sleep_seconds: float, max_queries: int) -> tuple[dict[str, Any], dict[str, Any]]:
     entries = cache.get("entries") if isinstance(cache.get("entries"), dict) else {}
@@ -318,9 +327,8 @@ def main() -> int:
     lane, cache = enrich(lane, cache, ttl_hours=args.ttl_hours, pages=args.pages,
                          timeout=args.timeout, sleep_seconds=args.sleep,
                          max_queries=args.max_queries)
-    args.lane.write_text(json.dumps(lane, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    args.cache.parent.mkdir(parents=True, exist_ok=True)
-    args.cache.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    atomic_write_json(args.lane, lane)
+    atomic_write_json(args.cache, cache)
     print(json.dumps(lane["ouedkniss_reference_summary"], ensure_ascii=False))
     return 0
 

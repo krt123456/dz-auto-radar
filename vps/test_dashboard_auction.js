@@ -206,6 +206,9 @@ try {
   check(wrapHtml.includes('id="fauction"'), "auction toggle checkbox must exist");
   check(wrapHtml.includes("hidden"), "auction toggle must start hidden");
   check(/[\u0600-\u06ff]/.test(wrapHtml), "auction toggle must have an Arabic label");
+  check(html.includes('id="eligibleAuctionsBtn"') && html.includes('id="allAuctionsBtn"'),
+    "auction section must expose strict-eligible and all-official controls");
+  check(html.includes("كل المزادات الرسمية"), "all-official control must have an Arabic label");
 
   const local = {
     "dzr-known-offers-v1": JSON.stringify(offers.map(row => row.id)),
@@ -309,6 +312,75 @@ try {
   const firstCard = evaluate(withLane, "cardForTest=auctionCard(VIEW[0]); cardForTest");
   check(firstCard.includes("المزايدة الحالية") && !/roi|profit|ربح|عائد/i.test(firstCard), "auction card must show bid without profit claims");
   check(firstCard.includes("واد كنيس") && firstCard.includes("إعلانات مشابهة"), "auction card must show a validated Ouedkniss average");
+
+  // broad monitored rows stay visibly distinct from strict eligible rows
+  const broadRows = [
+    {
+      id: "pvp-4620200", source: "pvp-giustizia", source_key: "pvp-giustizia",
+      registry_key: "pvp-giustizia", registry_priority: 6,
+      url: "https://pvp.giustizia.it/pvp/it/dettaglio_annuncio.page?id=4620200",
+      title: "MG ZS 2024", model: "MG ZS", country: "IT", year: 2024,
+      mileage_km: 12000, fuel: "petrol", seller: "court sale manager",
+      price_amount: 13800, price_currency: "EUR", price_eur: null,
+      price_kind: "base_price", price_label: "Prezzo base",
+      bid_visibility: "hidden_on_pvp", registration_date: "2024-03-12",
+      canonical_end_utc: futureIso, last_seen_at: nowIso,
+      eligibility_status: "conditional",
+      eligibility_reason: "Current bid and foreign bidder access require review.",
+      access_sale_note: "Registration with the sale manager applies.", evidence: "official-pvp",
+    },
+    {
+      id: "boe-hidden", source: "boe-subastas", source_key: "boe-subastas",
+      registry_key: "boe-subastas", registry_priority: 4,
+      url: "https://subastas.boe.es/detalleSubasta.php?idSub=BOE-SUB-1",
+      title: "Vehículo con puja oculta", model: "", country: "ES", year: null,
+      mileage: null, fuel: "", seller: "state",
+      price_amount: null, price_currency: "EUR", price_eur: null,
+      price_kind: "hidden", price_label: "Con puja",
+      bid_visibility: "login_required", registration_date: "",
+      canonical_end_utc: futureIso, last_seen_at: nowIso,
+      eligibility_status: "not_eligible",
+      eligibility_reason: "Remote bidder identity requirements are not met.",
+      access_sale_note: "DNI/NIE and bank requirements apply.", evidence: "official-boe",
+    },
+  ];
+  const broadPayload = {
+    ...payload,
+    auction_lane: {
+      ...payload.auction_lane,
+      monitored_schema_version: 1,
+      monitored_generated_at_utc: nowIso,
+      monitored_count: broadRows.length,
+      monitored_source_reports: [],
+      monitored_rows: broadRows,
+    },
+  };
+  const broad = makeSandbox({ local });
+  bootWith(broad, broadPayload);
+  check(evaluate(broad, "AUCTION_SCOPE") === "all", "all official auctions must be the default auction scope");
+  check(evaluate(broad, "AUCTION_MONITORED_LANE.length") === rows.length + broadRows.length,
+    "all-official scope must merge broad monitoring with strict rows");
+  evaluate(broad, "apply();");
+  check(evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"), "broad PVP row must be visible in all-official scope");
+  const broadCard = evaluate(broad, "auctionCard(VIEW.find(row=>row.id==='pvp-4620200'))");
+  check(broadCard.includes("سعر البداية") && broadCard.includes("يحتاج تحقق الأهلية") &&
+    !broadCard.includes("المزايدة الحالية الظاهرة"), "base price and conditional eligibility must be labelled honestly");
+  const hiddenCard = evaluate(broad, "auctionCard(VIEW.find(row=>row.id==='boe-hidden'))");
+  check(hiddenCard.includes("السعر غير ظاهر") && hiddenCard.includes("غير مؤهل للاستيراد"),
+    "hidden price and ineligible status must be explicit");
+  broad.document.getElementById("eligibleAuctionsBtn").dispatchEvent(new Event("click"));
+  check(evaluate(broad, "VIEW.every(row=>!['pvp-4620200','boe-hidden'].includes(row.id))"),
+    "strict-eligible scope must exclude broad-only monitoring rows");
+
+  const stalePayload = {
+    ...broadPayload,
+    auction_lane: { ...broadPayload.auction_lane, monitored_generated_at_utc: "2020-01-01T00:00:00Z" },
+  };
+  const stale = makeSandbox({ local });
+  bootWith(stale, stalePayload);
+  check(evaluate(stale, "AUCTION_WATCH_STATE") === "invalid" &&
+    evaluate(stale, "AUCTION_MONITORED_LANE.length") === rows.length,
+    "stale broad watch must fail safely while strict rows remain available");
 
   // cross-lane isolation: toggle off restores regular lane
   withLane.document.getElementById("fauction").checked = false;

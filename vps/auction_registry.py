@@ -77,7 +77,7 @@ _AUCTION_SOURCES: List[AuctionSource] = [
                   ("subastas.boe.es",), 8,
                   "founder mgr-e325f6c9e1fb46caa29d008a75a1e20d + design doc prio 7"),
     AuctionSource("kronofogden", "Kronofogden Auktionstorget", "se",
-                  ("auktionstorget.kronofogden.se",), 9,
+                  ("auktionstorget.kronofogden.se", "auktion.kronofogden.se"), 9,
                   "founder mgr-e325f6c9e1fb46caa29d008a75a1e20d"),
     AuctionSource("e-leiloes", "e-Leilões", "pt",
                   ("e-leiloes.pt",), 10,

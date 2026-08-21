@@ -97,11 +97,17 @@ def parse_detail(markup: str, url: str, *, now: datetime | None = None) -> dict[
         return None
     if end <= now:
         return None
-    bid = money(values.get("Aktuelles Gebot", "")) or money(values.get("Startgebot", ""))
+    bid = money(values.get("Aktuelles Gebot", ""))
     if bid <= 0:
         return None
     description_node = soup.select_one("#beschreibung") or soup.select_one("div.beschreibung")
     description = compact((description_node or soup).get_text(" ", strip=True))
+    if (
+        not re.search(r"Fahrbereit\s*:\s*Ja\b", description, re.I)
+        or not re.search(r"Papiere\s+vorhanden\s*:\s*Ja\b", description, re.I)
+        or re.search(r"(?:nicht\s+fahrbereit|Motorschaden|Unfallfahrzeug|Bastlerfahrzeug)", description, re.I)
+    ):
+        return None
     registration_match = re.search(r"Erstzulassung\s*:\s*(\d{1,2}\.\d{1,2}\.\d{4})", description, re.I)
     registration = registration_match.group(1) if registration_match else ""
     registration_year = int(DATE_RE.search(registration).group(3)) if DATE_RE.search(registration) else 0
@@ -130,8 +136,11 @@ def parse_detail(markup: str, url: str, *, now: datetime | None = None) -> dict[
         "accident_free": "unknown", "service_history": "unknown",
         "transmission": transmission, "country": country,
         "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "sale_term_code": "auction", "sale_certainty": "auction",
-        "sale_certainty_note": "Official German/Austrian justice auction; verify lot conditions before bidding.",
+        "sale_term_code": "auction-current-bid", "sale_certainty": "auction",
+        "sale_certainty_note": (
+            "Official German/Austrian justice auction with an explicit current bid, "
+            "roadworthy statement and vehicle papers; verify lot conditions before bidding."
+        ),
     }
 
 

@@ -103,7 +103,8 @@ if row is not None:
     for k, want in [
         ("listing_id", "974241"),
         ("auction_end_at", "2026-08-18T05:00:00Z"),
-        ("price_eur", "43500.00"),
+        ("price_eur", ""),
+        ("sale_term_code", "auction"),
         ("source", "zoll-auktion"),
         ("country", "DE"),
         ("mileage_km", 9800),
@@ -121,6 +122,7 @@ if row2 is not None:
         ("listing_id", "969490"),
         ("auction_end_at", "2026-08-18T05:37:00Z"),
         ("price_eur", "34700.00"),
+        ("sale_term_code", "auction-current-bid"),
     ]:
         check(f"prod2 {k}={want}", row2.get(k) == want, f"got {row2.get(k)!r}")
 

@@ -57,7 +57,7 @@ def make_db(rows):
 
 def frow(source, lid, url, end=None, price=5000, raw=None, last_seen="2026-08-17T02:00:00Z", year=2024,
          fuel="petrol"):
-    rj = {"auction_end_at": end} if end is not None else {}
+    rj = {"auction_end_at": end, "sale_term_code": "auction-current-bid"} if end is not None else {}
     if raw:
         rj.update(raw)
     return (source, lid, url, f"{source} {lid}", "volkswagen golf", "DE",
@@ -86,6 +86,8 @@ check("registry zoll evidence cites founder", "mgr-e325f6c9" in auction_source_b
 ro = auction_source_by_key("zoll-auktion")
 check("zoll priority 1", ro.priority == 1)
 check("domain match zoll", auction_source_for_url("https://www.zoll-auktion.de/auktion/kategorie/Fahrzeuge/191") is not None)
+check("domain match Kronofogden live auction host",
+      auction_source_for_url("https://auktion.kronofogden.se/auk/w.ObjectList?inC=KFM&inA=WEB").key == "kronofogden")
 cz = auction_source_for_url("https://nabidkamajetku.gov.cz/Home/AuctionDetail/61592")
 check("domain match Czech UZSVM", cz is not None and cz.key == "nabidka-majetku")
 # negative control: unrelated domain never matches
@@ -109,6 +111,8 @@ check("fuel: ambiguous hybrid rejected", not bab.import_eligible_fuel("hybrid"),
 excluded = [
     ("unregistered source excluded", frow("mobile.de", "m", "https://mobile.de/x", end=end_future), "not_in_registry"),
     ("domain mismatch excluded", frow("zoll-auktion", "z", "https://fake.example/z", end=end_future), "domain_mismatch"),
+    ("cross-official-domain mismatch excluded", frow("zoll-auktion", "z2", "https://pvp.giustizia.it/pvp/it/detail_annuncio.page?idAnnuncio=2", end=end_future), "domain_mismatch"),
+    ("starting price cannot enter current-bid lane", frow("zoll-auktion", "start", "https://www.zoll-auktion.de/start", end=end_future, raw={"sale_term_code": "auction"}), "not_confirmed_current_bid"),
     ("no explicit auction semantics excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end=None, raw={"title": "car"}), "no_explicit_auction_semantics"),
     ("naive end excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end="2026-08-18T10:00:00"), "malformed_or_naive_end"),
     ("malformed end excluded", frow("zoll-auktion", "z", "https://www.zoll-auktion.de/x", end="tomorrow-ish"), "malformed_or_naive_end"),
@@ -273,7 +277,10 @@ with _tf.TemporaryDirectory() as _td:
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         ("zoll-auktion", "z1", "https://www.zoll-auktion.de/z1", "t", "m", "DE", 5000,
          2024, 100, "petrol", "p", "2026-08-17T02:00:00Z",
-         _json.dumps({"auction_end_at": "2030-01-01T10:00:00Z"})))
+         _json.dumps({
+             "auction_end_at": "2030-01-01T10:00:00Z",
+             "sale_term_code": "auction-current-bid",
+         })))
     con.commit(); con.close()
     payload = bab.build_lane(_db, cutoff="2026-01-01T00:00:00Z",
                              regular_lane_ids=frozenset(), regular_lane_urls=frozenset(),
@@ -298,6 +305,129 @@ with _tf.TemporaryDirectory() as _td:
 lane, counts = run([frow("zoll-auktion", "p", "https://www.zoll-auktion.de/p", end=end_soon)])
 check("no profit key in lane rows", all("profit" not in json.dumps(r) for r in lane) and
       "profit" not in json.dumps(counts))
+
+# ---------- broad official-auction watch: separate, labelled, fail-closed ----
+watch_now = dt.datetime(2026, 8, 17, 6, 0, 0, tzinfo=UTC)
+pvp_raw = {
+    "id": "pvp-giustizia:4620200",
+    "source": "pvp-giustizia",
+    "url": "https://pvp.giustizia.it/pvp/it/dettaglio_annuncio.page?id=4620200",
+    "title": "MG ZS 2024",
+    "model": "MG ZS",
+    "country": "IT",
+    "year": 2024,
+    "mileage_km": 12000,
+    "fuel": "petrol",
+    "price_amount": 13800,
+    "price_currency": "EUR",
+    "price_kind": "base_price",
+    "price_label": "Prezzo base",
+    "bid_visibility": "hidden_on_pvp",
+    "registration_date": "2024-03-12",
+    "canonical_end_utc": "2026-08-24T10:00:00Z",
+    "last_seen_at": "2026-08-17T05:45:00Z",
+    "eligibility_status": "conditional",
+    "eligibility_reason": "Current bid and foreign-bidder access require review.",
+    "access_sale_note": "Sale manager registration applies.",
+}
+normalized, reason = bab._normalize_monitored_row(pvp_raw, generated_at=watch_now)
+check("broad watch accepts a registry/domain-backed PVP row", normalized is not None and reason == "")
+check("base_price normalized without claiming current bid",
+      normalized["price_kind"] == "starting_bid" and normalized["price_eur"] == 13800)
+check("conditional eligibility remains review-required",
+      normalized["eligibility_status"] == "review_required")
+check("broad watch preserves connector evidence fields",
+      normalized["mileage"] == 12000 and normalized["registration_date"] == "2024-03-12" and
+      normalized["bid_visibility"] == "hidden_on_pvp" and normalized["price_label"] == "Prezzo base")
+eligible_claim = dict(pvp_raw, id="pvp-giustizia:claim", eligibility_status="eligible")
+claimed, _ = bab._normalize_monitored_row(eligible_claim, generated_at=watch_now)
+check("connector cannot promote a broad row into the strict eligible lane",
+      claimed["eligibility_status"] == "review_required", negative=True)
+bad_domain = dict(pvp_raw, id="pvp-giustizia:bad", url="https://example.test/bad")
+rejected, reason = bab._normalize_monitored_row(bad_domain, generated_at=watch_now)
+check("broad watch rejects a non-registry domain",
+      rejected is None and reason == "domain_mismatch", negative=True)
+bad_country = dict(pvp_raw, id="pvp-giustizia:country", country="DZ")
+rejected, reason = bab._normalize_monitored_row(bad_country, generated_at=watch_now)
+check("broad watch rejects a country outside its official source",
+      rejected is None and reason == "country_mismatch", negative=True)
+stale_seen = dict(pvp_raw, id="pvp-giustizia:stale", last_seen_at="2026-08-16T20:00:00Z")
+rejected, reason = bab._normalize_monitored_row(stale_seen, generated_at=watch_now)
+check("broad watch rejects a stale row inside a fresh wrapper",
+      rejected is None and reason == "stale_last_seen", negative=True)
+future_seen = dict(pvp_raw, id="pvp-giustizia:future", last_seen_at="2026-08-17T07:00:00Z")
+rejected, reason = bab._normalize_monitored_row(future_seen, generated_at=watch_now)
+check("broad watch rejects a future observation",
+      rejected is None and reason == "future_last_seen", negative=True)
+strict_watch = bab._strict_monitored_row(lane[0])
+check("strict projection carries explicit current-bid and eligibility badges",
+      strict_watch["price_kind"] == "current_bid" and
+      strict_watch["eligibility_status"] == "eligible")
+artifact = bab.build_monitored_watch(
+    [strict_watch, normalized], generated_at=watch_now.isoformat(), rejected_counts={"duplicate": 1},
+)
+check("standalone watch has the same-origin publication contract",
+      artifact["schema_version"] == 1 and artifact["lane"] == "official_auction_watch" and
+      artifact["row_count"] == 2 and isinstance(artifact["source_reports"], list))
+
+with _tf.TemporaryDirectory() as _td:
+    input_path = _Path(_td) / "pvp-watch.json"
+    input_path.write_text(_json.dumps({
+        "schema_version": 1,
+        "lane": "official_auction_watch",
+        "generated_at_utc": "2026-08-17T05:45:00Z",
+        "row_count": 1,
+        "source_reports": {
+            "pvp-giustizia": {"status": "ok", "current_or_future_rows": 1},
+            "e-leiloes": {"status": "error", "current_or_future_rows": 0,
+                           "error": "geographic access timeout"},
+        },
+        "rows": [pvp_raw],
+    }), encoding="utf-8")
+    report_summary = bab.connector_report_summary([input_path])
+    check("zero/error connector remains visible in source health reports",
+          report_summary["e-leiloes"]["connector_status"] == "error" and
+          report_summary["e-leiloes"]["connector_declared_rows"] == 0)
+    merged, rejected_counts = bab.monitored_rows(
+        [lane[0]], [input_path], generated_at=watch_now.isoformat(),
+    )
+    check("broad input merges alongside strict rows", len(merged) == 2 and not rejected_counts)
+    stale_doc = _json.loads(input_path.read_text(encoding="utf-8"))
+    stale_doc["generated_at_utc"] = "2026-08-16T05:00:00Z"
+    input_path.write_text(_json.dumps(stale_doc), encoding="utf-8")
+    stale_rows, stale_rejected = bab.monitored_rows(
+        [lane[0]], [input_path], generated_at=watch_now.isoformat()
+    )
+    check(
+        "stale standalone connector is skipped without blocking strict",
+        len(stale_rows) == 1 and stale_rejected.get("input_stale") == 1,
+        negative=True,
+    )
+    input_path.write_text("{broken", encoding="utf-8")
+    broken_rows, broken_rejected = bab.monitored_rows(
+        [lane[0]], [input_path], generated_at=watch_now.isoformat()
+    )
+    check("corrupt optional connector cannot block strict",
+          len(broken_rows) == 1 and broken_rejected.get("input_unreadable") == 1,
+          negative=True)
+    input_path.write_text(_json.dumps({"schema_version": 99, "lane": "wrong"}), encoding="utf-8")
+    schema_rows, schema_rejected = bab.monitored_rows(
+        [lane[0]], [input_path], generated_at=watch_now.isoformat()
+    )
+    check("unsupported optional connector schema cannot block strict",
+          len(schema_rows) == 1 and schema_rejected.get("input_bad_schema") == 1,
+          negative=True)
+    input_path.write_text(_json.dumps({
+        "schema_version": 1, "lane": "official_auction_watch",
+        "generated_at_utc": watch_now.isoformat(), "row_count": 2,
+        "rows": [pvp_raw],
+    }), encoding="utf-8")
+    count_rows, count_rejected = bab.monitored_rows(
+        [lane[0]], [input_path], generated_at=watch_now.isoformat()
+    )
+    check("connector count mismatch cannot block strict",
+          len(count_rows) == 1 and count_rejected.get("input_count_mismatch") == 1,
+          negative=True)
 
 # ---------- mutation gate: a seeded defect must flip a test -----------------
 import build_auction_board as bab2

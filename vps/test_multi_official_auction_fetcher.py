@@ -33,7 +33,8 @@ class GenericOfficialAuctionTests(unittest.TestCase):
     def test_ovm_drz_vehicle_is_admitted(self) -> None:
         detail = {
             "id": 1890891, "volgNummer": "25", "sluitingsDatumISO": "2030-08-26T17:36:44Z",
-            "hoogsteBod": 10231, "isClosed": False, "zichtbaar": True, "buitenlandseBiederToegestaan": True,
+            "hoogsteBod": 10231, "aantalBiedingen": 3, "isClosed": False,
+            "zichtbaar": True, "buitenlandseBiederToegestaan": True,
             "categorie": {"id": 10}, "veiling": {"id": 9325, "type": "DRZ", "isGeopend": True},
             "kavelData": {"kavelDataType": "AUTO", "bouwjaar": "2023", "registratiedatum": "2023-11-16",
                           "naam": "Personenauto, Volkswagen, Polo, 2023", "merk": "Volkswagen", "model": "Polo",
@@ -43,7 +44,26 @@ class GenericOfficialAuctionTests(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(row["first_registration_date"], "2023-11-16")
         self.assertEqual(row["price_eur"], "10231.00")
+        self.assertEqual(row["sale_term_code"], "auction-current-bid")
         self.assertIn("/9325/kavels/25", row["source_url"])
+
+    def test_ovm_opening_amount_without_bids_is_not_a_current_bid(self) -> None:
+        detail = {
+            "id": 2, "volgNummer": "2", "sluitingsDatumISO": "2030-08-26T17:36:44Z",
+            "hoogsteBod": 10231, "aantalBiedingen": 0, "isClosed": False,
+            "zichtbaar": True, "buitenlandseBiederToegestaan": True,
+            "categorie": {"id": 10},
+            "veiling": {"id": 9325, "type": "DRZ", "isGeopend": True},
+            "kavelData": {"kavelDataType": "AUTO", "bouwjaar": "2024",
+                          "registratiedatum": "2024-11-16",
+                          "naam": "Volkswagen Polo 2024", "merk": "Volkswagen",
+                          "model": "Polo", "brandstof": "BENZINE"},
+        }
+        self.assertIsNone(
+            module._ovm_detail_to_row(
+                detail, now=dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc)
+            )
+        )
 
     def test_ovm_rejects_non_drz_or_foreign_blocked(self) -> None:
         base = {

@@ -33,10 +33,18 @@ fi
 
 install -m 0755 "$SOURCE/radar_refresh.sh" /opt/sonardeals-radar/radar_refresh.sh
 install -m 0755 "$SOURCE/auction_refresh.sh" /opt/sonardeals-radar/auction_refresh.sh
+install -m 0644 "$SOURCE/auction_registry.py" /opt/sonardeals-radar/auction_registry.py
+install -m 0755 "$SOURCE/build_auction_board.py" /opt/sonardeals-radar/build_auction_board.py
+install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" /opt/sonardeals-radar/zoll_auktion_fetcher.py
+install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" "$ROOT/zoll_auktion_fetcher.py"
 install -m 0755 "$SOURCE/justiz_auktion_fetcher.py" /opt/sonardeals-radar/justiz_auktion_fetcher.py
 install -m 0755 "$SOURCE/multi_official_auction_fetcher.py" /opt/sonardeals-radar/multi_official_auction_fetcher.py
+install -m 0755 "$SOURCE/pvp_official_auction_watch.py" /opt/sonardeals-radar/pvp_official_auction_watch.py
+install -m 0755 "$SOURCE/boe_kronofogden_watch_fetcher.py" /opt/sonardeals-radar/boe_kronofogden_watch_fetcher.py
+install -m 0755 "$SOURCE/fr_cz_de_official_watch.py" /opt/sonardeals-radar/fr_cz_de_official_watch.py
+install -m 0755 "$SOURCE/zoll_official_auction_watch.py" /opt/sonardeals-radar/zoll_official_auction_watch.py
+install -m 0755 "$SOURCE/be_pl_pt_official_watch.py" /opt/sonardeals-radar/be_pl_pt_official_watch.py
 install -m 0755 "$SOURCE/enrich_auction_ouedkniss.py" /opt/sonardeals-radar/enrich_auction_ouedkniss.py
-install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" "$ROOT/zoll_auktion_fetcher.py"
 install -m 0755 "$SOURCE/publish_radar_dashboard.py" /opt/sonardeals-radar/publish_radar_dashboard.py
 install -m 0755 "$SOURCE/audit_best_selection.py" /opt/sonardeals-radar/audit_best_selection.py
 install -m 0755 "$SOURCE/audit_live_convergence.py" /opt/sonardeals-radar/audit_live_convergence.py
@@ -59,7 +67,9 @@ if [[ -f "$SOURCE/certs/sectigo-public-server-authentication-ca-dv-r36.pem" ]]; 
     /opt/sonardeals-radar/certs/sectigo-public-server-authentication-ca-dv-r36.pem
 fi
 install -d -m 0755 /opt/sonardeals-radar/dashboard
-if [[ -f "$SOURCE/dashboard/index.html" ]]; then
+if [[ -f "$SOURCE/dashboard_index.html" ]]; then
+  DASHBOARD_INDEX="$SOURCE/dashboard_index.html"
+elif [[ -f "$SOURCE/dashboard/index.html" ]]; then
   DASHBOARD_INDEX="$SOURCE/dashboard/index.html"
 elif [[ -f "$SOURCE/../index.html" ]]; then
   DASHBOARD_INDEX="$SOURCE/../index.html"

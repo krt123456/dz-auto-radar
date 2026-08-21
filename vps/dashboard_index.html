@@ -95,6 +95,13 @@ header{padding:22px 0 12px}
   background:linear-gradient(135deg,rgba(34,211,165,.22),rgba(56,189,248,.16));
   box-shadow:0 0 0 1px rgba(34,211,165,.12)}
 .mode-tab[hidden]{display:none}
+.auction-scope{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.auction-scope[hidden]{display:none}
+.scope-button{border:1px solid var(--line);border-radius:999px;padding:8px 13px;cursor:pointer;
+  background:var(--card2);color:var(--mut);font-weight:700;font-size:.82rem}
+.scope-button.active{border-color:rgba(56,189,248,.58);background:rgba(56,189,248,.14);color:#d8f3ff}
+.b-review{background:rgba(251,191,36,.12);color:#fde68a;border:1px solid rgba(251,191,36,.38)}
+.b-ineligible{background:rgba(248,113,113,.12);color:#fecaca;border:1px solid rgba(248,113,113,.35)}
 
 /* ---------- cards ---------- */
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:12px}
@@ -202,6 +209,10 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <button class="mode-tab active" id="regularModeBtn" type="button" role="tab" aria-selected="true">🚘 إعلانات السيارات الأوروبية</button>
       <button class="mode-tab" id="auctionModeBtn" type="button" role="tab" aria-selected="false" hidden>🏛️ المزادات الرسمية <span id="auctionTabCount"></span></button>
     </div>
+    <div class="auction-scope" id="auctionScopeWrap" role="group" aria-label="نطاق المزادات" hidden>
+      <button class="scope-button" id="eligibleAuctionsBtn" type="button">✅ مؤهل مؤكّد بالبوابات <span id="eligibleAuctionCount"></span></button>
+      <button class="scope-button" id="allAuctionsBtn" type="button">🏛️ كل المزادات الرسمية <span id="allAuctionCount"></span></button>
+    </div>
     <div class="frow">
       <label class="sr-only" for="q">البحث في الموديل أو عنوان الإعلان</label>
       <input class="f" id="q" type="search" aria-label="البحث في الموديل أو عنوان الإعلان" placeholder="🔍 ابحث: موديل، عنوان…">
@@ -271,7 +282,7 @@ const COUNTRY_SEARCH_ALIASES={
   HU:"Hungary Magyarország Hongrie",GR:"Greece Ελλάδα Grèce",EE:"Estonia Eesti Estonie",LT:"Lithuania Lietuva Lituanie",
   IS:"Iceland Ísland Islande",LI:"Liechtenstein",MT:"Malta Malte"
 };
-const FUEL_AR=f=>({petrol:"بنزين",hybrid:"هجين"}[String(f||"").trim().toLowerCase()]||"غير محدد");
+const FUEL_AR=f=>({petrol:"بنزين",hybrid:"هجين",electric:"كهربائي",elektro:"كهربائي"}[String(f||"").trim().toLowerCase()]||"غير محدد");
 const nf=new Intl.NumberFormat("fr-FR",{maximumFractionDigits:0});
 const pctf=new Intl.NumberFormat("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:2});
 const finiteNumber=(value,fallback=0)=>{const number=Number(value);return Number.isFinite(number)?number:fallback;};
@@ -477,6 +488,75 @@ function validateAuctionLane(payload){
   }
   return lane.rows;
 }
+const WATCH_PRICE_KINDS=new Set(["current_bid","starting_bid","minimum_bid","guide_price","sealed_bid","hidden","unknown","minimum_offer","base_price"]);
+const WATCH_ELIGIBILITY=new Set(["eligible","review_required","not_eligible","conditional","unknown"]);
+const WATCH_MAX_AGE_MS=8*60*60*1000;
+function validateMonitoredAuctionRow(row){
+  if(typeof row!=="object"||!row||Array.isArray(row))throw contractFailure();
+  const source=String(row.source_key||row.source||"").trim();
+  const rawPriceKind=String(row.price_kind||"").trim();
+  const rawEligibility=String(row.eligibility_status||"").trim();
+  const priceKind=({minimum_offer:"minimum_bid",base_price:"starting_bid"})[rawPriceKind]||rawPriceKind;
+  const eligibility=({conditional:"review_required",unknown:"review_required"})[rawEligibility]||rawEligibility;
+  const currency=String(row.price_currency||"EUR").trim().toUpperCase();
+  const amount=typeof row.price_amount==="number"?row.price_amount:null;
+  const price=typeof row.price_eur==="number"?row.price_eur:(currency==="EUR"?amount:null);
+  const end=row.canonical_end_utc??row.sale_end_utc??row.sale_end_at??row.sale_end??null;
+  const lastSeen=row.last_seen_at||row.observed_at_utc;
+  const lastSeenMs=timestampMs(lastSeen),lastSeenAge=Date.now()-lastSeenMs;
+  const country=String(row.country||"").trim().toUpperCase();
+  const ref=row.ouedkniss_reference;
+  if(typeof row.id!=="string"||!row.id.trim()||typeof row.url!=="string"||safeUrl(row.url)==="#"||
+     typeof row.title!=="string"||!row.title.trim()||!AUCTION_SOURCE_LABELS.has(source)||
+     !officialAuctionUrl(source,row.url)||!SCHENGEN_AUCTION_COUNTRIES.has(country)||
+     !(AUCTION_SOURCE_COUNTRIES.get(source)||[]).includes(country)||
+     !WATCH_PRICE_KINDS.has(rawPriceKind)||!WATCH_ELIGIBILITY.has(rawEligibility)||
+     typeof row.eligibility_reason!=="string"||!row.eligibility_reason.trim()||
+     !Number.isFinite(lastSeenMs)||lastSeenAge < -5*60*1000||lastSeenAge>WATCH_MAX_AGE_MS||
+     (end!==null&&end!==undefined&&(!Number.isFinite(timestampMs(end))))||
+     (price!==null&&price!==undefined&&(!(typeof price==="number")||!Number.isFinite(price)||price<=0))||
+     (["current_bid","starting_bid","minimum_bid","guide_price"].includes(priceKind)&&!(typeof price==="number"&&price>0))||
+     (["hidden","unknown"].includes(priceKind)&&price!==null)||
+     (ref!==undefined&&ref!==null&&(
+       typeof ref!=="object"||Array.isArray(ref)||
+       !Number.isInteger(ref.average_dzd)||ref.average_dzd<=0||
+       !Number.isInteger(ref.sample_count)||ref.sample_count<2||
+       ref.source!=="Ouedkniss"||!Number.isFinite(timestampMs(ref.observed_at_utc))
+     )))throw contractFailure();
+  const mileage=row.mileage??row.mileage_km??null;
+  return {...row,source,source_key:source,price_eur:price,price_kind:priceKind,
+    eligibility_status:eligibility,mileage,canonical_end_utc:end,last_seen_at:lastSeen};
+}
+function validateOfficialAuctionWatch(value,lane){
+  if(value===undefined||value===null)return null;
+  if(typeof value!=="object"||Array.isArray(value)||value.schema_version!==1||
+     value.lane!=="official_auction_watch"||typeof value.registry_digest!=="string"||
+     !lane||value.registry_digest!==lane.registry_digest||!Array.isArray(value.rows)||
+     value.row_count!==value.rows.length||typeof value.source_reports!=="object"||value.source_reports===null)throw contractFailure();
+  const generated=timestampMs(value.generated_at_utc),age=Date.now()-generated;
+  if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
+  const ids=new Set(),urls=new Set(),rows=[];
+  for(const raw of value.rows){
+    const row=validateMonitoredAuctionRow(raw);
+    if(ids.has(row.id)||urls.has(row.url))throw contractFailure();
+    ids.add(row.id);urls.add(row.url);rows.push(row);
+  }
+  return rows;
+}
+function strictAsMonitored(row){
+  return {...row,price_eur:row.current_bid_eur,price_kind:"current_bid",
+    eligibility_status:"eligible",eligibility_reason:"اجتاز بوابات المصدر والسعر الحالي والعمر والوقود؛ يبقى التحقق النهائي من شروط المزايدة والملف."};
+}
+function mergeAuctionScopes(strictRows,monitoredRows){
+  const rows=strictRows.map(strictAsMonitored),ids=new Set(rows.map(row=>row.id)),urls=new Set(rows.map(row=>row.url));
+  for(const row of monitoredRows||[]){
+    if(ids.has(row.id)||urls.has(row.url))continue;
+    const safeRow=row.eligibility_status==="eligible"?{...row,eligibility_status:"review_required",
+      eligibility_reason:`لم يطابق هذا الصف مسار الأهلية الصارم؛ ${row.eligibility_reason}`} : row;
+    ids.add(safeRow.id);urls.add(safeRow.url);rows.push(safeRow);
+  }
+  return rows;
+}
 const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
 const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
@@ -490,7 +570,7 @@ const NAV_KEY="dzr-navigation-v2";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen","fauction"];
 const HISTORY_LIMIT=50000;
-let AUCTION_LANE=null;
+let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_SCOPE="eligible",AUCTION_WATCH_STATE="missing";
 const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
 const AUCTION_SORT_MODES=new Set(["auction_soon","auction_bid","auction_vetted"]);
 const AUCTION_SOURCE_CATALOG=Object.freeze([
@@ -501,14 +581,48 @@ const AUCTION_SOURCE_CATALOG=Object.freeze([
   ["kronofogden","Kronofogden Auktionstorget · SE"],
   ["pvp-giustizia","Portale delle Vendite Pubbliche · IT"],
   ["finshop","Fin Shop · BE"],
+  ["domeinenrz","Domeinen Roerende Zaken · NL"],
   ["onlineveilingmeester","Domeinen Roerende Zaken / Onlineveilingmeester · NL"],
   ["e-leiloes","e-Leilões · PT"],
   ["licytacje-komornik","Licytacje Komornicze · PL"],
   ["nabidka-majetku","Nabídka majetku ÚZSVM · CZ"],
-  ["vebeg","VEBEG Federal Surplus · DE"]
+  ["vebeg","VEBEG Federal Surplus · DE"],
+  ["alcopa","Alcopa Auction · FR"],
+  ["huutokaupat","Huutokaupat · FI"],
+  ["copart-de","Copart Germany · DE"]
 ]);
 const AUCTION_SOURCE_LABELS=new Map(AUCTION_SOURCE_CATALOG);
+const AUCTION_SOURCE_DOMAINS=new Map([
+  ["zoll-auktion",["zoll-auktion.de"]],
+  ["encheres-du-domaine",["encheres-domaine.gouv.fr"]],
+  ["justiz-auktion",["justiz-auktion.de"]],
+  ["boe-subastas",["subastas.boe.es"]],
+  ["kronofogden",["auktion.kronofogden.se","auktionstorget.kronofogden.se"]],
+  ["pvp-giustizia",["pvp.giustizia.it"]],
+  ["finshop",["finshop.belgium.be","fin.belgium.be"]],
+  ["domeinenrz",["domeinenrz.nl"]],
+  ["onlineveilingmeester",["onlineveilingmeester.nl"]],
+  ["e-leiloes",["e-leiloes.pt"]],
+  ["licytacje-komornik",["licytacje.komornik.pl"]],
+  ["nabidka-majetku",["nabidkamajetku.gov.cz"]],
+  ["vebeg",["vebeg.de"]],
+  ["alcopa",["alcopa-auction.fr","alcopa.fr"]],
+  ["huutokaupat",["huutokaupat.com"]],
+  ["copart-de",["copart.de"]]
+]);
+const SCHENGEN_AUCTION_COUNTRIES=new Set(["AT","BE","BG","CH","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IS","IT","LI","LT","LU","LV","MT","NL","NO","PL","PT","RO","SE","SI","SK"]);
+const AUCTION_SOURCE_COUNTRIES=new Map([
+  ["zoll-auktion",["DE"]],["encheres-du-domaine",["FR"]],["justiz-auktion",["DE","AT"]],
+  ["boe-subastas",["ES"]],["kronofogden",["SE"]],["pvp-giustizia",["IT"]],
+  ["finshop",["BE"]],["domeinenrz",["NL"]],["onlineveilingmeester",["NL"]],
+  ["e-leiloes",["PT"]],["licytacje-komornik",["PL"]],["nabidka-majetku",["CZ"]],
+  ["vebeg",["DE"]],["alcopa",["FR"]],["huutokaupat",["FI"]],["copart-de",["DE"]]
+]);
 const auctionSourceLabel=value=>AUCTION_SOURCE_LABELS.get(String(value||""))||String(value||"");
+const officialAuctionUrl=(source,value)=>{try{
+  const hostname=new URL(String(value||"")).hostname.toLowerCase().replace(/^www\./,"");
+  return (AUCTION_SOURCE_DOMAINS.get(String(source||""))||[]).some(domain=>hostname===domain||hostname.endsWith(`.${domain}`));
+}catch(error){return false;}};
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
 const normalizeAuctionSortMode=value=>AUCTION_SORT_MODES.has(String(value||""))?String(value):"auction_soon";
 const SORT_HELP={
@@ -520,8 +634,22 @@ const SORT_HELP={
 };
 const AUCTION_SORT_HELP={
   auction_soon:"تنتهي قريبًا: يرتب المزادات حسب نهاية المزاد الفعلية؛ المزادات المغلقة تُخفى فورًا.",
-  auction_bid:"أقل مزايدة حاليًا: يرتب سعر المزايدة الحالية باليورو من الأقل إلى الأعلى.",
+  auction_bid:"أقل سعر معلن: يرتب المبلغ المتاح باليورو، مع تمييز المزايدة الحالية عن سعر البداية أو الحد الأدنى.",
   auction_vetted:"أحدث مصدر موثق: يرتب حسب أولوية المصدر الرسمي ثم آخر رصد له."
+};
+const AUCTION_PRICE_KIND_LABELS={
+  current_bid:"المزايدة الحالية الظاهرة",
+  starting_bid:"سعر البداية — ليس المزايدة الحالية",
+  minimum_bid:"الحد الأدنى للعرض — ليس المزايدة الحالية",
+  guide_price:"سعر إرشادي — ليس المزايدة الحالية",
+  sealed_bid:"عرض مختوم؛ المزايدات غير ظاهرة",
+  hidden:"السعر الحالي محجوب",
+  unknown:"نوع السعر غير محسوم"
+};
+const AUCTION_ELIGIBILITY_LABELS={
+  eligible:"مؤهل مؤكّد بالبوابات الصارمة",
+  review_required:"يحتاج تحقق الأهلية",
+  not_eligible:"غير مؤهل للاستيراد"
 };
 
 function readNavigationState(){
@@ -554,8 +682,11 @@ function restoreNavigationState(state){
   return true;
 }
 
+const activeAuctionRows=()=>AUCTION_SCOPE==="all"?(AUCTION_MONITORED_LANE||AUCTION_LANE||[]):(AUCTION_LANE||[]);
+const auctionPrice=row=>typeof row.price_eur==="number"?row.price_eur:
+  (typeof row.current_bid_eur==="number"?row.current_bid_eur:null);
 function populateFilterOptions(auctionMode){
-  const rows=auctionMode?(AUCTION_LANE||[]):DATA;
+  const rows=auctionMode?activeAuctionRows():DATA;
   const countryOf=o=>auctionMode?o.country:o.c;
   const sourceOf=o=>auctionMode?o.source:o.s;
   const fuelOf=o=>auctionMode?o.fuel:o.f;
@@ -680,13 +811,35 @@ async function unlock(pin){
   const json=new TextDecoder().decode(await gunzip(plain));
   return JSON.parse(json);
 }
+async function loadOfficialAuctionWatch(payload){
+  try{
+    const response=await fetch(`official_auction_watch.json?v=${Date.now()}`,{cache:"no-store"});
+    if(!response.ok){AUCTION_WATCH_STATE="missing";return null;}
+    const rows=validateOfficialAuctionWatch(await response.json(),payload&&payload.auction_lane);
+    AUCTION_WATCH_STATE="ready";return rows;
+  }catch(error){AUCTION_WATCH_STATE="invalid";return null;}
+}
+function embeddedOfficialAuctionWatch(payload){
+  const lane=payload&&payload.auction_lane;
+  if(!lane||!Array.isArray(lane.monitored_rows))return null;
+  return validateOfficialAuctionWatch({
+    schema_version:lane.monitored_schema_version,
+    lane:"official_auction_watch",
+    registry_digest:lane.registry_digest,
+    generated_at_utc:lane.monitored_generated_at_utc||lane.generated_at_utc,
+    row_count:lane.monitored_count,
+    source_reports:Array.isArray(lane.monitored_source_reports)?lane.monitored_source_reports:[],
+    rows:lane.monitored_rows,
+  },lane);
+}
 
 /* ---------- lock flow ---------- */
 async function tryUnlock(pin,silent){
   $("enter").disabled=true;$("lockmsg").textContent=silent?"":"جاري الفتح…";$("lockmsg").style.color="var(--mut)";
   try{
     const payload=await unlock(pin);
-    boot(payload);
+    const monitored=await loadOfficialAuctionWatch(payload);
+    boot(payload,monitored);
     ACTIVE_PIN=pin;
     if($("remember").checked)localStorage.setItem("dzk",pin);
     sessionStorage.setItem("dzk",pin);
@@ -710,10 +863,18 @@ if(typeof DecompressionStream==="undefined"){
 }
 
 /* ---------- app ---------- */
-function boot(payload){
+function boot(payload,monitoredRows=null){
   const validated=validatePayload(payload);
   const offers=validated.offers;
   AUCTION_LANE=validated.lane;
+  if(AUCTION_LANE&&monitoredRows===null){
+    try{
+      monitoredRows=embeddedOfficialAuctionWatch(payload);
+      if(monitoredRows!==null)AUCTION_WATCH_STATE="ready";
+    }catch(error){AUCTION_WATCH_STATE="invalid";monitoredRows=null;}
+  }
+  AUCTION_MONITORED_LANE=AUCTION_LANE?mergeAuctionScopes(AUCTION_LANE,monitoredRows):null;
+  AUCTION_SCOPE="all";
   const navigationState=readNavigationState();
   DATA=offers.slice();
   ORIGINAL_RANK=new Map(DATA.map((offer,index)=>[offer.id,index]));
@@ -773,8 +934,9 @@ function boot(payload){
   populateFilterOptions(false);
   ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
   ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
-  const auctionWrap=$("auctionToggleWrap");
+  const auctionWrap=$("auctionToggleWrap"),auctionScopeWrap=$("auctionScopeWrap");
   const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
+  const eligibleAuctionsBtn=$("eligibleAuctionsBtn"),allAuctionsBtn=$("allAuctionsBtn");
   const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");
   const paintModeTabs=auctionMode=>{
     regularModeBtn.classList.toggle("active",!auctionMode);
@@ -782,19 +944,35 @@ function boot(payload){
     regularModeBtn.setAttribute("aria-selected",String(!auctionMode));
     auctionModeBtn.setAttribute("aria-selected",String(auctionMode));
   };
+  const paintAuctionScope=()=>{
+    eligibleAuctionsBtn.classList.toggle("active",AUCTION_SCOPE==="eligible");
+    allAuctionsBtn.classList.toggle("active",AUCTION_SCOPE==="all");
+    eligibleAuctionsBtn.setAttribute("aria-pressed",String(AUCTION_SCOPE==="eligible"));
+    allAuctionsBtn.setAttribute("aria-pressed",String(AUCTION_SCOPE==="all"));
+  };
+  const selectAuctionScope=scope=>{
+    AUCTION_SCOPE=scope==="eligible"?"eligible":"all";
+    clearSectionFilters();paintAuctionScope();populateFilterOptions(true);page=1;apply();saveNavigationState();
+  };
   if(AUCTION_LANE){
     auctionWrap.hidden=false;
     auctionModeBtn.hidden=false;
-    $("auctionTabCount").textContent=`(${nf.format(AUCTION_LANE.length)})`;
+    $("auctionTabCount").textContent=`(${nf.format(AUCTION_MONITORED_LANE.length)})`;
+    $("eligibleAuctionCount").textContent=`(${nf.format(AUCTION_LANE.length)})`;
+    $("allAuctionCount").textContent=`(${nf.format(AUCTION_MONITORED_LANE.length)})`;
     $("fauction").checked=true;
+    AUCTION_SCOPE="all";paintAuctionScope();
+    eligibleAuctionsBtn.addEventListener("click",()=>selectAuctionScope("eligible"));
+    allAuctionsBtn.addEventListener("click",()=>selectAuctionScope("all"));
     $("fauction").addEventListener("change",()=>{
       clearSectionFilters();
       paintModeTabs($("fauction").checked);
+      auctionScopeWrap.hidden=!$("fauction").checked;
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
         $("fs").innerHTML='<option value="auction_soon">⏳ تنتهي قريبًا</option>'+
-          '<option value="auction_bid">💶 أقل مزايدة حاليًا باليورو</option>'+
+          '<option value="auction_bid">💶 أقل سعر مزاد معلن باليورو</option>'+
           '<option value="auction_vetted">🛡️ أحدث مصدر موثق</option>';
         $("fs").value="auction_soon";
         populateFilterOptions(true);
@@ -813,6 +991,7 @@ function boot(payload){
     auctionModeBtn.addEventListener("click",()=>{$("fauction").checked=true;$("fauction").dispatchEvent(new Event("change"));});
   }else{
     auctionWrap.hidden=true;
+    auctionScopeWrap.hidden=true;
     auctionModeBtn.hidden=true;
     paintModeTabs(false);
   }
@@ -880,25 +1059,29 @@ function applyAuction(){
   const s=normalizeAuctionSortMode($("fs").value);
   const nowMs=Date.now();
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
-  VIEW=AUCTION_LANE.filter(row=>{
-    if(!(timestampMs(row.canonical_end_utc)>nowMs))return false;
+  const endRank=row=>timestampMs(row.canonical_end_utc)??Number.MAX_SAFE_INTEGER;
+  VIEW=activeAuctionRows().filter(row=>{
+    const end=timestampMs(row.canonical_end_utc),price=auctionPrice(row);
+    if(end!==null&&end<=nowMs)return false;
     if(c&&row.country!==c)return false;
     if(src&&row.source!==src)return false;
     if(f&&row.fuel!==f)return false;
     if(y&&String(row.year)!==y)return false;
-    if(!(row.current_bid_eur>=pmin&&row.current_bid_eur<=pmax))return false;
+    if(p&&!(typeof price==="number"&&price>=pmin&&price<=pmax))return false;
     if(!q)return true;
-    const haystack=normalizeSearchText([row.title,row.model,row.country,CN[row.country]||"",row.source,auctionSourceLabel(row.source),row.registry_key].join(" "));
+    const haystack=normalizeSearchText([row.title,row.model,row.country,CN[row.country]||"",row.source,auctionSourceLabel(row.source),row.registry_key,row.price_kind,row.eligibility_status,row.eligibility_reason].join(" "));
     return q.split(" ").every(token=>haystack.includes(token));
   });
   const auctionSorts={
-    auction_soon:(a,b)=>timestampMs(a.canonical_end_utc)-timestampMs(b.canonical_end_utc)||a.current_bid_eur-b.current_bid_eur,
-    auction_bid:(a,b)=>a.current_bid_eur-b.current_bid_eur||timestampMs(a.canonical_end_utc)-timestampMs(b.canonical_end_utc),
+    auction_soon:(a,b)=>endRank(a)-endRank(b)||(auctionPrice(a)??Number.MAX_SAFE_INTEGER)-(auctionPrice(b)??Number.MAX_SAFE_INTEGER),
+    auction_bid:(a,b)=>(auctionPrice(a)??Number.MAX_SAFE_INTEGER)-(auctionPrice(b)??Number.MAX_SAFE_INTEGER)||endRank(a)-endRank(b),
     auction_vetted:(a,b)=>a.registry_priority-b.registry_priority||timestampMs(b.last_seen_at)-timestampMs(a.last_seen_at)
   };
   VIEW.sort(auctionSorts[s]);
   $("sortHelp").textContent=AUCTION_SORT_HELP[s];
-  $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> مزاد رسمي متاح الآن`;
+  const scopeLabel=AUCTION_SCOPE==="all"?"من كل المزادات الرسمية المراقبة":"مؤهلًا عبر البوابات الصارمة";
+  const watchWarning=AUCTION_SCOPE==="all"&&AUCTION_WATCH_STATE!=="ready"?" · الرصد الواسع غير متاح أو قديم؛ عُرضت المؤهلة فقط":"";
+  $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> ${scopeLabel}${watchWarning}`;
   render();
 }
 function auctionCard(row){
@@ -906,6 +1089,14 @@ function auctionCard(row){
   const countryName=CN[row.country]||row.country;
   const endMs=timestampMs(row.canonical_end_utc);
   const soonBadge=row.ends_soon?'<span class="badge b-live">تنتهي قريبًا ⏳</span>':'';
+  const price=auctionPrice(row);
+  const priceKind=row.price_kind||"current_bid";
+  const priceLabel=AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown;
+  const endLabel=priceKind==="current_bid"?"نهاية المزاد":"موعد البيع";
+  const eligibility=row.eligibility_status||"eligible";
+  const eligibilityClass=eligibility==="eligible"?"b-real":eligibility==="not_eligible"?"b-ineligible":"b-review";
+  const eligibilityBadge=`<span class="badge ${eligibilityClass}">${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</span>`;
+  const priceBadge=`<span class="badge ${priceKind==="current_bid"?"b-live":"b-est"}">${esc(AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown)}</span>`;
   const ref=row.ouedkniss_reference;
   const ouedReference=ref?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`:"";
   const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="فتح المزاد: ${esc(row.title)}">فتح المزاد ↗</a>`:
@@ -913,11 +1104,11 @@ function auctionCard(row){
   return `<article class="card auction" role="listitem">
     <div class="top">
       <span class="flag" role="img" aria-label="${esc(countryName)}">${FLAGS[row.country]||"🌍"}</span>
-      <span class="chip">${esc(row.source)}</span>${soonBadge}
+      <span class="chip">${esc(row.source)}</span>${eligibilityBadge}${priceBadge}${soonBadge}
     </div>
     <h2 class="title" title="${esc(row.title)}">${esc(row.title)}</h2>
     <div class="saving">
-      <strong>${fmtMoney(row.current_bid_eur)}</strong><span>المزايدة الحالية باليورو (مصدر رسمي)</span>
+      <strong>${typeof price==="number"?fmtMoney(price):"السعر غير ظاهر"}</strong><span>${esc(priceLabel)}</span>
     </div>
     <div class="meta">
       <div>🗓️ السنة <b>${row.year?nf.format(row.year):"—"}</b></div>
@@ -926,8 +1117,12 @@ function auctionCard(row){
       <div>🌍 الدولة <b>${esc(countryName)}</b></div>
       <div>🏛️ المصدر الرسمي <b>${esc(auctionSourceLabel(row.source))}</b></div>
     </div>
-    <div class="recency">نهاية المزاد: <b>${fmtTime(endMs)}</b> · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
+    <div class="recency">${endLabel}: <b>${endMs===null?"غير معلن":fmtTime(endMs)}</b> · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
     ${ouedReference}
+    <div class="evidence">حالة الأهلية: <b>${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</b> · ${esc(row.eligibility_reason||"تحتاج مراجعة شروط الاستيراد والمشاركة.")}</div>
+    ${row.registration_date?`<div class="recency">تاريخ التسجيل المعلن: <b>${esc(row.registration_date)}</b></div>`:""}
+    ${row.price_label?`<div class="recency">وصف السعر في المصدر: <b>${esc(row.price_label)}</b></div>`:""}
+    ${row.bid_visibility?`<div class="recency">ظهور المزايدات: <b>${esc(row.bid_visibility)}</b></div>`:""}
     <div class="evidence">شروط الدخول: ${esc(row.access_sale_note)}</div>
     <div class="foot">
       <span class="verification">دليل المصدر: ${esc(row.evidence)}</span>

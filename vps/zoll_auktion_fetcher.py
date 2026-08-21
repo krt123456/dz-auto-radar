@@ -71,6 +71,8 @@ END_RE = re.compile(
 LISTING_ID_RE = re.compile(r'id="bilder_auktionen_id">(\d+)')
 END_DD_RE = re.compile(r'id="auktions_ende"[^>]*>(.*?)</dd>', re.S)
 BID_SPAN_RE = re.compile(r'id="hoechstgebot"[^>]*>(.*?)</span>', re.S)
+BID_COUNT_RE = re.compile(r'id="anz_gebote_zahl"[^>]*>\s*(\d+)', re.I)
+BID_COUNT_FALLBACK_RE = re.compile(r'id="anz_gebote_gesamt"[^>]*>\s*(\d+)', re.I)
 TITLE_H4_RE = re.compile(r'id="ueberschrift_auktion"[^>]*>(.*?)</h4>', re.S)
 DL_ROW_RE = re.compile(
     r"<(?:dt|th)[^>]*>(.*?)</(?:dt|th)>\s*<(?:dd|td)[^>]*>(.*?)</(?:dd|td)>", re.S
@@ -262,7 +264,9 @@ def parse_product_page(text: str, product_path: str) -> Optional[AuctionRow]:
         title = strip_tags(title_match.group(1))
     bid = None
     bid_match = BID_SPAN_RE.search(text)
-    if bid_match:
+    bid_count_match = BID_COUNT_RE.search(text) or BID_COUNT_FALLBACK_RE.search(text)
+    bid_count = int(bid_count_match.group(1)) if bid_count_match else None
+    if bid_match and bid_count is not None and bid_count > 0:
         bid = parse_bid(bid_match.group(1))
     fields: Dict[str, str] = {}
     for dt_tag, dd_tag in DL_ROW_RE.findall(text):
@@ -294,9 +298,17 @@ def parse_product_page(text: str, product_path: str) -> Optional[AuctionRow]:
         "transmission": TRANSMISSION_MAP.get(transmission_raw, transmission_raw),
         "country": "DE",
         "auction_end_at": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "sale_term_code": "auction",
+        "sale_term_code": "auction-current-bid" if bid is not None else "auction",
         "sale_certainty": "auction",
-        "sale_certainty_note": "Official Zoll-Auktion; Algeria import precheck passed for fuel, exact registration, accident-free evidence, current HU and no major/critical condition marker. Verify the expert inspection before bidding.",
+        "sale_certainty_note": (
+            "Official Zoll-Auktion; a public current bid is confirmed by a positive "
+            "official bid count. Algeria import precheck passed for fuel, exact "
+            "registration, accident-free evidence, current HU and no major/critical "
+            "condition marker. Verify the expert inspection before bidding."
+            if bid is not None else
+            "Official Zoll-Auktion; no positive public bid count was confirmed, so "
+            "the displayed amount is not admitted to the strict current-bid lane."
+        ),
     }
     log.info(
         "lot %s %s bid=%s end=%s",

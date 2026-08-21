@@ -28,6 +28,11 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import listing_availability as lifecycle
+from auction_registry import (
+    auction_source_by_key,
+    auction_source_for_url,
+    registry_digest_json,
+)
 from source_identity import autoscout24_non_detail_url
 
 
@@ -51,6 +56,19 @@ DEFAULT_AUDIT = Path("/var/lib/sonardeals-radar/latest_selection_manifest.json")
 DEFAULT_SELECTION_AUDIT = Path(
     "/var/lib/sonardeals-radar/latest_selection_audit.json"
 )
+DEFAULT_OFFICIAL_AUCTION_WATCH = (
+    DEFAULT_ROOT / "mobile_site_local" / "official_auction_watch.json"
+)
+OFFICIAL_AUCTION_WATCH_SCHEMA_VERSION = 1
+OFFICIAL_AUCTION_WATCH_MAX_AGE = timedelta(hours=8)
+OFFICIAL_AUCTION_WATCH_MAX_ROWS = 20_000
+OFFICIAL_AUCTION_PRICE_KINDS = frozenset({
+    "current_bid", "starting_bid", "minimum_bid", "guide_price",
+    "sealed_bid", "hidden", "unknown",
+})
+OFFICIAL_AUCTION_ELIGIBILITY = frozenset({
+    "eligible", "review_required", "not_eligible",
+})
 SCHENGEN_COUNTRIES = frozenset(
     {
         "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI",
@@ -539,6 +557,110 @@ def validate_auction_lane(lane: Any) -> None:
                     raise RuntimeError(f"auction lane row {index} has an invalid Ouedkniss reference")
 
 
+def validate_official_auction_watch(
+    watch: Any, *, now: datetime | None = None,
+) -> None:
+    """Validate the public broad-watch artifact without promoting its rows.
+
+    This file deliberately includes official lots which may be old, diesel,
+    price-hidden, or participation-restricted.  Its contract protects identity,
+    price semantics and freshness; only the encrypted strict lane may claim a
+    row is import-eligible.
+    """
+    if not isinstance(watch, dict):
+        raise RuntimeError("official auction watch is not an object")
+    if watch.get("schema_version") != OFFICIAL_AUCTION_WATCH_SCHEMA_VERSION:
+        raise RuntimeError("unsupported official auction watch schema")
+    if watch.get("lane") != "official_auction_watch":
+        raise RuntimeError("official auction watch lane mismatch")
+    registry_digest = watch.get("registry_digest")
+    if registry_digest != registry_digest_json():
+        raise RuntimeError("official auction watch registry digest is invalid")
+    generated = parsed_utc(watch.get("generated_at_utc"))
+    current = now or datetime.now(UTC)
+    if generated is None or current.tzinfo is None:
+        raise RuntimeError("official auction watch timestamp is invalid")
+    current = current.astimezone(UTC)
+    if generated > current + timedelta(minutes=5):
+        raise RuntimeError("official auction watch timestamp is in the future")
+    if current - generated > OFFICIAL_AUCTION_WATCH_MAX_AGE:
+        raise RuntimeError("official auction watch is stale")
+    rows = watch.get("rows")
+    if not isinstance(rows, list) or len(rows) > OFFICIAL_AUCTION_WATCH_MAX_ROWS:
+        raise RuntimeError("official auction watch rows are invalid")
+    if watch.get("row_count") != len(rows):
+        raise RuntimeError("official auction watch count mismatch")
+    if not isinstance(watch.get("source_reports"), list):
+        raise RuntimeError("official auction watch source reports are invalid")
+    seen_ids: set[str] = set()
+    seen_urls: set[str] = set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise RuntimeError(f"official auction watch row {index} is not an object")
+        row_id = str(row.get("id") or "").strip()
+        source = str(row.get("source_key") or row.get("source") or "").strip()
+        title = str(row.get("title") or "").strip()
+        url = str(row.get("url") or "").strip()
+        parsed_url = urlparse(url)
+        if (
+            not row_id or not source or not title
+            or parsed_url.scheme != "https" or not parsed_url.hostname
+            or parsed_url.username is not None or parsed_url.password is not None
+        ):
+            raise RuntimeError(f"official auction watch row {index} has invalid identity")
+        registry = auction_source_by_key(source)
+        matched_registry = auction_source_for_url(url)
+        if registry is None or matched_registry is None or matched_registry.key != registry.key:
+            raise RuntimeError(f"official auction watch row {index} is not registry/domain backed")
+        country = str(row.get("country") or "").strip().upper()
+        allowed_countries = (
+            {"DE", "AT"} if source == "justiz-auktion" else {registry.country.upper()}
+        )
+        if country not in SCHENGEN_COUNTRIES or country not in allowed_countries:
+            raise RuntimeError(f"official auction watch row {index} has invalid source country")
+        if row_id in seen_ids or url in seen_urls:
+            raise RuntimeError(f"official auction watch row {index} duplicates id or url")
+        seen_ids.add(row_id); seen_urls.add(url)
+        price_kind = str(row.get("price_kind") or "").strip()
+        if price_kind not in OFFICIAL_AUCTION_PRICE_KINDS:
+            raise RuntimeError(f"official auction watch row {index} has invalid price semantics")
+        price = row.get("price_eur")
+        if price is not None and (
+            isinstance(price, bool) or not isinstance(price, (int, float))
+            or not math.isfinite(float(price)) or float(price) <= 0
+        ):
+            raise RuntimeError(f"official auction watch row {index} has invalid EUR price")
+        if price_kind in {"current_bid", "starting_bid", "minimum_bid", "guide_price"} and price is None:
+            raise RuntimeError(f"official auction watch row {index} is missing its labelled price")
+        if price_kind in {"hidden", "unknown"} and price is not None:
+            raise RuntimeError(f"official auction watch row {index} exposes an ambiguous price")
+        status = str(row.get("eligibility_status") or "").strip()
+        reason = str(row.get("eligibility_reason") or "").strip()
+        if status not in OFFICIAL_AUCTION_ELIGIBILITY or not reason:
+            raise RuntimeError(f"official auction watch row {index} has invalid eligibility status")
+        last_seen = parsed_utc(row.get("last_seen_at"))
+        if (
+            last_seen is None
+            or last_seen > current + timedelta(minutes=5)
+            or current - last_seen > OFFICIAL_AUCTION_WATCH_MAX_AGE
+        ):
+            raise RuntimeError(f"official auction watch row {index} has invalid observation time")
+        end = row.get("canonical_end_utc")
+        if end is not None and not valid_timestamp(end):
+            raise RuntimeError(f"official auction watch row {index} has invalid sale/end time")
+        reference = row.get("ouedkniss_reference")
+        if reference is not None:
+            if not isinstance(reference, dict) or (
+                type(reference.get("average_dzd")) is not int
+                or reference["average_dzd"] <= 0
+                or type(reference.get("sample_count")) is not int
+                or reference["sample_count"] < 2
+                or reference.get("source") != "Ouedkniss"
+                or not valid_timestamp(reference.get("observed_at_utc"))
+            ):
+                raise RuntimeError(
+                    f"official auction watch row {index} has an invalid Ouedkniss reference"
+                )
 def embed_auction_lane(
     lane: dict[str, Any],
     data_generated_at: str,
@@ -789,6 +911,31 @@ def prepare(args: argparse.Namespace) -> None:
     if not args.index.is_file():
         raise RuntimeError(f"dashboard index is unavailable: {args.index}")
     args.site.mkdir(parents=True, exist_ok=True)
+    watch_bytes: bytes | None = None
+    if args.official_auction_watch.is_file():
+        try:
+            watch = load_json(args.official_auction_watch)
+            validate_official_auction_watch(watch)
+            embedded_lane = payload.get("auction_lane")
+            if (
+                not isinstance(embedded_lane, dict)
+                or watch.get("registry_digest") != embedded_lane.get("registry_digest")
+            ):
+                raise RuntimeError(
+                    "official auction watch does not match the strict auction registry"
+                )
+            watch_bytes = (
+                json.dumps(watch, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+            ).encode("utf-8")
+            manifest["official_auction_watch_count"] = watch["row_count"]
+            manifest["official_auction_watch_sha256"] = hashlib.sha256(watch_bytes).hexdigest()
+        except (OSError, ValueError, TypeError, RuntimeError) as exc:
+            # The broad watch is an optional, explicitly less-qualified lane.
+            # Fail it closed without blocking the encrypted strict dashboard.
+            print(f"OFFICIAL_AUCTION_WATCH_OMITTED reason={exc}", file=sys.stderr)
+    if watch_bytes is None:
+        manifest["official_auction_watch_count"] = None
+        manifest["official_auction_watch_sha256"] = None
     atomic_write(
         args.site / ".gitignore",
         b"board.json\n__pycache__/\n*.pyc\nworker/.dev.vars\nworker/.wrangler/\nworker/node_modules/\n",
@@ -796,6 +943,10 @@ def prepare(args: argparse.Namespace) -> None:
     )
     atomic_write(args.site / "index.html", args.index.read_bytes(), 0o644)
     atomic_write(args.site / "data.enc", encrypt_payload(pin, payload), 0o600)
+    if watch_bytes is not None:
+        atomic_write(args.site / "official_auction_watch.json", watch_bytes, 0o644)
+    else:
+        (args.site / "official_auction_watch.json").unlink(missing_ok=True)
     fx_bytes: bytes | None = None
     try:
         fx_bytes = args.fx_config.read_bytes() if args.fx_config.is_file() else None
@@ -865,6 +1016,17 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
             raise RuntimeError(f"selection audit does not match manifest: {key}")
     if manifest.get("verified_live_count") != manifest.get("published_offer_count"):
         raise RuntimeError("publication contains links not verified in this generation")
+    watch_sha256 = manifest.get("official_auction_watch_sha256")
+    if watch_sha256 is not None:
+        public_watch = args.site / "official_auction_watch.json"
+        if not public_watch.is_file() or sha256_file(public_watch) != watch_sha256:
+            raise RuntimeError("official auction watch does not match publication manifest")
+        watch = load_json(public_watch)
+        validate_official_auction_watch(watch)
+        if watch.get("row_count") != manifest.get("official_auction_watch_count"):
+            raise RuntimeError("official auction watch count does not match publication manifest")
+        if watch.get("registry_digest") != manifest.get("auction_lane_registry_digest"):
+            raise RuntimeError("official auction watch registry does not match publication manifest")
 
 
 def publish(args: argparse.Namespace) -> None:
@@ -873,13 +1035,23 @@ def publish(args: argparse.Namespace) -> None:
         raise RuntimeError(f"publication directory is not a git checkout: {args.site}")
     (args.site / "board.json").unlink(missing_ok=True)
     run_git(args.site, "rm", "--cached", "--ignore-unmatch", "board.json", check=False)
-    run_git(args.site, "add", "--", ".gitignore", "index.html", "data.enc", "display_currency.json")
+    publication_paths = [".gitignore", "index.html", "data.enc", "display_currency.json"]
+    watch_path = args.site / "official_auction_watch.json"
+    watch_tracked = run_git(
+        args.site, "ls-files", "--error-unmatch", "official_auction_watch.json", check=False
+    ).returncode == 0
+    if watch_path.is_file() or watch_tracked:
+        publication_paths.append("official_auction_watch.json")
+    run_git(args.site, "add", "--", *publication_paths)
     staged = {
         line.strip()
         for line in run_git(args.site, "diff", "--cached", "--name-only").stdout.splitlines()
         if line.strip()
     }
-    allowed = {".gitignore", "index.html", "data.enc", "display_currency.json", "board.json"}
+    allowed = {
+        ".gitignore", "index.html", "data.enc", "display_currency.json",
+        "official_auction_watch.json", "board.json",
+    }
     unexpected = staged - allowed
     if unexpected:
         raise RuntimeError(f"refusing to publish unexpected files: {sorted(unexpected)}")
@@ -902,6 +1074,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fx-config", type=Path, default=DEFAULT_FX)
     parser.add_argument("--audit-manifest", type=Path, default=DEFAULT_AUDIT)
     parser.add_argument("--selection-audit", type=Path, default=DEFAULT_SELECTION_AUDIT)
+    parser.add_argument(
+        "--official-auction-watch", type=Path,
+        default=DEFAULT_OFFICIAL_AUCTION_WATCH,
+        help="standalone public broad official-auction watch JSON",
+    )
     parser.add_argument("--top-n", type=int, default=10_000)
     parser.add_argument("--per-country-min", type=int, default=20)
     parser.add_argument("--per-source-min", type=int, default=5)
