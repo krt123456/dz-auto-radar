@@ -164,6 +164,8 @@ end_future = "2026-08-18T10:00:00+02:00"
 f_rows = [
     frow("zoll-auktion", "y2023d", "https://www.zoll-auktion.de/y2023d", end=end_future,
          raw={"first_registration_date": "15.11.2023"}),
+    frow("onlineveilingmeester", "y2023iso", "https://onlineveilingmeester.nl/y2023iso",
+         end=end_future, raw={"first_registration_date": "2023-11-16"}),
     frow("zoll-auktion", "y2024", "https://www.zoll-auktion.de/y2024", end=end_future),
     frow("zoll-auktion", "y2025", "https://www.zoll-auktion.de/y2025", end=end_future),
     frow("zoll-auktion", "y2026", "https://www.zoll-auktion.de/y2026", end=end_future),
@@ -171,6 +173,8 @@ f_rows = [
 lane, counts = run(f_rows)
 check("founder: 2023 with full day+month enters lane",
       any(r["id"].endswith(":y2023d") for r in lane))
+check("founder: ISO 2023 registration date enters lane",
+      any(r["id"].endswith(":y2023iso") for r in lane))
 check("founder: 2024 enters lane", any(r["id"].endswith(":y2024") for r in lane))
 check("founder: 2025 enters lane", any(r["id"].endswith(":y2025") for r in lane))
 check("founder: 2026 enters lane", any(r["id"].endswith(":y2026") for r in lane))

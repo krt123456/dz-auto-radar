@@ -59,7 +59,9 @@ UTC = dt.timezone.utc
 # require a full day+month registration date.
 FOUNDER_MIN_YEAR = 2023
 FOUNDER_MAX_YEAR = 2026
-_REG_DATE_RE = re.compile(r"^\s*\d{1,2}\.\d{1,2}\.\d{4}\s*$")
+_REG_DATE_RE = re.compile(
+    r"^\s*(?:\d{1,2}\.\d{1,2}\.\d{4}|\d{4}-\d{2}-\d{2})\s*$"
+)
 _ISO_RE = re.compile(
     r"^\s*(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?"
     r"(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?\s*$"
@@ -138,9 +140,14 @@ def founder_eligible(
                 reg = ""
         if not _REG_DATE_RE.match(reg):
             return False, "year_2023_without_day_month"
-        try:
-            registered = dt.datetime.strptime(reg.strip(), "%d.%m.%Y").date()
-        except ValueError:
+        registered = None
+        for date_format in ("%d.%m.%Y", "%Y-%m-%d"):
+            try:
+                registered = dt.datetime.strptime(reg.strip(), date_format).date()
+                break
+            except ValueError:
+                pass
+        if registered is None:
             return False, "year_2023_without_day_month"
         today = now.astimezone(UTC).date()
         try:
