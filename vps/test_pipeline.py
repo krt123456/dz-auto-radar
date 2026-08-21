@@ -815,6 +815,21 @@ process.stdout.write("DASHBOARD_CONTRACT_PASS");
         self.assertIn("capture_alces_fx.py", refresh)
         self.assertIn("RADAR_FX_CAPTURE_SKIPPED", refresh)
         self.assertIn("sectigo-public-server-authentication-ca-dv-r36.pem", refresh)
+        self.assertIn(
+            'AUCTION_DATABASE="${RADAR_AUCTION_DATABASE:-$STATE/auction_offers.sqlite}"',
+            refresh,
+        )
+        auction_phase = refresh[refresh.index('PHASE="auction_fetch"'):]
+        self.assertNotIn('--db "$ROOT/universe_offers.sqlite"', auction_phase)
+        self.assertIn('--database "$AUCTION_DATABASE"', auction_phase)
+
+        hourly = (HERE / "auction_refresh.sh").read_text(encoding="utf-8")
+        self.assertIn(
+            'AUCTION_DATABASE="${RADAR_AUCTION_DATABASE:-$STATE/auction_offers.sqlite}"',
+            hourly,
+        )
+        self.assertNotIn('--db "$ROOT/universe_offers.sqlite"', hourly)
+        self.assertIn('--database "$AUCTION_DATABASE"', hourly)
 
         dashboard = (HERE.parent / "index.html").read_text(encoding="utf-8")
         freshness = re.search(

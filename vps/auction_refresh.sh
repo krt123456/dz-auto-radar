@@ -6,6 +6,7 @@ STATE="${RADAR_STATE_DIR:-/var/lib/sonardeals-radar}"
 SITE="${RADAR_SITE:-/srv/sonardeals-radar/site}"
 LOCK="${RADAR_REFRESH_LOCK_FILE:-/run/lock/sonardeals-radar-refresh.lock}"
 IMPORTER="${RADAR_UNIVERSE_IMPORTER:-$ROOT/import_live_offers_to_universe.py}"
+AUCTION_DATABASE="${RADAR_AUCTION_DATABASE:-$STATE/auction_offers.sqlite}"
 AUDIT="$STATE/latest_selection_audit.json"
 LIVE_AUDIT="$STATE/latest_live_selection_audit.json"
 LIVE_DATA_URL="${RADAR_LIVE_DATA_URL:-https://krt123456.github.io/dz-auto-radar/data.enc}"
@@ -22,20 +23,20 @@ echo "AUCTION_REFRESH_START at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 python3 /home/krt/car_deal_finder/zoll_auktion_fetcher.py \
   --out /home/krt/eu_harvest/zoll_auktion_live.csv
 python3 "$IMPORTER" --input-csv /home/krt/eu_harvest/zoll_auktion_live.csv \
-  --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+  --db "$AUCTION_DATABASE" --batch-size 5000
 
 python3 /opt/sonardeals-radar/justiz_auktion_fetcher.py \
   --out /home/krt/eu_harvest/justiz_auktion_live.csv \
   --report "$STATE/justiz_auction_fetch_report.json"
 python3 "$IMPORTER" --input-csv /home/krt/eu_harvest/justiz_auktion_live.csv \
-  --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+  --db "$AUCTION_DATABASE" --batch-size 5000
 
 xvfb-run -a python3 /opt/sonardeals-radar/multi_official_auction_fetcher.py \
   --out /home/krt/eu_harvest/official_auction_live.csv \
   --report "$STATE/official_auction_fetch_report.json" \
   --max-candidates "${RADAR_AUCTION_MAX_CANDIDATES_PER_SOURCE:-40}"
 python3 "$IMPORTER" --input-csv /home/krt/eu_harvest/official_auction_live.csv \
-  --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+  --db "$AUCTION_DATABASE" --batch-size 5000
 
 python3 /opt/sonardeals-radar/capture_alces_fx.py \
   --config "$STATE/fx/display_currency.json" \
@@ -44,7 +45,7 @@ python3 /opt/sonardeals-radar/capture_alces_fx.py \
 
 generated_at="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["data_generated_at_utc"])' "$ROOT/mobile_site_local/board.json")"
 python3 /opt/sonardeals-radar/build_auction_board.py \
-  --database "$ROOT/universe_offers.sqlite" \
+  --database "$AUCTION_DATABASE" \
   --board "$ROOT/mobile_site_local/board.json" \
   --generated-at "$generated_at" \
   --output "$ROOT/mobile_site_local/auction_lane.json"

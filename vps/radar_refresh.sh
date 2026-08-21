@@ -205,20 +205,21 @@ JUSTIZ_CSV="${RADAR_JUSTIZ_CSV:-/home/krt/eu_harvest/justiz_auktion_live.csv}"
 MULTI_AUCTION_FETCHER="${RADAR_MULTI_AUCTION_FETCHER:-/opt/sonardeals-radar/multi_official_auction_fetcher.py}"
 MULTI_AUCTION_CSV="${RADAR_MULTI_AUCTION_CSV:-/home/krt/eu_harvest/official_auction_live.csv}"
 IMPORTER="${RADAR_UNIVERSE_IMPORTER:-/home/krt/car_deal_finder/import_live_offers_to_universe.py}"
+AUCTION_DATABASE="${RADAR_AUCTION_DATABASE:-$STATE/auction_offers.sqlite}"
 notify running "$PHASE" "يجلب مزادات زول ووزارة العدل الرسمية"
 python3 "$ZOLL_FETCHER" --out "$ZOLL_CSV"
-python3 "$IMPORTER" --input-csv "$ZOLL_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+python3 "$IMPORTER" --input-csv "$ZOLL_CSV" --db "$AUCTION_DATABASE" --batch-size 5000
 python3 "$JUSTIZ_FETCHER" --out "$JUSTIZ_CSV" --report "$STATE/justiz_auction_fetch_report.json"
-python3 "$IMPORTER" --input-csv "$JUSTIZ_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+python3 "$IMPORTER" --input-csv "$JUSTIZ_CSV" --db "$AUCTION_DATABASE" --batch-size 5000
 python3 "$MULTI_AUCTION_FETCHER" --out "$MULTI_AUCTION_CSV" \
   --report "$STATE/official_auction_fetch_report.json" \
   --max-candidates "${RADAR_AUCTION_MAX_CANDIDATES_PER_SOURCE:-40}"
-python3 "$IMPORTER" --input-csv "$MULTI_AUCTION_CSV" --db "$ROOT/universe_offers.sqlite" --batch-size 5000
+python3 "$IMPORTER" --input-csv "$MULTI_AUCTION_CSV" --db "$AUCTION_DATABASE" --batch-size 5000
 
 PHASE="auction_lane"
 notify running "$PHASE" "يبني مسار المزادات الموثق من الكون المقبول (fail-closed)"
 python3 "$LANE_BUILDER" \
-  --database "$ROOT/universe_offers.sqlite" \
+  --database "$AUCTION_DATABASE" \
   --board "$ROOT/mobile_site_local/board.json" \
   --generated-at "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["data_generated_at_utc"])' "$ROOT/mobile_site_local/board.json")" \
   --output "$ROOT/mobile_site_local/auction_lane.json"

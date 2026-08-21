@@ -740,9 +740,10 @@ def build_payload(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, A
     published_urls = {str(offer.get("u") or "") for offer in selected}
     auction_lane_block: dict[str, Any] | None = None
     auction_lane_sha256: str | None = None
-    if args.auction_lane is not None and args.auction_lane.is_file():
+    auction_lane_path = getattr(args, "auction_lane", None)
+    if auction_lane_path is not None and auction_lane_path.is_file():
         try:
-            lane = json.loads(args.auction_lane.read_text(encoding="utf-8"))
+            lane = json.loads(auction_lane_path.read_text(encoding="utf-8"))
         except (ValueError, OSError) as exc:
             raise RuntimeError(f"auction lane file is unreadable: {exc}") from exc
         auction_lane_block = embed_auction_lane(
