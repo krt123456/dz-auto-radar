@@ -19,6 +19,7 @@ if ! flock -n 9; then
 fi
 exec > >(tee -a "$STATE/logs/auction-refresh-$(date -u +%Y%m%d).log") 2>&1
 echo "AUCTION_REFRESH_START at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+SNAPSHOT_CUTOFF="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 python3 /opt/sonardeals-radar/zoll_auktion_fetcher.py \
   --out /home/krt/eu_harvest/zoll_auktion_live.csv
@@ -47,6 +48,7 @@ generated_at="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], e
 python3 /opt/sonardeals-radar/build_auction_board.py \
   --database "$AUCTION_DATABASE" \
   --board "$ROOT/mobile_site_local/board.json" \
+  --cutoff "$SNAPSHOT_CUTOFF" \
   --generated-at "$generated_at" \
   --output "$ROOT/mobile_site_local/auction_lane.json"
 python3 /opt/sonardeals-radar/enrich_auction_ouedkniss.py \
