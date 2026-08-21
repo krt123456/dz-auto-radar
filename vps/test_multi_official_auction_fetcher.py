@@ -101,6 +101,128 @@ class GenericOfficialAuctionTests(unittest.TestCase):
         item["start_auction_lot_at"] = "2025-01-01T10:00:00+00:00"; item["professional_only"] = 1
         self.assertIsNone(module._domaine_item_to_row(item, now=now))
 
+    def test_czech_state_live_roadworthy_petrol_vehicle_is_admitted(self) -> None:
+        item = {
+            "Id": 70001, "Name": "Osobni automobil Skoda Octavia", "AuctionStatus": 1,
+            "StartDate": "2025-01-01T09:00:00", "EndDate": "2026-09-17T08:00:00",
+            "Price": "250 000,00", "NbrOfBids": 2,
+            "Description": (
+                "Datum prvni registrace: 15.05.2024. Palivo: benzin. "
+                "Vozidlo je pojizdne a provozuschopne. Technicky prukaz je k dispozici. "
+                "Stav tachometru: 12 345 km."
+            ),
+        }
+        row = module._czech_item_to_row(
+            item, rates={"CZK": 25.0}, now=dt.datetime(2026, 8, 21, tzinfo=dt.timezone.utc)
+        )
+        self.assertIsNotNone(row)
+        self.assertEqual(row["first_registration_date"], "2024-05-15")
+        self.assertEqual(row["fuel"], "petrol")
+        self.assertEqual(row["price_eur"], "10000.00")
+        self.assertEqual(row["mileage_km"], "12345")
+
+    def test_czech_state_rejects_diesel_damage_or_residency_gate(self) -> None:
+        base = {
+            "Id": 70002, "Name": "Osobni automobil Skoda Superb", "AuctionStatus": 1,
+            "StartDate": "2025-01-01T09:00:00", "EndDate": "2026-09-17T08:00:00",
+            "Price": "250 000,00",
+            "Description": (
+                "Datum prvni registrace: 15.05.2024. Palivo: nafta. "
+                "Vozidlo je pojizdne. Technicky prukaz."
+            ),
+        }
+        now = dt.datetime(2026, 8, 21, tzinfo=dt.timezone.utc)
+        self.assertIsNone(module._czech_item_to_row(base, rates={"CZK": 25.0}, now=now))
+        base["Description"] = (
+            "Datum prvni registrace: 15.05.2024. Palivo: benzin. "
+            "Vozidlo je nepojizdne. Technicky prukaz."
+        )
+        self.assertIsNone(module._czech_item_to_row(base, rates={"CZK": 25.0}, now=now))
+        base["Description"] = (
+            "Datum prvni registrace: 15.05.2024. Palivo: benzin. "
+            "Vozidlo je pojizdne. Technicky prukaz. "
+            "Ucastnit se muze pouze obcan Ceske republiky."
+        )
+        self.assertIsNone(module._czech_item_to_row(base, rates={"CZK": 25.0}, now=now))
+
+    def test_czech_state_requires_exact_registration_not_model_year(self) -> None:
+        item = {
+            "Id": 70003, "Name": "Osobni automobil Skoda Fabia", "AuctionStatus": 1,
+            "StartDate": "2026-01-01T09:00:00", "EndDate": "2026-09-17T08:00:00",
+            "Price": "200 000,00", "Description": (
+                "Rok vyroby 2024. Palivo: benzin. Vozidlo je pojizdne. Technicky prukaz."
+            ),
+        }
+        self.assertIsNone(module._czech_item_to_row(
+            item, rates={"CZK": 25.0}, now=dt.datetime(2026, 8, 21, tzinfo=dt.timezone.utc)
+        ))
+
+    def test_czech_state_does_not_treat_electronic_auction_as_electric_fuel(self) -> None:
+        item = {
+            "Id": 70004, "Name": "Osobni automobil Skoda Fabia", "AuctionStatus": 1,
+            "StartDate": "2026-01-01T09:00:00", "EndDate": "2026-09-17T08:00:00",
+            "Price": "200 000,00", "Description": (
+                "Datum prvni registrace: 15.05.2024. Vozidlo je pojizdne. Technicky prukaz."
+            ),
+        }
+        self.assertIsNone(module._czech_item_to_row(
+            item, rates={"CZK": 25.0}, now=dt.datetime(2026, 8, 21, tzinfo=dt.timezone.utc),
+            detail_text="Elektronicke aukce registrace uzivatele",
+        ))
+
+    def test_czech_state_rejects_no_price_accessory_or_major_fault(self) -> None:
+        item = {
+            "Id": 70005, "Name": "Osobni automobil Skoda Kamiq", "AuctionStatus": 1,
+            "StartDate": "2026-01-01T09:00:00", "EndDate": "2026-09-17T08:00:00",
+            "Price": "200 000,00", "NoPrice": True, "Description": (
+                "Datum prvni registrace: 15.05.2024. Palivo: benzin. "
+                "Vozidlo je pojizdne. Technicky prukaz."
+            ),
+        }
+        now = dt.datetime(2026, 8, 21, tzinfo=dt.timezone.utc)
+        self.assertIsNone(module._czech_item_to_row(item, rates={"CZK": 25.0}, now=now))
+        item["NoPrice"] = False; item["Name"] = "Soubor pneumatik Skoda"
+        self.assertIsNone(module._czech_item_to_row(item, rates={"CZK": 25.0}, now=now))
+        item["Name"] = "Osobni automobil Skoda Kamiq"
+        item["Description"] += " Motor nelze nastartovat."
+        self.assertIsNone(module._czech_item_to_row(item, rates={"CZK": 25.0}, now=now))
+
+    def test_czech_labelled_petrol_electric_is_hybrid(self) -> None:
+        self.assertEqual(module._czech_fuel("palivo: BA 95 B + elektricka energie"),
+                         "petrol/electric hybrid")
+        self.assertEqual(module._czech_fuel("palivo BA 95 B"), "petrol")
+        self.assertIsNone(module._czech_fuel("palivo NM"))
+
+    def test_boe_result_ids_dedupe_and_login_gate(self) -> None:
+        markup = """
+        <a href='detalleSubasta.php?idSub=SUB-JA-2026-263728&ver=1'>one</a>
+        <a href='detalleSubasta.php?idSub=SUB-JA-2026-263728&ver=3'>duplicate</a>
+        <a href='detalleSubasta.php?idSub=SUB-AT-2026-99ABC&ver=1'>two</a>
+        """
+        self.assertEqual(module._boe_result_ids(markup),
+                         ["SUB-AT-2026-99ABC", "SUB-JA-2026-263728"])
+        self.assertTrue(module._boe_price_login_gate(
+            "<div>Con puja (inicie sesi&oacute;n para consultar el importe)</div>"
+        ))
+
+    def test_boe_monitor_posts_exact_filters_and_never_emits_rows(self) -> None:
+        class Response:
+            def __init__(self, text): self.text = text
+            def raise_for_status(self): return None
+        class Session:
+            def __init__(self): self.data = None
+            def post(self, url, data, headers, timeout):
+                self.data = tuple(data)
+                return Response("<a href='detalleSubasta.php?idSub=SUB-JA-2026-263728&ver=1'>x</a>")
+            def get(self, url, headers, timeout):
+                return Response("Con puja (inicie sesion para consultar el importe)")
+        session = Session()
+        rows, report = module.harvest_boe_monitor(session, timeout=5)
+        self.assertEqual(rows, [])
+        self.assertEqual(report["discovered_auction_events"], 1)
+        self.assertEqual(report["current_bid_visibility"], "login_required")
+        self.assertEqual(session.data, module.BOE_SEARCH_DATA)
+
 
 if __name__ == "__main__":
     unittest.main()

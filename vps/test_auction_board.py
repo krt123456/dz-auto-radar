@@ -80,10 +80,14 @@ check("registry contains kronofogden (founder list)",
       auction_source_by_key("kronofogden") is not None)
 check("registry contains licytacje-komornik (founder list)",
       auction_source_by_key("licytacje-komornik") is not None)
+check("registry contains Czech UZSVM state auctions",
+      auction_source_by_key("nabidka-majetku") is not None)
 check("registry zoll evidence cites founder", "mgr-e325f6c9" in auction_source_by_key("zoll-auktion").evidence)
 ro = auction_source_by_key("zoll-auktion")
 check("zoll priority 1", ro.priority == 1)
 check("domain match zoll", auction_source_for_url("https://www.zoll-auktion.de/auktion/kategorie/Fahrzeuge/191") is not None)
+cz = auction_source_for_url("https://nabidkamajetku.gov.cz/Home/AuctionDetail/61592")
+check("domain match Czech UZSVM", cz is not None and cz.key == "nabidka-majetku")
 # negative control: unrelated domain never matches
 check("unrelated domain returns None (fail closed)",
       auction_source_for_url("https://mobile.de/") is None, negative=True)
