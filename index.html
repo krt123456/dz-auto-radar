@@ -601,7 +601,14 @@ const AUCTION_SOURCE_CATALOG=Object.freeze([
   ["huutokaupat","Huutokaupat · FI"],
   ["copart-de","Copart Germany · DE"],
   ["copart-es","Copart España · ES"],
-  ["copart-fi","Copart Finland · FI"]
+  ["copart-fi","Copart Finland · FI"],
+  ["oksjonikeskus","Oksjonikeskus · EE"],
+  ["anabi","ANABI Licitații Online · RO"],
+  ["eaukcionai","eAukcionai · LT"],
+  ["sodnedrazbe","SodneDrazbe.si · SI"],
+  ["e-arveres-mnv","MNV E-Árverés · HU"],
+  ["ropk","Register majetku štátu · SK"],
+  ["nva-latvia","NVA vehicle auctions · LV"]
 ]);
 const AUCTION_SOURCE_LABELS=new Map(AUCTION_SOURCE_CATALOG);
 const AUCTION_SOURCE_DOMAINS=new Map([
@@ -622,7 +629,14 @@ const AUCTION_SOURCE_DOMAINS=new Map([
   ["huutokaupat",["huutokaupat.com"]],
   ["copart-de",["copart.de"]],
   ["copart-es",["copart.es"]],
-  ["copart-fi",["copart.fi"]]
+  ["copart-fi",["copart.fi"]],
+  ["oksjonikeskus",["oksjonikeskus.ee"]],
+  ["anabi",["anabi.just.ro"]],
+  ["eaukcionai",["eaukcionai.lt"]],
+  ["sodnedrazbe",["sodnedrazbe.si"]],
+  ["e-arveres-mnv",["e-arveres.mnv.hu"]],
+  ["ropk",["ropk.sk"]],
+  ["nva-latvia",["nva.iem.gov.lv","izsoles.ta.gov.lv"]]
 ]);
 const SCHENGEN_AUCTION_COUNTRIES=new Set(["AT","BE","BG","CH","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IS","IT","LI","LT","LU","LV","MT","NL","NO","PL","PT","RO","SE","SI","SK"]);
 const AUCTION_SOURCE_COUNTRIES=new Map([
@@ -631,7 +645,10 @@ const AUCTION_SOURCE_COUNTRIES=new Map([
   ["finshop",["BE"]],["domeinenrz",["NL"]],["onlineveilingmeester",["NL"]],
   ["e-leiloes",["PT"]],["licytacje-komornik",["PL"]],["nabidka-majetku",["CZ"]],
   ["vebeg",["DE"]],["alcopa",["FR"]],["huutokaupat",["FI"]],
-  ["copart-de",["DE"]],["copart-es",["ES"]],["copart-fi",["FI"]]
+  ["copart-de",["DE"]],["copart-es",["ES"]],["copart-fi",["FI"]],
+  ["oksjonikeskus",["EE"]],["anabi",["RO"]],["eaukcionai",["LT"]],
+  ["sodnedrazbe",["SI"]],["e-arveres-mnv",["HU"]],["ropk",["SK"]],
+  ["nva-latvia",["LV"]]
 ]);
 const auctionSourceLabel=value=>AUCTION_SOURCE_LABELS.get(String(value||""))||String(value||"");
 const officialAuctionUrl=(source,value)=>{try{
