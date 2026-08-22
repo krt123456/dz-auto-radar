@@ -100,6 +100,13 @@ header{padding:22px 0 12px}
 .scope-button{border:1px solid var(--line);border-radius:999px;padding:8px 13px;cursor:pointer;
   background:var(--card2);color:var(--mut);font-weight:700;font-size:.82rem}
 .scope-button.active{border-color:rgba(56,189,248,.58);background:rgba(56,189,248,.14);color:#d8f3ff}
+.auction-distribution{margin:0 0 10px;padding:10px 12px;border:1px solid rgba(56,189,248,.25);
+  border-radius:12px;background:rgba(56,189,248,.06);color:var(--mut);font-size:.78rem;line-height:1.55}
+.auction-distribution[hidden]{display:none}
+.distribution-summary b{color:var(--txt)}
+.distribution-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.distribution-chip{padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:var(--card2);color:#c9d7ef}
+.auction-ranking-note{margin-top:7px;color:#fde68a}
 .b-review{background:rgba(251,191,36,.12);color:#fde68a;border:1px solid rgba(251,191,36,.38)}
 .b-ineligible{background:rgba(248,113,113,.12);color:#fecaca;border:1px solid rgba(248,113,113,.35)}
 
@@ -213,6 +220,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <button class="scope-button" id="eligibleAuctionsBtn" type="button">✅ مؤهل مؤكّد بالبوابات <span id="eligibleAuctionCount"></span></button>
       <button class="scope-button" id="allAuctionsBtn" type="button">🏛️ كل المزادات الرسمية <span id="allAuctionCount"></span></button>
     </div>
+    <div class="auction-distribution" id="auctionSourceCounts" role="status" aria-live="polite" hidden></div>
     <div class="frow">
       <label class="sr-only" for="q">البحث في الموديل أو عنوان الإعلان</label>
       <input class="f" id="q" type="search" aria-label="البحث في الموديل أو عنوان الإعلان" placeholder="🔍 ابحث: موديل، عنوان…">
@@ -399,7 +407,7 @@ async function loadFx(){
     FX=await validateFxConfig(await response.json());FX_STATE="ready";
   }catch(error){FX=null;FX_STATE="fallback";FX_REASON=error&&error.message||"invalid";}
   paintFxStatus();
-  if(DATA.length)render();
+  if(DATA.length)apply();
   return FX;
 }
 const FORBIDDEN_OFFER_FIELDS=new Set([
@@ -502,6 +510,7 @@ function validateMonitoredAuctionRow(row){
   const amount=typeof row.price_amount==="number"?row.price_amount:null;
   const price=typeof row.price_eur==="number"?row.price_eur:(currency==="EUR"?amount:null);
   const end=row.canonical_end_utc??row.sale_end_utc??row.sale_end_at??row.sale_end??null;
+  const event=row.sale_event_utc??null;
   const lastSeen=row.last_seen_at||row.observed_at_utc;
   const lastSeenMs=timestampMs(lastSeen),lastSeenAge=Date.now()-lastSeenMs;
   const country=String(row.country||"").trim().toUpperCase();
@@ -514,6 +523,7 @@ function validateMonitoredAuctionRow(row){
      typeof row.eligibility_reason!=="string"||!row.eligibility_reason.trim()||
      !Number.isFinite(lastSeenMs)||lastSeenAge < -5*60*1000||lastSeenAge>WATCH_MAX_AGE_MS||
      (end!==null&&end!==undefined&&(!Number.isFinite(timestampMs(end))))||
+     (event!==null&&event!==undefined&&(!Number.isFinite(timestampMs(event))))||
      (price!==null&&price!==undefined&&(!(typeof price==="number")||!Number.isFinite(price)||price<=0))||
      (["current_bid","starting_bid","minimum_bid","guide_price"].includes(priceKind)&&!(typeof price==="number"&&price>0))||
      (["hidden","unknown"].includes(priceKind)&&price!==null)||
@@ -525,7 +535,7 @@ function validateMonitoredAuctionRow(row){
      )))throw contractFailure();
   const mileage=row.mileage??row.mileage_km??null;
   return {...row,source,source_key:source,price_eur:price,price_kind:priceKind,
-    eligibility_status:eligibility,mileage,canonical_end_utc:end,last_seen_at:lastSeen};
+    eligibility_status:eligibility,mileage,canonical_end_utc:end,sale_event_utc:event,last_seen_at:lastSeen};
 }
 function validateOfficialAuctionWatch(value,lane){
   if(value===undefined||value===null)return null;
@@ -572,7 +582,7 @@ const NAV_CHECK_IDS=["flive","fnew","funseen","fauction"];
 const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_SCOPE="eligible",AUCTION_WATCH_STATE="missing";
 const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
-const AUCTION_SORT_MODES=new Set(["auction_soon","auction_bid","auction_vetted"]);
+const AUCTION_SORT_MODES=new Set(["auction_priority","auction_soon","auction_bid","auction_vetted"]);
 const AUCTION_SOURCE_CATALOG=Object.freeze([
   ["zoll-auktion","Zoll-Auktion · DE"],
   ["encheres-du-domaine","Les Enchères du Domaine · FR"],
@@ -589,7 +599,9 @@ const AUCTION_SOURCE_CATALOG=Object.freeze([
   ["vebeg","VEBEG Federal Surplus · DE"],
   ["alcopa","Alcopa Auction · FR"],
   ["huutokaupat","Huutokaupat · FI"],
-  ["copart-de","Copart Germany · DE"]
+  ["copart-de","Copart Germany · DE"],
+  ["copart-es","Copart España · ES"],
+  ["copart-fi","Copart Finland · FI"]
 ]);
 const AUCTION_SOURCE_LABELS=new Map(AUCTION_SOURCE_CATALOG);
 const AUCTION_SOURCE_DOMAINS=new Map([
@@ -608,7 +620,9 @@ const AUCTION_SOURCE_DOMAINS=new Map([
   ["vebeg",["vebeg.de"]],
   ["alcopa",["alcopa-auction.fr","alcopa.fr"]],
   ["huutokaupat",["huutokaupat.com"]],
-  ["copart-de",["copart.de"]]
+  ["copart-de",["copart.de"]],
+  ["copart-es",["copart.es"]],
+  ["copart-fi",["copart.fi"]]
 ]);
 const SCHENGEN_AUCTION_COUNTRIES=new Set(["AT","BE","BG","CH","CZ","DE","DK","EE","ES","FI","FR","GR","HR","HU","IS","IT","LI","LT","LU","LV","MT","NL","NO","PL","PT","RO","SE","SI","SK"]);
 const AUCTION_SOURCE_COUNTRIES=new Map([
@@ -616,7 +630,8 @@ const AUCTION_SOURCE_COUNTRIES=new Map([
   ["boe-subastas",["ES"]],["kronofogden",["SE"]],["pvp-giustizia",["IT"]],
   ["finshop",["BE"]],["domeinenrz",["NL"]],["onlineveilingmeester",["NL"]],
   ["e-leiloes",["PT"]],["licytacje-komornik",["PL"]],["nabidka-majetku",["CZ"]],
-  ["vebeg",["DE"]],["alcopa",["FR"]],["huutokaupat",["FI"]],["copart-de",["DE"]]
+  ["vebeg",["DE"]],["alcopa",["FR"]],["huutokaupat",["FI"]],
+  ["copart-de",["DE"]],["copart-es",["ES"]],["copart-fi",["FI"]]
 ]);
 const auctionSourceLabel=value=>AUCTION_SOURCE_LABELS.get(String(value||""))||String(value||"");
 const officialAuctionUrl=(source,value)=>{try{
@@ -624,7 +639,7 @@ const officialAuctionUrl=(source,value)=>{try{
   return (AUCTION_SOURCE_DOMAINS.get(String(source||""))||[]).some(domain=>hostname===domain||hostname.endsWith(`.${domain}`));
 }catch(error){return false;}};
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
-const normalizeAuctionSortMode=value=>AUCTION_SORT_MODES.has(String(value||""))?String(value):"auction_soon";
+const normalizeAuctionSortMode=value=>AUCTION_SORT_MODES.has(String(value||""))?String(value):"auction_priority";
 const SORT_HELP={
   ranked:"أفضل قيمة مرصودة بين الروابط المتحقق منها في هذا الجيل؛ التحقق يثبت الرابط لا الربح.",
   price:"الأقل سعرًا: يرتب سعر الإعلان المرصود باليورو من الأقل إلى الأعلى.",
@@ -633,6 +648,7 @@ const SORT_HELP={
   km:"الأقل كيلومترات: يرتب عداد السيارة المعلن من الأقل إلى الأعلى."
 };
 const AUCTION_SORT_HELP={
+  auction_priority:"المؤهلة أولًا، ثم أعلى نسبة فرق سعر مرصودة عندما يكتمل مرجع واد كنيس الموثق وسعر الصرف؛ المجهول أخيرًا. بعد المؤهلة تتناوب الدول والمصادر. هذا الفرق ليس ربحًا صافيًا ولا ROI نهائيًا.",
   auction_soon:"تنتهي قريبًا: يرتب المزادات حسب نهاية المزاد الفعلية؛ المزادات المغلقة تُخفى فورًا.",
   auction_bid:"أقل سعر معلن: يرتب المبلغ المتاح باليورو، مع تمييز المزايدة الحالية عن سعر البداية أو الحد الأدنى.",
   auction_vetted:"أحدث مصدر موثق: يرتب حسب أولوية المصدر الرسمي ثم آخر رصد له."
@@ -685,6 +701,111 @@ function restoreNavigationState(state){
 const activeAuctionRows=()=>AUCTION_SCOPE==="all"?(AUCTION_MONITORED_LANE||AUCTION_LANE||[]):(AUCTION_LANE||[]);
 const auctionPrice=row=>typeof row.price_eur==="number"?row.price_eur:
   (typeof row.current_bid_eur==="number"?row.current_bid_eur:null);
+const lexicalCompare=(left,right)=>String(left||"")<String(right||"")?-1:String(left||"")>String(right||"")?1:0;
+
+/*
+ * Shared, deterministic ranking rule for the UI and eligible-auction alerts.
+ * This is an observed price margin, not net profit or final ROI:
+ *   bid_dzd = round(price_eur * official ALCES sell rate)
+ *   observed_margin_dzd = Ouedkniss average_dzd - bid_dzd
+ *   observed_margin_ratio = observed_margin_dzd / bid_dzd
+ * Rows without both pieces of evidence are deliberately unranked/unknown.
+ */
+function auctionRankingMetric(row,fx=FX){
+  const ref=row&&row.ouedkniss_reference,price=auctionPrice(row||{});
+  const rateScaled=fx&&fx.rateScaled,rateScale=fx&&fx.rateScale;
+  if(!ref||!Number.isInteger(ref.average_dzd)||ref.average_dzd<=0||
+     !Number.isInteger(ref.sample_count)||ref.sample_count<2||
+     typeof price!=="number"||!Number.isFinite(price)||price<=0||
+     !Number.isSafeInteger(rateScaled)||rateScaled<=0||
+     !Number.isSafeInteger(rateScale)||rateScale<=0)return null;
+  const bidDzd=Math.round(price*rateScaled/rateScale);
+  if(!Number.isSafeInteger(bidDzd)||bidDzd<=0)return null;
+  const marginDzd=ref.average_dzd-bidDzd;
+  return {bidDzd,marginDzd,marginRatio:marginDzd/bidDzd,sampleCount:ref.sample_count};
+}
+function compareEligibleAuctionRank(left,right,fx=FX){
+  const a=auctionRankingMetric(left,fx),b=auctionRankingMetric(right,fx);
+  if(a&&!b)return -1;
+  if(!a&&b)return 1;
+  if(a&&b){
+    if(a.marginRatio!==b.marginRatio)return b.marginRatio-a.marginRatio;
+    if(a.marginDzd!==b.marginDzd)return b.marginDzd-a.marginDzd;
+    if(a.sampleCount!==b.sampleCount)return b.sampleCount-a.sampleCount;
+  }
+  const aPriority=Number.isFinite(left.registry_priority)?left.registry_priority:Number.MAX_SAFE_INTEGER;
+  const bPriority=Number.isFinite(right.registry_priority)?right.registry_priority:Number.MAX_SAFE_INTEGER;
+  if(aPriority!==bPriority)return aPriority-bPriority;
+  const aEnd=timestampMs(left.canonical_end_utc)??Number.MAX_SAFE_INTEGER;
+  const bEnd=timestampMs(right.canonical_end_utc)??Number.MAX_SAFE_INTEGER;
+  return aEnd-bEnd||lexicalCompare(left.source,right.source)||lexicalCompare(left.id,right.id);
+}
+function balanceAuctionRows(rows){
+  const queues=[],bySource=new Map();
+  for(const row of rows){
+    const key=String(row.source||row.source_key||"unknown");
+    if(!bySource.has(key)){
+      const queue={key,rows:[],cursor:0,index:queues.length};
+      bySource.set(key,queue);queues.push(queue);
+    }
+    bySource.get(key).rows.push(row);
+  }
+  const emittedByCountry=new Map(),emittedBySource=new Map(),result=[];
+  let rotation=0;
+  while(result.length<rows.length){
+    let best=null;
+    for(let offset=0;offset<queues.length;offset++){
+      const queue=queues[(rotation+offset)%queues.length];
+      if(queue.cursor>=queue.rows.length)continue;
+      const row=queue.rows[queue.cursor],country=String(row.country||"unknown");
+      const candidate={queue,row,country,offset,
+        countryCount:emittedByCountry.get(country)||0,
+        sourceCount:emittedBySource.get(queue.key)||0};
+      if(!best||candidate.countryCount<best.countryCount||
+         (candidate.countryCount===best.countryCount&&candidate.sourceCount<best.sourceCount)||
+         (candidate.countryCount===best.countryCount&&candidate.sourceCount===best.sourceCount&&candidate.offset<best.offset))best=candidate;
+    }
+    if(!best)break;
+    best.queue.cursor++;result.push(best.row);
+    emittedByCountry.set(best.country,best.countryCount+1);
+    emittedBySource.set(best.queue.key,best.sourceCount+1);
+    rotation=(best.queue.index+1)%queues.length;
+  }
+  return result;
+}
+function prioritizeAuctionRows(rows,fx=FX){
+  const eligible=[],remaining=[];
+  for(const row of rows)(row.eligibility_status==="eligible"?eligible:remaining).push(row);
+  eligible.sort((a,b)=>compareEligibleAuctionRank(a,b,fx));
+  return eligible.concat(balanceAuctionRows(remaining));
+}
+function paintAuctionDistribution(rows){
+  const panel=$("auctionSourceCounts");if(!panel)return;
+  const sourceCounts=new Map(),countryCounts=new Map();
+  for(const row of rows){
+    const source=String(row.source||row.source_key||"unknown"),country=String(row.country||"unknown");
+    sourceCounts.set(source,(sourceCounts.get(source)||0)+1);
+    countryCounts.set(country,(countryCounts.get(country)||0)+1);
+  }
+  const orderedCounts=counts=>[...counts].sort((a,b)=>b[1]-a[1]||lexicalCompare(a[0],b[0]));
+  const sourceChips=orderedCounts(sourceCounts).map(([source,count])=>
+    `<span class="distribution-chip">${esc(auctionSourceLabel(source))} <b>${nf.format(count)}</b></span>`).join("");
+  const countryChips=orderedCounts(countryCounts).map(([country,count])=>
+    `<span class="distribution-chip">${FLAGS[country]||"🌍"} ${esc(CN[country]||country)} <b>${nf.format(count)}</b></span>`).join("");
+  const eligible=rows.filter(row=>row.eligibility_status==="eligible");
+  const withReference=eligible.filter(row=>row.ouedkniss_reference).length;
+  const ranked=eligible.filter(row=>auctionRankingMetric(row)!==null).length;
+  const rankingNote=!eligible.length?"":ranked
+    ?`يتوفر هامش سعر مرصود موثق لـ <b>${nf.format(ranked)}</b> من ${nf.format(eligible.length)} مزاد مؤهل؛ لا يمثل ربحًا صافيًا أو ROI نهائيًا.`
+    :withReference
+      ?`تعذر حساب هامش السعر الموثق للمؤهلة لأن سعر الصرف الموثق غير متاح؛ لم نختلق ربحًا أو ROI.`
+      :`لا يملك أي من المزادات المؤهلة الحالية مرجع واد كنيس مكتملًا؛ الربح وROI غير منشورين، لذلك يبقى ترتيب الهامش مجهولًا بدل اختلاق قيمة.`;
+  panel.hidden=false;
+  panel.innerHTML=`<div class="distribution-summary">النتائج الحالية من <b>${nf.format(sourceCounts.size)} مصدرًا</b> و<b>${nf.format(countryCounts.size)} دولة</b></div>`+
+    `<div class="distribution-chips" aria-label="عدادات المصادر">${sourceChips}</div>`+
+    `<div class="distribution-chips" aria-label="عدادات الدول">${countryChips}</div>`+
+    (rankingNote?`<div class="auction-ranking-note">${rankingNote}</div>`:"");
+}
 function populateFilterOptions(auctionMode){
   const rows=auctionMode?activeAuctionRows():DATA;
   const countryOf=o=>auctionMode?o.country:o.c;
@@ -971,10 +1092,11 @@ function boot(payload,monitoredRows=null){
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
-        $("fs").innerHTML='<option value="auction_soon">⏳ تنتهي قريبًا</option>'+
+        $("fs").innerHTML='<option value="auction_priority">✅ المؤهل ثم تنوع الدول والمصادر</option>'+
+          '<option value="auction_soon">⏳ تنتهي قريبًا</option>'+
           '<option value="auction_bid">💶 أقل سعر مزاد معلن باليورو</option>'+
           '<option value="auction_vetted">🛡️ أحدث مصدر موثق</option>';
-        $("fs").value="auction_soon";
+        $("fs").value="auction_priority";
         populateFilterOptions(true);
       }else{
         $("fs").innerHTML='<option value="ranked">✨ أفضل قيمة مرصودة ضمن روابط متحقق منها</option>'+
@@ -1028,6 +1150,7 @@ function boot(payload,monitoredRows=null){
 }
 function apply(){
   if($("fauction")&&$("fauction").checked&&AUCTION_LANE){applyAuction();return;}
+  if($("auctionSourceCounts"))$("auctionSourceCounts").hidden=true;
   const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
         p=$("fp").value,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
         unseenOnly=$("funseen").checked,s=normalizeSortMode($("fs").value);
@@ -1057,6 +1180,7 @@ function applyAuction(){
   const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,
         f=$("ff").value,y=$("fy").value,p=$("fp").value;
   const s=normalizeAuctionSortMode($("fs").value);
+  if($("fs").value!==s)$("fs").value=s;
   const nowMs=Date.now();
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
   const endRank=row=>timestampMs(row.canonical_end_utc)??Number.MAX_SAFE_INTEGER;
@@ -1077,17 +1201,20 @@ function applyAuction(){
     auction_bid:(a,b)=>(auctionPrice(a)??Number.MAX_SAFE_INTEGER)-(auctionPrice(b)??Number.MAX_SAFE_INTEGER)||endRank(a)-endRank(b),
     auction_vetted:(a,b)=>a.registry_priority-b.registry_priority||timestampMs(b.last_seen_at)-timestampMs(a.last_seen_at)
   };
-  VIEW.sort(auctionSorts[s]);
+  if(s==="auction_priority")VIEW=prioritizeAuctionRows(VIEW);
+  else VIEW.sort(auctionSorts[s]);
   $("sortHelp").textContent=AUCTION_SORT_HELP[s];
   const scopeLabel=AUCTION_SCOPE==="all"?"من كل المزادات الرسمية المراقبة":"مؤهلًا عبر البوابات الصارمة";
   const watchWarning=AUCTION_SCOPE==="all"&&AUCTION_WATCH_STATE!=="ready"?" · الرصد الواسع غير متاح أو قديم؛ عُرضت المؤهلة فقط":"";
   $("count").innerHTML=`عرض <b>${nf.format(VIEW.length)}</b> ${scopeLabel}${watchWarning}`;
+  paintAuctionDistribution(VIEW);
   render();
 }
 function auctionCard(row){
   const id=String(row.id||""),href=safeUrl(row.url);
   const countryName=CN[row.country]||row.country;
   const endMs=timestampMs(row.canonical_end_utc);
+  const eventMs=timestampMs(row.sale_event_utc);
   const soonBadge=row.ends_soon?'<span class="badge b-live">تنتهي قريبًا ⏳</span>':'';
   const price=auctionPrice(row);
   const priceKind=row.price_kind||"current_bid";
@@ -1098,7 +1225,9 @@ function auctionCard(row){
   const eligibilityBadge=`<span class="badge ${eligibilityClass}">${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</span>`;
   const priceBadge=`<span class="badge ${priceKind==="current_bid"?"b-live":"b-est"}">${esc(AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown)}</span>`;
   const ref=row.ouedkniss_reference;
+  const rankingMetric=auctionRankingMetric(row);
   const ouedReference=ref?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`:"";
+  const marginEvidence=rankingMetric?`<div class="evidence">هامش السعر المرصود قبل الشحن والجمارك: <b>${nf.format(rankingMetric.marginDzd)} دج · ${fmtPct(rankingMetric.marginRatio*100)}</b> · معيار ترتيب فقط، وليس ربحًا صافيًا أو ROI نهائيًا</div>`:"";
   const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="فتح المزاد: ${esc(row.title)}">فتح المزاد ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
   return `<article class="card auction" role="listitem">
@@ -1117,12 +1246,15 @@ function auctionCard(row){
       <div>🌍 الدولة <b>${esc(countryName)}</b></div>
       <div>🏛️ المصدر الرسمي <b>${esc(auctionSourceLabel(row.source))}</b></div>
     </div>
-    <div class="recency">${endLabel}: <b>${endMs===null?"غير معلن":fmtTime(endMs)}</b> · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
+    <div class="recency">${endLabel}: <b>${endMs===null?"غير معلن":fmtTime(endMs)}</b>${eventMs!==null?` · موعد جلسة المزاد: <b>${fmtTime(eventMs)}</b>`:""} · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
     ${ouedReference}
+    ${marginEvidence}
     <div class="evidence">حالة الأهلية: <b>${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</b> · ${esc(row.eligibility_reason||"تحتاج مراجعة شروط الاستيراد والمشاركة.")}</div>
     ${row.registration_date?`<div class="recency">تاريخ التسجيل المعلن: <b>${esc(row.registration_date)}</b></div>`:""}
     ${row.price_label?`<div class="recency">وصف السعر في المصدر: <b>${esc(row.price_label)}</b></div>`:""}
     ${row.bid_visibility?`<div class="recency">ظهور المزايدات: <b>${esc(row.bid_visibility)}</b></div>`:""}
+    ${row.damage?`<div class="evidence">الحالة/الضرر المعلن: <b>${esc(row.damage)}</b></div>`:""}
+    ${row.documents?`<div class="recency">الوثائق المعلنة: <b>${esc(row.documents)}</b></div>`:""}
     <div class="evidence">شروط الدخول: ${esc(row.access_sale_note)}</div>
     <div class="foot">
       <span class="verification">دليل المصدر: ${esc(row.evidence)}</span>
@@ -1242,6 +1374,10 @@ async function signedRefreshHeaders(mode){
 }
 function paintRefresh(state){
   const running=!!state.running||state.status==="pending"||state.status==="queued"||state.status==="running";
+  const controlUpdatedMs=timestampMs(state.updated_at||state.completed_at||state.started_at||state.requested_at);
+  const controlIsOlderThanData=Number.isFinite(controlUpdatedMs)&&Number.isFinite(DATA_GENERATED_AT_MS)&&
+    controlUpdatedMs<DATA_GENERATED_AT_MS-5*60*1000;
+  const controlIsStale=!Number.isFinite(controlUpdatedMs)||Date.now()-controlUpdatedMs>DATA_MAX_AGE_MS;
   if(running)awaitingRefresh=true;
   $("refreshBtn").disabled=running;$("fullRefreshBtn").disabled=running;
   $("refreshBtn").textContent=running&&state.mode==="smart"?"⏳ تحديث ذكي…":"⚡ جلب وتحديث ذكي";
@@ -1249,7 +1385,12 @@ function paintRefresh(state){
   $("refreshStatus").style.color=DATA_FRESH?"var(--mut)":"var(--warn)";
   if(state.message&&running)$("refreshStatus").textContent=state.message;
   if(state.job_id)requestedJobId=state.job_id;
-  if(!running&&state.status==="ok"){
+  if(!running&&(controlIsOlderThanData||controlIsStale)){
+    clearInterval(refreshPoll);refreshPoll=null;
+    $("refreshStatus").textContent=DATA_FRESH
+      ?"البيانات المنشورة أحدث من سجل خدمة التحديث؛ تجاهلنا حالة خدمة قديمة"
+      :"سجل خدمة التحديث قديم؛ يعتمد وقت البيانات المنشور أعلاه";
+  }else if(!running&&state.status==="ok"){
     clearInterval(refreshPoll);refreshPoll=null;
     if(awaitingRefresh){
       awaitingRefresh=false;
