@@ -173,6 +173,9 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
   .wrap{padding-inline:10px}.meta,.discounts{grid-template-columns:1fr}.verification{max-width:100%}.open{width:100%;text-align:center}
   #filters{margin-inline:-10px;padding-inline:10px}.card{padding:14px}
 }
+@media(max-width:759px){
+  #filters{position:static;top:auto;z-index:auto;backdrop-filter:none;-webkit-backdrop-filter:none}
+}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
 </style>
 </head>
@@ -581,6 +584,7 @@ const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen","fauction"];
 const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_SCOPE="eligible",AUCTION_WATCH_STATE="missing";
+let AUCTION_EU_REFERENCE_INDEX=new Map();
 const SORT_MODES=new Set(["ranked","price","saving","recent","km"]);
 const AUCTION_SORT_MODES=new Set(["auction_priority","auction_soon","auction_bid","auction_vetted"]);
 const AUCTION_SOURCE_CATALOG=Object.freeze([
@@ -665,7 +669,7 @@ const SORT_HELP={
   km:"الأقل كيلومترات: يرتب عداد السيارة المعلن من الأقل إلى الأعلى."
 };
 const AUCTION_SORT_HELP={
-  auction_priority:"المؤهلة أولًا، ثم أعلى نسبة فرق سعر مرصودة عندما يكتمل مرجع واد كنيس الموثق وسعر الصرف؛ المجهول أخيرًا. بعد المؤهلة تتناوب الدول والمصادر. هذا الفرق ليس ربحًا صافيًا ولا ROI نهائيًا.",
+  auction_priority:"المؤهلة أولًا، ثم أكبر هامش شراء مرصود: واد كنيس أولًا عند توفره، وإلا نفس مرجع السيارات الأوروبية المشابهة المستخدم في الإعلانات العادية. المجهول أخيرًا. هذا الهامش قبل الشحن والجمارك والعمولة وليس ربحًا صافيًا.",
   auction_soon:"تنتهي قريبًا: يرتب المزادات حسب نهاية المزاد الفعلية؛ المزادات المغلقة تُخفى فورًا.",
   auction_bid:"أقل سعر معلن: يرتب المبلغ المتاح باليورو، مع تمييز المزايدة الحالية عن سعر البداية أو الحد الأدنى.",
   auction_vetted:"أحدث مصدر موثق: يرتب حسب أولوية المصدر الرسمي ثم آخر رصد له."
@@ -720,26 +724,182 @@ const auctionPrice=row=>typeof row.price_eur==="number"?row.price_eur:
   (typeof row.current_bid_eur==="number"?row.current_bid_eur:null);
 const lexicalCompare=(left,right)=>String(left||"")<String(right||"")?-1:String(left||"")>String(right||"")?1:0;
 
+const AUCTION_VEHICLE_MAKES=[
+  "mercedes benz","land rover","range rover","alfa romeo","great wall","volkswagen",
+  "mercedes","renault","peugeot","citroen","opel","vauxhall","toyota","bmw","audi",
+  "ford","nissan","hyundai","kia","honda","mazda","fiat","skoda","seat","volvo",
+  "mitsubishi","suzuki","dacia","chevrolet","jeep","porsche","mini","lexus","subaru",
+  "jaguar","chrysler","dodge","tesla","ssangyong","isuzu","daihatsu","infiniti",
+  "genesis","cupra","smart","chery","geely","haval","byd","iveco","fuso","mg","ds","vw"
+].sort((a,b)=>b.length-a.length);
+const AUCTION_MAKE_ALIASES=new Map([
+  ["vw","volkswagen"],["mercedes","mercedes benz"],["vauxhall","opel"]
+]);
+const AUCTION_MODEL_NOISE=new Set([
+  "auto","automobile","car","cars","vehicle","vehicule","voiture","samochod","osobowy",
+  "occasion","used","gebraucht","benzina","benzin","essence","petrol","hybrid","diesel",
+  "automatic","automatique","automat","manual","manuel","mhev","phev","hev","ev"
+]);
+const normalizeAuctionVehicleText=value=>String(value||"").normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+const normalizeAuctionFuel=value=>{
+  const text=normalizeAuctionVehicleText(value);
+  if(/(?:^| )(?:hybrid|e hybrid|mhev|phev|hev)(?: |$)/.test(text))return "hybrid";
+  if(/(?:^| )(?:petrol|gasoline|benzin|benzine|essence|natural)(?: |$)/.test(text))return "petrol";
+  if(/(?:^| )(?:electric|elektrisch|electrique|elektro|bev)(?: |$)/.test(text))return "electric";
+  if(/(?:^| )(?:diesel|nafta|gazole)(?: |$)/.test(text))return "diesel";
+  return text;
+};
+function auctionVehicleIdentities(value){
+  const text=normalizeAuctionVehicleText(value),padded=` ${text} `;
+  if(!text)return [];
+  let make="",makeIndex=-1;
+  for(const candidate of AUCTION_VEHICLE_MAKES){
+    const index=padded.indexOf(` ${candidate} `);
+    if(index>=0&&(makeIndex<0||index<makeIndex)){make=candidate;makeIndex=index;}
+  }
+  if(!make)return [];
+  const canonicalMake=AUCTION_MAKE_ALIASES.get(make)||make;
+  const after=padded.slice(makeIndex+make.length+2).trim().split(/\s+/);
+  const tokens=[];
+  for(const raw of after){
+    const token=raw.replace(/^0+(?=\d)/,"");
+    if(!token||/^(?:19|20)\d{2}$/.test(token)||AUCTION_MODEL_NOISE.has(token))continue;
+    if(!/[a-z]/.test(token)&&!/\d/.test(token))continue;
+    tokens.push(token);
+    if(tokens.length===2)break;
+  }
+  if(!tokens.length)return [];
+  const base=`${canonicalMake}:${tokens[0]}`;
+  return tokens.length>1?[`${base}:${tokens[1]}`,base]:[base];
+}
+const auctionPeerKey=(identity,year,fuel,mileage)=>{
+  const normalizedModel=String(identity||"").trim().toLowerCase();
+  const normalizedFuel=normalizeAuctionFuel(fuel);
+  const normalizedYear=Number(year),normalizedMileage=Number(mileage);
+  if(!normalizedModel||!normalizedFuel||!Number.isInteger(normalizedYear)||normalizedYear<2000||
+     !Number.isFinite(normalizedMileage)||normalizedMileage<0)return null;
+  return `${normalizedModel}|${normalizedYear}|${normalizedFuel}|${Math.floor(normalizedMileage/25000)}`;
+};
+const auctionBroadPeerKey=(identity,year,fuel)=>{
+  const normalizedModel=String(identity||"").trim().toLowerCase(),normalizedFuel=normalizeAuctionFuel(fuel);
+  const normalizedYear=Number(year);
+  if(!normalizedModel||!normalizedFuel||!Number.isInteger(normalizedYear)||normalizedYear<2000)return null;
+  return `${normalizedModel}|${normalizedYear}|${normalizedFuel}|*`;
+};
+function auctionVinCandidate(row){
+  const text=[row&&row.title,row&&row.model,row&&row.evidence,row&&row.documents,row&&row.access_sale_note]
+    .filter(Boolean).join(" ").toUpperCase();
+  const candidates=text.match(/\b[A-HJ-NPR-Z0-9]{17}\b/g)||[];
+  return candidates.find(value=>(value.match(/\d/g)||[]).length>=3)||null;
+}
+function auctionVinModelYear(row){
+  const vin=auctionVinCandidate(row);if(!vin)return null;
+  const codes="ABCDEFGHJKLMNPRSTVWXY123456789",index=codes.indexOf(vin[9]);
+  if(index<0)return null;
+  const current=new Date().getUTCFullYear(),candidates=[];
+  for(let year=1980+index;year<=current+1;year+=30)candidates.push(year);
+  return candidates.length?candidates[candidates.length-1]:null;
+}
+function auctionComparableYear(row){
+  const explicit=Number(row&&row.year);
+  if(Number.isInteger(explicit)&&explicit>=2000&&explicit<=new Date().getUTCFullYear()+1)return explicit;
+  const registration=String(row&&row.registration_date||"").match(/(?:^|\D)((?:19|20)\d{2})(?:\D|$)/);
+  if(registration){
+    const year=Number(registration[1]);
+    if(year>=2000&&year<=new Date().getUTCFullYear()+1)return year;
+  }
+  const candidates=[...new Set((`${row&&row.model||""} ${row&&row.title||""}`.match(/\b(?:19|20)\d{2}\b/g)||[])
+    .map(Number).filter(year=>year>=2000&&year<=new Date().getUTCFullYear()+1))];
+  if(candidates.length!==1)return null;
+  const vinYear=auctionVinModelYear(row);
+  return vinYear!==null&&Math.abs(vinYear-candidates[0])>1?null:candidates[0];
+}
+const middleInteger=values=>{
+  const ordered=values.slice().sort((a,b)=>a-b),middle=Math.floor(ordered.length/2);
+  return ordered.length%2?ordered[middle]:Math.round((ordered[middle-1]+ordered[middle])/2);
+};
+function buildAuctionEuropeanReferenceIndex(offers){
+  const buckets=new Map();
+  for(const offer of offers||[]){
+    const lower=Number(offer.q1),median=Number(offer.mp),peers=Number(offer.pn);
+    const sources=Number(offer.ps),countries=Number(offer.pc);
+    const identities=auctionVehicleIdentities(offer.t);
+    if(!identities.length||!Number.isInteger(lower)||lower<=0||!Number.isInteger(median)||median<lower||
+       !Number.isInteger(peers)||peers<8||!Number.isInteger(sources)||sources<2||
+       !Number.isInteger(countries)||countries<2)continue;
+    for(const identity of identities){
+      const model=String(offer.m||"").trim().toLowerCase();
+      if(!model)continue;
+      for(const key of [auctionPeerKey(identity,offer.y,offer.f,offer.km),auctionBroadPeerKey(identity,offer.y,offer.f)]){
+        if(!key)continue;
+        if(!buckets.has(key))buckets.set(key,new Map());
+        const byModel=buckets.get(key);
+        if(!byModel.has(model))byModel.set(model,[]);
+        byModel.get(model).push({lower,median,peers,sources,countries});
+      }
+    }
+  }
+  const result=new Map();
+  for(const [key,byModel] of buckets){
+    if(byModel.size!==1)continue;
+    const [modelKey,refs]=byModel.entries().next().value;
+    const broad=key.endsWith("|*");
+    result.set(key,{source:"European observed market peers",
+      model_key:modelKey,
+      mileage_scope:broad?"same_model_year_fuel":"same_25000km_band",
+      lower_quartile_eur:broad?Math.min(...refs.map(ref=>ref.lower)):middleInteger(refs.map(ref=>ref.lower)),
+      median_eur:middleInteger(refs.map(ref=>ref.median)),
+      sample_count:Math.min(...refs.map(ref=>ref.peers)),
+      source_count:Math.min(...refs.map(ref=>ref.sources)),
+      country_count:Math.min(...refs.map(ref=>ref.countries)),
+      evidence_rows:refs.length});
+  }
+  return result;
+}
+function auctionEuropeanReference(row){
+  const identities=auctionVehicleIdentities(`${row&&row.model||""} ${row&&row.title||""}`);
+  for(const identity of identities){
+    const year=auctionComparableYear(row);
+    for(const key of [auctionPeerKey(identity,year,row&&row.fuel,row&&row.mileage),auctionBroadPeerKey(identity,year,row&&row.fuel)]){
+      const reference=key?AUCTION_EU_REFERENCE_INDEX.get(key)||null:null;
+      if(reference)return reference;
+    }
+  }
+  return null;
+}
+
 /*
  * Shared, deterministic ranking rule for the UI and eligible-auction alerts.
  * This is an observed price margin, not net profit or final ROI:
  *   bid_dzd = round(price_eur * official ALCES sell rate)
- *   observed_margin_dzd = Ouedkniss average_dzd - bid_dzd
- *   observed_margin_ratio = observed_margin_dzd / bid_dzd
- * Rows without both pieces of evidence are deliberately unranked/unknown.
+ * Ouedkniss is preferred when present. Otherwise the exact ordinary-radar
+ * cohort (model + year + fuel + 25,000 km band) supplies the same conservative
+ * European lower-quartile and median references used by regular listings.
+ * This remains an observed purchase margin, not landed-cost net profit.
  */
 function auctionRankingMetric(row,fx=FX){
   const ref=row&&row.ouedkniss_reference,price=auctionPrice(row||{});
   const rateScaled=fx&&fx.rateScaled,rateScale=fx&&fx.rateScale;
-  if(!ref||!Number.isInteger(ref.average_dzd)||ref.average_dzd<=0||
-     !Number.isInteger(ref.sample_count)||ref.sample_count<2||
-     typeof price!=="number"||!Number.isFinite(price)||price<=0||
-     !Number.isSafeInteger(rateScaled)||rateScaled<=0||
-     !Number.isSafeInteger(rateScale)||rateScale<=0)return null;
-  const bidDzd=Math.round(price*rateScaled/rateScale);
-  if(!Number.isSafeInteger(bidDzd)||bidDzd<=0)return null;
-  const marginDzd=ref.average_dzd-bidDzd;
-  return {bidDzd,marginDzd,marginRatio:marginDzd/bidDzd,sampleCount:ref.sample_count};
+  if(typeof price!=="number"||!Number.isFinite(price)||price<=0)return null;
+  if(ref&&Number.isInteger(ref.average_dzd)&&ref.average_dzd>0&&
+     Number.isInteger(ref.sample_count)&&ref.sample_count>=2&&
+     Number.isSafeInteger(rateScaled)&&rateScaled>0&&
+     Number.isSafeInteger(rateScale)&&rateScale>0){
+    const bidDzd=Math.round(price*rateScaled/rateScale);
+    if(Number.isSafeInteger(bidDzd)&&bidDzd>0){
+      const marginDzd=ref.average_dzd-bidDzd;
+      return {referenceKind:"ouedkniss",bidDzd,marginDzd,
+        marginRatio:marginDzd/bidDzd,sampleCount:ref.sample_count};
+    }
+  }
+  const european=auctionEuropeanReference(row);
+  if(!european||!Number.isInteger(european.lower_quartile_eur)||european.lower_quartile_eur<=0||
+     !Number.isInteger(european.median_eur)||european.median_eur<european.lower_quartile_eur||
+     !Number.isInteger(european.sample_count)||european.sample_count<8)return null;
+  const marginEur=european.lower_quartile_eur-price;
+  return {referenceKind:"europe",marginEur,marginRatio:marginEur/price,
+    sampleCount:european.sample_count,european};
 }
 function compareEligibleAuctionRank(left,right,fx=FX){
   const a=auctionRankingMetric(left,fx),b=auctionRankingMetric(right,fx);
@@ -747,7 +907,10 @@ function compareEligibleAuctionRank(left,right,fx=FX){
   if(!a&&b)return 1;
   if(a&&b){
     if(a.marginRatio!==b.marginRatio)return b.marginRatio-a.marginRatio;
-    if(a.marginDzd!==b.marginDzd)return b.marginDzd-a.marginDzd;
+    if(a.referenceKind!==b.referenceKind)return a.referenceKind==="ouedkniss"?-1:1;
+    const aMargin=a.referenceKind==="ouedkniss"?a.marginDzd:a.marginEur;
+    const bMargin=b.referenceKind==="ouedkniss"?b.marginDzd:b.marginEur;
+    if(aMargin!==bMargin)return bMargin-aMargin;
     if(a.sampleCount!==b.sampleCount)return b.sampleCount-a.sampleCount;
   }
   const aPriority=Number.isFinite(left.registry_priority)?left.registry_priority:Number.MAX_SAFE_INTEGER;
@@ -791,10 +954,19 @@ function balanceAuctionRows(rows){
   return result;
 }
 function prioritizeAuctionRows(rows,fx=FX){
-  const eligible=[],remaining=[];
-  for(const row of rows)(row.eligibility_status==="eligible"?eligible:remaining).push(row);
-  eligible.sort((a,b)=>compareEligibleAuctionRank(a,b,fx));
-  return eligible.concat(balanceAuctionRows(remaining));
+  const statusOrder=["eligible","review_required","not_eligible"],result=[];
+  const normalizedStatus=row=>row.eligibility_status==="eligible"?"eligible":
+    row.eligibility_status==="not_eligible"?"not_eligible":"review_required";
+  for(const status of statusOrder){
+    const known=[],unknown=[];
+    for(const row of rows){
+      if(normalizedStatus(row)!==status)continue;
+      (auctionRankingMetric(row,fx)?known:unknown).push(row);
+    }
+    known.sort((a,b)=>compareEligibleAuctionRank(a,b,fx));
+    result.push(...known,...balanceAuctionRows(unknown));
+  }
+  return result;
 }
 function paintAuctionDistribution(rows){
   const panel=$("auctionSourceCounts");if(!panel)return;
@@ -810,13 +982,14 @@ function paintAuctionDistribution(rows){
   const countryChips=orderedCounts(countryCounts).map(([country,count])=>
     `<span class="distribution-chip">${FLAGS[country]||"🌍"} ${esc(CN[country]||country)} <b>${nf.format(count)}</b></span>`).join("");
   const eligible=rows.filter(row=>row.eligibility_status==="eligible");
-  const withReference=eligible.filter(row=>row.ouedkniss_reference).length;
+  const withOued=eligible.filter(row=>row.ouedkniss_reference).length;
+  const withEurope=eligible.filter(row=>!row.ouedkniss_reference&&auctionEuropeanReference(row)).length;
   const ranked=eligible.filter(row=>auctionRankingMetric(row)!==null).length;
   const rankingNote=!eligible.length?"":ranked
-    ?`يتوفر هامش سعر مرصود موثق لـ <b>${nf.format(ranked)}</b> من ${nf.format(eligible.length)} مزاد مؤهل؛ لا يمثل ربحًا صافيًا أو ROI نهائيًا.`
-    :withReference
+    ?`يتوفر هامش شراء مرصود لـ <b>${nf.format(ranked)}</b> من ${nf.format(eligible.length)} مزاد مؤهل: ${nf.format(withOued)} بمرجع واد كنيس و${nf.format(withEurope)} بمرجع أوروبي مماثل؛ قبل الشحن والجمارك والعمولة.`
+    :withOued
       ?`تعذر حساب هامش السعر الموثق للمؤهلة لأن سعر الصرف الموثق غير متاح؛ لم نختلق ربحًا أو ROI.`
-      :`لا يملك أي من المزادات المؤهلة الحالية مرجع واد كنيس مكتملًا؛ الربح وROI غير منشورين، لذلك يبقى ترتيب الهامش مجهولًا بدل اختلاق قيمة.`;
+      :`لا يملك أي من المزادات المؤهلة الحالية مرجع واد كنيس أو فوجًا أوروبيًا مماثلًا مكتملًا؛ يبقى الهامش مجهولًا بدل اختلاق قيمة.`;
   panel.hidden=false;
   panel.innerHTML=`<div class="distribution-summary">النتائج الحالية من <b>${nf.format(sourceCounts.size)} مصدرًا</b> و<b>${nf.format(countryCounts.size)} دولة</b></div>`+
     `<div class="distribution-chips" aria-label="عدادات المصادر">${sourceChips}</div>`+
@@ -1015,6 +1188,7 @@ function boot(payload,monitoredRows=null){
   AUCTION_SCOPE="all";
   const navigationState=readNavigationState();
   DATA=offers.slice();
+  AUCTION_EU_REFERENCE_INDEX=buildAuctionEuropeanReferenceIndex(DATA);
   ORIGINAL_RANK=new Map(DATA.map((offer,index)=>[offer.id,index]));
   initializeOfferHistory();
   $("lock").classList.add("hidden");$("app").classList.remove("hidden");
@@ -1109,7 +1283,7 @@ function boot(payload,monitoredRows=null){
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
-        $("fs").innerHTML='<option value="auction_priority">✅ المؤهل ثم تنوع الدول والمصادر</option>'+
+        $("fs").innerHTML='<option value="auction_priority">💰 المؤهل ثم أعلى هامش شراء مرصود</option>'+ 
           '<option value="auction_soon">⏳ تنتهي قريبًا</option>'+
           '<option value="auction_bid">💶 أقل سعر مزاد معلن باليورو</option>'+
           '<option value="auction_vetted">🛡️ أحدث مصدر موثق</option>';
@@ -1242,9 +1416,18 @@ function auctionCard(row){
   const eligibilityBadge=`<span class="badge ${eligibilityClass}">${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</span>`;
   const priceBadge=`<span class="badge ${priceKind==="current_bid"?"b-live":"b-est"}">${esc(AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown)}</span>`;
   const ref=row.ouedkniss_reference;
+  const europeanRef=!ref?auctionEuropeanReference(row):null;
   const rankingMetric=auctionRankingMetric(row);
-  const ouedReference=ref?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`:"";
-  const marginEvidence=rankingMetric?`<div class="evidence">هامش السعر المرصود قبل الشحن والجمارك: <b>${nf.format(rankingMetric.marginDzd)} دج · ${fmtPct(rankingMetric.marginRatio*100)}</b> · معيار ترتيب فقط، وليس ربحًا صافيًا أو ROI نهائيًا</div>`:"";
+  const comparableYear=auctionComparableYear(row),vin=auctionVinCandidate(row);
+  const referenceEvidence=ref
+    ?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`
+    :europeanRef
+      ?`<div class="evidence">مرجع السوق الأوروبي المماثل: منخفض <b>${fmtMoney(europeanRef.lower_quartile_eur)}</b> · أوسط <b>${fmtMoney(europeanRef.median_eur)}</b> · ${nf.format(europeanRef.sample_count)} إعلانًا من ${nf.format(europeanRef.source_count)} عائلات مصادر و${nf.format(europeanRef.country_count)} دول · ${europeanRef.mileage_scope==="same_25000km_band"?"نفس فئة العداد":"نفس الموديل والسنة والوقود بمرجع محافظ عبر فئات العداد"}</div>`
+      :"";
+  const marginValue=rankingMetric?(rankingMetric.referenceKind==="ouedkniss"
+    ?`${nf.format(rankingMetric.marginDzd)} دج`
+    :fmtMoney(rankingMetric.marginEur)):"";
+  const marginEvidence=rankingMetric?`<div class="evidence">هامش الشراء المرصود قبل الشحن والجمارك وعمولة المزاد: <b>${marginValue} · ${fmtPct(rankingMetric.marginRatio*100)}</b> · معيار ترتيب محافظ، وليس ربحًا صافيًا مضمونًا</div>`:"";
   const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="فتح المزاد: ${esc(row.title)}">فتح المزاد ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
   return `<article class="card auction" role="listitem">
@@ -1257,17 +1440,18 @@ function auctionCard(row){
       <strong>${typeof price==="number"?fmtMoney(price):"السعر غير ظاهر"}</strong><span>${esc(priceLabel)}</span>
     </div>
     <div class="meta">
-      <div>🗓️ السنة <b>${row.year?nf.format(row.year):"—"}</b></div>
+      <div>🗓️ السنة <b>${comparableYear?nf.format(comparableYear):"—"}</b>${!row.year&&comparableYear?" <small>(مرجع سعري غير مؤهل للأهلية)</small>":""}</div>
       <div>🛣️ العداد <b>${row.mileage?nf.format(row.mileage)+" كم":"—"}</b></div>
       <div>⛽ الوقود <b>${row.fuel?FUEL_AR(row.fuel):"—"}</b></div>
       <div>🌍 الدولة <b>${esc(countryName)}</b></div>
       <div>🏛️ المصدر الرسمي <b>${esc(auctionSourceLabel(row.source))}</b></div>
     </div>
     <div class="recency">${endLabel}: <b>${endMs===null?"غير معلن":fmtTime(endMs)}</b>${eventMs!==null?` · موعد جلسة المزاد: <b>${fmtTime(eventMs)}</b>`:""} · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
-    ${ouedReference}
+    ${referenceEvidence}
     ${marginEvidence}
     <div class="evidence">حالة الأهلية: <b>${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</b> · ${esc(row.eligibility_reason||"تحتاج مراجعة شروط الاستيراد والمشاركة.")}</div>
     ${row.registration_date?`<div class="recency">تاريخ التسجيل المعلن: <b>${esc(row.registration_date)}</b></div>`:""}
+    ${vin?`<div class="recency">رقم VIN المرصود: <b>${esc(vin)}</b> · يُستخدم لمراجعة تعارض سنة الموديل ولا يمنح الأهلية وحده</div>`:""}
     ${row.price_label?`<div class="recency">وصف السعر في المصدر: <b>${esc(row.price_label)}</b></div>`:""}
     ${row.bid_visibility?`<div class="recency">ظهور المزايدات: <b>${esc(row.bid_visibility)}</b></div>`:""}
     ${row.damage?`<div class="evidence">الحالة/الضرر المعلن: <b>${esc(row.damage)}</b></div>`:""}
