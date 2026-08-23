@@ -715,6 +715,11 @@ const AUCTION_PRICE_KIND_LABELS={
   hidden:"السعر الحالي محجوب",
   unknown:"نوع السعر غير محسوم"
 };
+const AUCTION_ELIGIBILITY_LABELS={
+  eligible:"مؤهل مبدئيًا",
+  review_required:"يتطلب مراجعة الأهلية",
+  not_eligible:"غير مؤهل للاستيراد"
+};
 function readNavigationState(){
   try{
     const value=JSON.parse(sessionStorage.getItem(NAV_KEY)||"null");
@@ -1399,6 +1404,9 @@ function auctionCard(row){
   const endMs=timestampMs(row.canonical_end_utc);
   const eventMs=timestampMs(row.sale_event_utc);
   const priceKind=row.price_kind||"current_bid";
+  const eligibility=row.eligibility_status||"review_required";
+  const eligibilityClass=eligibility==="eligible"?"b-real":eligibility==="not_eligible"?"b-ineligible":"b-review";
+  const eligibilityLabel=AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required;
   const endText=endMs!==null?fmtTime(endMs):"غير معلنة";
   const mileage=Number(row.mileage??row.mileage_km);
   const isFav=FAVORITES_IDS.has(id);
@@ -1408,6 +1416,7 @@ function auctionCard(row){
     <div class="top">
       <span class="flag">${FLAGS[row.country]||"🌍"}</span>
       <span class="chip">${esc(auctionSourceLabel(row.source_key||row.source))}</span>
+      <span class="badge ${eligibilityClass}">${esc(eligibilityLabel)}</span>
       <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
     </div>
     <h2 class="title">${esc(row.title)}</h2>
@@ -1426,6 +1435,7 @@ function auctionCard(row){
       ${endMs!==null?` · <b>${countdownText(endMs)}</b>`:""}
       ${endMs===null&&eventMs!==null?` · موعد جلسة البيع: <b>${fmtTime(eventMs)}</b>`:""}
     </div>
+    <div class="evidence">حالة الأهلية للمعلومة فقط ولا تخفي المزاد: <b>${esc(eligibilityLabel)}</b> · ${esc(row.eligibility_reason)}</div>
     <div class="foot">${link}</div>
   </article>`;
 }
