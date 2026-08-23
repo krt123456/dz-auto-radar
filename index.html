@@ -23,7 +23,7 @@ body::before{content:"";position:fixed;inset:0;background:
 a{color:inherit;text-decoration:none}
 button,input,select{font-family:inherit;font-size:1rem}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc2);outline-offset:2px}
-.wrap{max-width:1280px;margin:0 auto;padding:180px 14px 90px}
+.wrap{max-width:1280px;margin:0 auto;padding:0 14px 90px}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
   overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
@@ -71,13 +71,13 @@ header{padding:22px 0 12px}
 .fx-note.warn{border-color:rgba(251,191,36,.48);background:rgba(251,191,36,.1);color:#fde68a}
 
 /* ---------- filters ---------- */
-#filters{position:fixed;top:0;left:0;right:0;z-index:20;background:rgba(11,18,32,.95);backdrop-filter:blur(12px);
-  border-bottom:1px solid var(--line);padding:12px 14px;margin:0}
+#filters{position:sticky;top:0;z-index:20;background:rgba(11,18,32,.88);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);padding:12px 0;margin:10px -14px 16px;padding-inline:14px}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-@media(min-width:760px){.frow{grid-template-columns:repeat(4,minmax(0,1fr))}}
-@media(min-width:1120px){.frow{grid-template-columns:repeat(8,minmax(80px,1fr))}}
+@media(min-width:760px){.frow{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media(min-width:1120px){.frow{grid-template-columns:2fr repeat(6,minmax(100px,1fr)) auto}}
 #q{grid-column:1/-1}
-@media(min-width:760px){#q{grid-column:1/-1}}
+@media(min-width:760px){#q{grid-column:auto}}
 .f{padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card2);color:var(--txt);width:100%}
 .f:focus{outline:2px solid var(--acc2)}
 #reset{background:var(--chip);border:1px solid var(--line);border-radius:12px;color:var(--mut);padding:11px 16px;cursor:pointer;white-space:nowrap}
@@ -85,7 +85,7 @@ header{padding:22px 0 12px}
 .count b{color:var(--acc)}
 .sort-help{color:#b9c9e6;font-size:.78rem;line-height:1.55;margin-top:9px;padding-inline:4px}
 .secondary-filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:8px}
-@media(min-width:760px){.secondary-filters{grid-template-columns:repeat(5,max-content);justify-content:start}}
+@media(min-width:760px){.secondary-filters{grid-template-columns:repeat(3,max-content);justify-content:start}}
 .check{display:flex;gap:8px;align-items:center;cursor:pointer}
 #auctionToggleWrap{display:none!important}
 .mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px}
@@ -174,18 +174,9 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
   #filters{margin-inline:-10px;padding-inline:10px}.card{padding:14px}
 }
 @media(max-width:759px){
-  #filters{padding:10px}
-  .wrap{padding-top:200px}
+  #filters{position:static;top:auto;z-index:auto;backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
-.heart-btn{background:none;border:none;cursor:pointer;font-size:1.2em;padding:4px;position:absolute;top:8px;left:8px;z-index:2;transition:transform .2s}
-.heart-btn:hover{transform:scale(1.2)}
-.heart-btn.active{animation:heartPop .3s ease}
-@keyframes heartPop{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
-.card.is-favorite{border:2px solid #e74c3c}
-.card .top{position:relative}
-#auctionDaysWrap{display:inline-block}
-#auctionDaysWrap[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -239,8 +230,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <select class="f" id="fc" aria-label="الدولة"><option value="">كل الدول</option></select>
       <select class="f" id="fsrc" aria-label="المصدر"><option value="">كل المصادر</option></select>
       <select class="f" id="ff" aria-label="نوع الوقود"><option value="">كل الوقود</option></select>
-      <select class="f" id="fy" aria-label="من سنة"><option value="">من سنة</option></select>
-      <select class="f" id="fy2" aria-label="إلى سنة"><option value="">إلى سنة</option></select>
+      <select class="f" id="fy" aria-label="السنة"><option value="">كل السنوات</option></select>
       <select class="f" id="fp" aria-label="نطاق سعر الإعلان">
         <option value="">كل الأسعار</option>
         <option value="0-10000">حتى 10,000 €</option>
@@ -249,19 +239,6 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="20000-30000">20,000 — 30,000 €</option>
         <option value="30000-999999">فوق 30,000 €</option>
       </select>
-      <div id="auctionDaysWrap" hidden>
-        <select class="f" id="fDays" aria-label="الوقت المتبقي للمزاد">
-          <option value="">كل المواعيد</option>
-          <option value="0.5">أقل من 12 ساعة</option>
-          <option value="1">أقل من 24 ساعة</option>
-          <option value="2">أقل من 48 ساعة</option>
-          <option value="3">أقل من 3 أيام</option>
-          <option value="5">أقل من 5 أيام</option>
-          <option value="7">أقل من أسبوع</option>
-          <option value="14">أقل من أسبوعين</option>
-          <option value="30">أقل من شهر</option>
-        </select>
-      </div>
       <select class="f" id="fs" aria-label="ترتيب النتائج" aria-describedby="sortHelp">
         <option value="ranked">✨ أفضل قيمة مرصودة ضمن روابط متحقق منها</option>
         <option value="price">💶 الأقل سعراً باليورو</option>
@@ -283,9 +260,6 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       </label>
       <label class="f check" id="auctionToggleWrap" hidden>
         <input type="checkbox" id="fauction"> المزادات الرسمية فقط
-      </label>
-      <label class="f check">
-        <input type="checkbox" id="fav"> ❤️ المفضلة فقط
       </label>
     </div>
     <div class="sort-help" id="sortHelp">أفضل قيمة مرصودة بين الروابط المتحقق منها في هذا الجيل؛ التحقق يثبت الرابط لا الربح.</div>
@@ -417,18 +391,6 @@ function recencyText(value){
   const relative=ageMinutes<1?"الآن":ageMinutes<60?`منذ ${ageMinutes} دقيقة`:
     ageMinutes<1440?`منذ ${Math.floor(ageMinutes/60)} ساعة`:`منذ ${Math.floor(ageMinutes/1440)} يومًا`;
   return `${relative} · ${fmtTime(value)}`;
-}
-function countdownText(endMs){
-  if(endMs===null)return"";
-  const now=Date.now();
-  const diff=endMs-now;
-  if(diff<=0)return"انتهى المزاد";
-  const days=Math.floor(diff/(1000*60*60*24));
-  const hours=Math.floor((diff%(1000*60*60*24))/(1000*60*60));
-  const minutes=Math.floor((diff%(1000*60*60))/(1000*60));
-  if(days>0)return`${days} يوم ${hours} ساعة ${minutes} دقيقة`;
-  if(hours>0)return`${hours} ساعة ${minutes} دقيقة`;
-  return`${minutes} دقيقة`;
 }
 function paintFxStatus(){
   const note=$("fxnote");if(!note)return;
@@ -612,14 +574,14 @@ const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
 const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
 let DATA=[],VIEW=[],page=1,VERIFICATION_RECENT=false,VERIFICATION_AT_MS=null,ACTIVE_PIN="",ORIGINAL_RANK=new Map();
-let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set(),FAVORITES_IDS=new Set();
+let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=8*60*60*1000;
 let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
 const DATA_MAX_AGE_MS=8*60*60*1000;
-const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1",FAVORITES_KEY="dzr-favorites-v1";
+const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
 const NAV_KEY="dzr-navigation-v2";
-const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fy2","fp","fs"];
-const NAV_CHECK_IDS=["flive","fnew","funseen","fauction","fav"];
+const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
+const NAV_CHECK_IDS=["flive","fnew","funseen","fauction"];
 const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_SCOPE="eligible",AUCTION_WATCH_STATE="missing";
 let AUCTION_EU_REFERENCE_INDEX=new Map();
@@ -1057,8 +1019,7 @@ function populateFilterOptions(auctionMode){
   const fuels=[...new Set(rows.map(fuelOf).filter(Boolean))].sort();
   setOptions("ff","كل الوقود",fuels,f=>esc(FUEL_AR(f)));
   const years=[...new Set(rows.map(yearOf).filter(y=>y>2000))].sort((a,b)=>b-a);
-  setOptions("fy","من سنة",years,y=>String(y));
-  setOptions("fy2","إلى سنة",years,y=>String(y));
+  setOptions("fy","كل السنوات",years,y=>String(y));
 }
 
 function normalizeSearchText(value){
@@ -1111,7 +1072,6 @@ function initializeOfferHistory(){
   const ids=DATA.map(o=>String(o.id||"")).filter(Boolean);
   const current=new Set(ids);
   VISITED_IDS=readIdSet(VISITED_KEY);
-  FAVORITES_IDS=readIdSet(FAVORITES_KEY);
   const hasBaseline=localStorage.getItem(KNOWN_KEY)!==null;
   KNOWN_IDS=hasBaseline?readIdSet(KNOWN_KEY):new Set(ids);
   NEW_IDS=hasBaseline?readIdSet(NEW_KEY):new Set();
@@ -1284,12 +1244,12 @@ function boot(payload,monitoredRows=null){
     `<div class="stat">بناء اللوحة<b>${fmtTime(boardTimestamp)}</b></div>`;
   updateHistoryStats();
   populateFilterOptions(false);
-  ["q","fc","fsrc","ff","fy","fy2","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
-  ["flive","fnew","funseen","fav","fDays"].forEach(id=>{if($(id))$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();});});
+  ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
+  ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
   const auctionWrap=$("auctionToggleWrap"),auctionScopeWrap=$("auctionScopeWrap");
   const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
   const eligibleAuctionsBtn=$("eligibleAuctionsBtn"),allAuctionsBtn=$("allAuctionsBtn");
-  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fy2","fp"].forEach(id=>$(id).value="");
+  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");
   const paintModeTabs=auctionMode=>{
     regularModeBtn.classList.toggle("active",!auctionMode);
     auctionModeBtn.classList.toggle("active",auctionMode);
@@ -1320,7 +1280,6 @@ function boot(payload,monitoredRows=null){
       clearSectionFilters();
       paintModeTabs($("fauction").checked);
       auctionScopeWrap.hidden=!$("fauction").checked;
-      if($("auctionDaysWrap"))$("auctionDaysWrap").hidden=!$("fauction").checked;
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
@@ -1338,7 +1297,6 @@ function boot(payload,monitoredRows=null){
           '<option value="km">🛣️ الأقل كيلومترات</option>';
         $("fs").value=normalizeSortMode($("fs").dataset.regularSort||"ranked");
         populateFilterOptions(false);
-        if($("fDays"))$("fDays").value="";
       }
       page=1;apply();saveNavigationState();
     });
@@ -1357,7 +1315,7 @@ function boot(payload,monitoredRows=null){
   }else{
     $("fs").value=normalizeSortMode($("fs").value);
   }
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
@@ -1384,22 +1342,18 @@ function boot(payload,monitoredRows=null){
 function apply(){
   if($("fauction")&&$("fauction").checked&&AUCTION_LANE){applyAuction();return;}
   if($("auctionSourceCounts"))$("auctionSourceCounts").hidden=true;
-  const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,
-        yFrom=$("fy").value,yTo=$("fy2").value,
+  const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
         p=$("fp").value,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
-        unseenOnly=$("funseen").checked,favOnly=$("fav")&&$("fav").checked,s=normalizeSortMode($("fs").value);
+        unseenOnly=$("funseen").checked,s=normalizeSortMode($("fs").value);
   if($("fs").value!==s)$("fs").value=s;
   const searchTokens=q?q.split(" "):[];
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
-  let[yMin,yMax]=yFrom&&yTo?[Number(yFrom),Number(yTo)]:yFrom?[Number(yFrom),9999]:yTo?[0,Number(yTo)]:[0,9999];
   VIEW=DATA.filter(o=>
     matchesSearch(o,searchTokens)&&
-    (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&
-    (!yFrom&&!yTo||(o.y>=yMin&&o.y<=yMax))&&
+    (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&(!y||String(o.y)===y)&&
     o.p>=pmin&&o.p<=pmax&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&
-    (!unseenOnly||!VISITED_IDS.has(String(o.id||"")))&&
-    (!favOnly||FAVORITES_IDS.has(String(o.id||""))));
+    (!unseenOnly||!VISITED_IDS.has(String(o.id||""))));
   const lexicalId=(a,b)=>String(a.id)<String(b.id)?-1:String(a.id)>String(b.id)?1:0;
   const originalRank=offer=>ORIGINAL_RANK.has(offer.id)?ORIGINAL_RANK.get(offer.id):Number.MAX_SAFE_INTEGER;
   const rankedTie=(a,b)=>originalRank(a)-originalRank(b)||lexicalId(a,b);
@@ -1415,29 +1369,20 @@ function apply(){
 }
 function applyAuction(){
   const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,
-        f=$("ff").value,yFrom=$("fy").value,yTo=$("fy2").value,p=$("fp").value,
-        daysMax=$("fDays")?Number($("fDays").value)||0:0;
+        f=$("ff").value,y=$("fy").value,p=$("fp").value;
   const s=normalizeAuctionSortMode($("fs").value);
   if($("fs").value!==s)$("fs").value=s;
   const nowMs=Date.now();
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
-  let[yMin,yMax]=yFrom&&yTo?[Number(yFrom),Number(yTo)]:yFrom?[Number(yFrom),9999]:yTo?[0,Number(yTo)]:[0,9999];
   const endRank=row=>timestampMs(row.canonical_end_utc)??Number.MAX_SAFE_INTEGER;
   VIEW=activeAuctionRows().filter(row=>{
-    const end=timestampMs(row.canonical_end_utc)||timestampMs(row.sale_event_utc),price=auctionPrice(row);
+    const end=timestampMs(row.canonical_end_utc),price=auctionPrice(row);
     if(end!==null&&end<=nowMs)return false;
     if(c&&row.country!==c)return false;
     if(src&&row.source!==src)return false;
     if(f&&row.fuel!==f)return false;
-    if(yFrom||yTo){
-      const rowYear=row.year||0;
-      if(rowYear<yMin||rowYear>yMax)return false;
-    }
+    if(y&&String(row.year)!==y)return false;
     if(p&&!(typeof price==="number"&&price>=pmin&&price<=pmax))return false;
-    if(daysMax>0&&end!==null){
-      const daysLeft=(end-nowMs)/(1000*60*60*24);
-      if(daysLeft>daysMax)return false;
-    }
     if(!q)return true;
     const haystack=normalizeSearchText([row.title,row.model,row.country,CN[row.country]||"",row.source,auctionSourceLabel(row.source),row.registry_key,row.price_kind,row.eligibility_status,row.eligibility_reason].join(" "));
     return q.split(" ").every(token=>haystack.includes(token));
@@ -1459,41 +1404,63 @@ function applyAuction(){
 function auctionCard(row){
   const id=String(row.id||""),href=safeUrl(row.url);
   const countryName=CN[row.country]||row.country;
-  const endMs=timestampMs(row.canonical_end_utc)||timestampMs(row.sale_event_utc);
+  const endMs=timestampMs(row.canonical_end_utc);
+  const eventMs=timestampMs(row.sale_event_utc);
+  const soonBadge=row.ends_soon?'<span class="badge b-live">تنتهي قريبًا ⏳</span>':'';
   const price=auctionPrice(row);
   const priceKind=row.price_kind||"current_bid";
+  const priceLabel=AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown;
+  const endLabel=priceKind==="current_bid"?"نهاية المزاد":"موعد البيع";
   const eligibility=row.eligibility_status||"eligible";
   const eligibilityClass=eligibility==="eligible"?"b-real":eligibility==="not_eligible"?"b-ineligible":"b-review";
-  const damage=row.damage||"";
-  const damageClass=damage.includes("Scrap")?"b-ineligible":damage.includes("Front")||damage.includes("Side")||damage.includes("Flood")?"b-review":"b-real";
-  const endText=endMs?fmtTime(endMs):"غير معلن";
-  const isFav=FAVORITES_IDS.has(id);
-  const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">فتح المزاد ↗</a>`:
+  const eligibilityBadge=`<span class="badge ${eligibilityClass}">${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</span>`;
+  const priceBadge=`<span class="badge ${priceKind==="current_bid"?"b-live":"b-est"}">${esc(AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown)}</span>`;
+  const ref=row.ouedkniss_reference;
+  const europeanRef=!ref?auctionEuropeanReference(row):null;
+  const rankingMetric=auctionRankingMetric(row);
+  const comparableYear=auctionComparableYear(row),vin=auctionVinCandidate(row);
+  const referenceEvidence=ref
+    ?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`
+    :europeanRef
+      ?`<div class="evidence">مرجع السوق الأوروبي المماثل: منخفض <b>${fmtMoney(europeanRef.lower_quartile_eur)}</b> · أوسط <b>${fmtMoney(europeanRef.median_eur)}</b> · ${nf.format(europeanRef.sample_count)} إعلانًا من ${nf.format(europeanRef.source_count)} عائلات مصادر و${nf.format(europeanRef.country_count)} دول · ${europeanRef.mileage_scope==="same_25000km_band"?"نفس فئة العداد":"نفس الموديل والسنة والوقود بمرجع محافظ عبر فئات العداد"}</div>`
+      :"";
+  const marginValue=rankingMetric?(rankingMetric.referenceKind==="ouedkniss"
+    ?`${nf.format(rankingMetric.marginDzd)} دج`
+    :fmtMoney(rankingMetric.marginEur)):"";
+  const marginEvidence=rankingMetric?`<div class="evidence">هامش الشراء المرصود قبل الشحن والجمارك وعمولة المزاد: <b>${marginValue} · ${fmtPct(rankingMetric.marginRatio*100)}</b> · معيار ترتيب محافظ، وليس ربحًا صافيًا مضمونًا</div>`:"";
+  const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="فتح المزاد: ${esc(row.title)}">فتح المزاد ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
-  return `<article class="card auction${isFav?" is-favorite":""}" role="listitem">
+  return `<article class="card auction" role="listitem">
     <div class="top">
-      <span class="flag">${FLAGS[row.country]||"🌍"}</span>
-      <span class="chip">${esc(row.source)}</span>
-      <span class="badge ${eligibilityClass}">${eligibility==="eligible"?"مؤهل":"يحتاج مراجعة"}</span>
-      ${damage?`<span class="badge ${damageClass}">${esc(damage)}</span>`:""}
-      <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
+      <span class="flag" role="img" aria-label="${esc(countryName)}">${FLAGS[row.country]||"🌍"}</span>
+      <span class="chip">${esc(row.source)}</span>${eligibilityBadge}${priceBadge}${soonBadge}
     </div>
-    <h2 class="title">${esc(row.title)}</h2>
+    <h2 class="title" title="${esc(row.title)}">${esc(row.title)}</h2>
     <div class="saving">
-      <strong>${typeof price==="number"?fmtMoney(price):"السعر غير ظاهر"}</strong>
-      <span>${priceKind==="current_bid"?"مزايدة حالية":"سعر إرشادي"}</span>
+      <strong>${typeof price==="number"?fmtMoney(price):"السعر غير ظاهر"}</strong><span>${esc(priceLabel)}</span>
     </div>
     <div class="meta">
-      <div>🗓️ <b>${row.year||"—"}</b></div>
-      <div>🛣️ <b>${row.mileage?nf.format(row.mileage)+" كم":"—"}</b></div>
-      <div>⛽ <b>${row.fuel?FUEL_AR(row.fuel):"—"}</b></div>
-      <div>📍 <b>${esc(row.location||countryName)}</b></div>
+      <div>🗓️ السنة <b>${comparableYear?nf.format(comparableYear):"—"}</b>${!row.year&&comparableYear?" <small>(مرجع سعري غير مؤهل للأهلية)</small>":""}</div>
+      <div>🛣️ العداد <b>${row.mileage?nf.format(row.mileage)+" كم":"—"}</b></div>
+      <div>⛽ الوقود <b>${row.fuel?FUEL_AR(row.fuel):"—"}</b></div>
+      <div>🌍 الدولة <b>${esc(countryName)}</b></div>
+      <div>🏛️ المصدر الرسمي <b>${esc(auctionSourceLabel(row.source))}</b></div>
     </div>
-    <div class="recency">
-      ⏰ نهاية المزاد: <b>${endText}</b>
-      ${endMs?` · <b>${countdownText(endMs)}</b>`:""}
+    <div class="recency">${endLabel}: <b>${endMs===null?"غير معلن":fmtTime(endMs)}</b>${eventMs!==null?` · موعد جلسة المزاد: <b>${fmtTime(eventMs)}</b>`:""} · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
+    ${referenceEvidence}
+    ${marginEvidence}
+    <div class="evidence">حالة الأهلية: <b>${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</b> · ${esc(row.eligibility_reason||"تحتاج مراجعة شروط الاستيراد والمشاركة.")}</div>
+    ${row.registration_date?`<div class="recency">تاريخ التسجيل المعلن: <b>${esc(row.registration_date)}</b></div>`:""}
+    ${vin?`<div class="recency">رقم VIN المرصود: <b>${esc(vin)}</b> · يُستخدم لمراجعة تعارض سنة الموديل ولا يمنح الأهلية وحده</div>`:""}
+    ${row.price_label?`<div class="recency">وصف السعر في المصدر: <b>${esc(row.price_label)}</b></div>`:""}
+    ${row.bid_visibility?`<div class="recency">ظهور المزايدات: <b>${esc(row.bid_visibility)}</b></div>`:""}
+    ${row.damage?`<div class="evidence">الحالة/الضرر المعلن: <b>${esc(row.damage)}</b></div>`:""}
+    ${row.documents?`<div class="recency">الوثائق المعلنة: <b>${esc(row.documents)}</b></div>`:""}
+    <div class="evidence">شروط الدخول: ${esc(row.access_sale_note)}</div>
+    <div class="foot">
+      <span class="verification">دليل المصدر: ${esc(row.evidence)}</span>
+      ${link}
     </div>
-    <div class="foot">${link}</div>
   </article>`;
 }
 function verificationInfo(o){
@@ -1505,32 +1472,43 @@ function verificationInfo(o){
 }
 function card(o){
   const id=String(o.id||""),opened=VISITED_IDS.has(id),fresh=NEW_IDS.has(id);
-  const isFav=FAVORITES_IDS.has(id);
+  const historyBadge=fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':'';
   const verification=verificationInfo(o);
   const href=safeUrl(o.u);
   const link=verification.open&&href!=="#"?
-    `<a class="open${verification.recent?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${opened?"فتحه مجددًا":"فتح الإعلان"}${verification.recent?"":" ⚠"} ↗</a>`:
+    `<a class="open${verification.recent?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="${opened?"فتح الإعلان مجددًا":"فتح الإعلان"}: ${esc(o.t)}">${opened?"فتحه مجددًا":"فتح الإعلان"}${verification.recent?"":" ⚠"} ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
   const countryName=CN[o.c]||o.c;
-  return `<article class="card${fresh?" is-new":""}${opened?" is-visited":""}${isFav?" is-favorite":""}" role="listitem">
+  return `<article class="card${fresh?" is-new":""}${opened?" is-visited":""}" role="listitem">
     <div class="top">
-      <span class="flag">${FLAGS[o.c]||"🌍"}</span>
-      <span class="chip">${esc(o.m)}</span>
-      ${fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':''}
-      <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
+      <span class="flag" role="img" aria-label="${esc(countryName)}">${FLAGS[o.c]||"🌍"}</span>
+      <span class="chip">${esc(o.m)}</span>${historyBadge}${verification.badge}
     </div>
-    <h2 class="title">${esc(o.t)}</h2>
+    <h2 class="title" title="${esc(o.t)}">${esc(o.t)}</h2>
     <div class="saving">
-      <strong>${fmtMoney(o.p)}</strong><span>سعر الإعلان</span>
+      <strong>${fmtMoney(o.sv)}</strong><span>فرق مرصود عن السعر المنخفض لعروض مشابهة</span>
+    </div>
+    <div class="discounts">
+      <div class="metric">أقل من السعر المنخفض المعتاد لعروض مشابهة<strong>${fmtPct(o.sp)}</strong></div>
+      <div class="metric">أقل من السعر الأوسط لعروض مشابهة<strong>${fmtPct(o.dp)}</strong></div>
     </div>
     <div class="meta">
-      <div>🗓️ <b>${nf.format(o.y)}</b></div>
-      <div>🛣️ <b>${nf.format(o.km)} كم</b></div>
-      <div>⛽ <b>${FUEL_AR(o.f)}</b></div>
-      <div>🌍 <b>${esc(countryName)}</b></div>
+      <div>💰 سعر الإعلان المرصود (قبل الشحن والجمارك؛ شمول الضريبة غير مثبت) <b>${fmtMoney(o.p)}</b></div>
+      <div>◼ سعر منخفض لعروض مشابهة <b>${fmtMoney(o.q1)}</b></div>
+      <div>◉ السعر الأوسط لعروض مشابهة <b>${fmtMoney(o.mp)}</b></div>
+      <div>🗓️ السنة <b>${nf.format(o.y)}</b></div>
+      <div>🛣️ العداد <b>${nf.format(o.km)} كم</b></div>
+      <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
+      <div>🌍 دولة الإعلان <b>${esc(countryName)}</b></div>
+      <div>🔎 المصدر <b>${esc(o.s)}</b></div>
     </div>
-    <div class="recency">🕐 ${esc(recencyText(o.ls))}</div>
-    <div class="foot">${link}</div>
+    ${costEstimator(o)}
+    <div class="evidence">دليل النظراء: <b>${nf.format(o.pn)}</b> إعلانًا · <b>${nf.format(o.ps)}</b> عائلات مصادر · <b>${nf.format(o.pc)}</b> دول</div>
+    <div class="recency">آخر رصد للإعلان: ${esc(recencyText(o.ls))}</div>
+    <div class="foot">
+      <span class="verification">${esc(verification.detail)}</span>
+      ${link}
+    </div>
   </article>`;
 }
 function nonNegativeCost(value){
@@ -1580,25 +1558,6 @@ addEventListener("pagehide",saveNavigationState);
 $("grid").addEventListener("input",event=>{
   if(!event.target.closest(".cost-input"))return;
   updateCostEstimator(event.target.closest(".cost-estimator"));
-});
-
-$("grid").addEventListener("click",event=>{
-  const btn=event.target.closest(".heart-btn");
-  if(!btn)return;
-  const id=btn.dataset.favId;
-  if(!id)return;
-  if(FAVORITES_IDS.has(id)){
-    FAVORITES_IDS.delete(id);
-    btn.classList.remove("active");
-    btn.textContent="🤍";
-    btn.closest(".card")?.classList.remove("is-favorite");
-  }else{
-    FAVORITES_IDS.add(id);
-    btn.classList.add("active");
-    btn.textContent="❤️";
-    btn.closest(".card")?.classList.add("is-favorite");
-  }
-  writeIdSet(FAVORITES_KEY,FAVORITES_IDS);
 });
 
 let refreshPoll=null,awaitingRefresh=false,requestedRefreshMode="smart",requestedJobId="";
