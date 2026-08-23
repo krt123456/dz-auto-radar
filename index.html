@@ -23,7 +23,7 @@ body::before{content:"";position:fixed;inset:0;background:
 a{color:inherit;text-decoration:none}
 button,input,select{font-family:inherit;font-size:1rem}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc2);outline-offset:2px}
-.wrap{max-width:1280px;margin:0 auto;padding:180px 14px 90px}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 14px 90px}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
   overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
@@ -71,7 +71,7 @@ header{padding:22px 0 12px}
 .fx-note.warn{border-color:rgba(251,191,36,.48);background:rgba(251,191,36,.1);color:#fde68a}
 
 /* ---------- filters ---------- */
-#filters{position:fixed;top:0;left:0;right:0;z-index:20;background:rgba(11,18,32,.95);backdrop-filter:blur(12px);
+#filters{position:relative;z-index:20;background:rgba(11,18,32,.95);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);padding:12px 14px;margin:0}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 @media(min-width:760px){.frow{grid-template-columns:repeat(4,minmax(0,1fr))}}
@@ -170,7 +170,6 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
 }
 @media(max-width:759px){
   #filters{padding:10px}
-  .wrap{padding-top:200px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
 .heart-btn{background:none;border:none;cursor:pointer;font-size:1.2em;padding:4px;position:absolute;top:8px;left:8px;z-index:2;transition:transform .2s}
