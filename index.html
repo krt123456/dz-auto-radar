@@ -177,6 +177,12 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
   #filters{position:static;top:auto;z-index:auto;backdrop-filter:none;-webkit-backdrop-filter:none}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important}}
+.heart-btn{background:none;border:none;cursor:pointer;font-size:1.2em;padding:4px;position:absolute;top:8px;left:8px;z-index:2;transition:transform .2s}
+.heart-btn:hover{transform:scale(1.2)}
+.heart-btn.active{animation:heartPop .3s ease}
+@keyframes heartPop{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
+.card.is-favorite{border:2px solid #e74c3c}
+.card .top{position:relative}
 </style>
 </head>
 <body>
@@ -260,6 +266,9 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       </label>
       <label class="f check" id="auctionToggleWrap" hidden>
         <input type="checkbox" id="fauction"> المزادات الرسمية فقط
+      </label>
+      <label class="f check">
+        <input type="checkbox" id="fav"> ❤️ المفضلة فقط
       </label>
     </div>
     <div class="sort-help" id="sortHelp">أفضل قيمة مرصودة بين الروابط المتحقق منها في هذا الجيل؛ التحقق يثبت الرابط لا الربح.</div>
@@ -574,11 +583,11 @@ const CONTROL_API="https://sonardeals-radar-control.krtabd120.workers.dev";
 const CONTROL_SALT=new TextEncoder().encode("sonardeals-radar-control-v1");
 
 let DATA=[],VIEW=[],page=1,VERIFICATION_RECENT=false,VERIFICATION_AT_MS=null,ACTIVE_PIN="",ORIGINAL_RANK=new Map();
-let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set();
+let KNOWN_IDS=new Set(),NEW_IDS=new Set(),VISITED_IDS=new Set(),FAVORITES_IDS=new Set();
 const PER=60,LIVE_VERIFICATION_MAX_AGE_MS=8*60*60*1000;
 let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
 const DATA_MAX_AGE_MS=8*60*60*1000;
-const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1";
+const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1",FAVORITES_KEY="dzr-favorites-v1";
 const NAV_KEY="dzr-navigation-v2";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fp","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen","fauction"];
@@ -1072,6 +1081,7 @@ function initializeOfferHistory(){
   const ids=DATA.map(o=>String(o.id||"")).filter(Boolean);
   const current=new Set(ids);
   VISITED_IDS=readIdSet(VISITED_KEY);
+  FAVORITES_IDS=readIdSet(FAVORITES_KEY);
   const hasBaseline=localStorage.getItem(KNOWN_KEY)!==null;
   KNOWN_IDS=hasBaseline?readIdSet(KNOWN_KEY):new Set(ids);
   NEW_IDS=hasBaseline?readIdSet(NEW_KEY):new Set();
@@ -1245,7 +1255,7 @@ function boot(payload,monitoredRows=null){
   updateHistoryStats();
   populateFilterOptions(false);
   ["q","fc","fsrc","ff","fy","fp","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
-  ["flive","fnew","funseen"].forEach(id=>$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();}));
+  ["flive","fnew","funseen","fav"].forEach(id=>{if($(id))$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();});});
   const auctionWrap=$("auctionToggleWrap"),auctionScopeWrap=$("auctionScopeWrap");
   const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
   const eligibleAuctionsBtn=$("eligibleAuctionsBtn"),allAuctionsBtn=$("allAuctionsBtn");
@@ -1315,7 +1325,7 @@ function boot(payload,monitoredRows=null){
   }else{
     $("fs").value=normalizeSortMode($("fs").value);
   }
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fp"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
@@ -1344,7 +1354,7 @@ function apply(){
   if($("auctionSourceCounts"))$("auctionSourceCounts").hidden=true;
   const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,f=$("ff").value,y=$("fy").value,
         p=$("fp").value,liveOnly=$("flive").checked,newOnly=$("fnew").checked,
-        unseenOnly=$("funseen").checked,s=normalizeSortMode($("fs").value);
+        unseenOnly=$("funseen").checked,favOnly=$("fav")&&$("fav").checked,s=normalizeSortMode($("fs").value);
   if($("fs").value!==s)$("fs").value=s;
   const searchTokens=q?q.split(" "):[];
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
@@ -1353,7 +1363,8 @@ function apply(){
     (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&(!y||String(o.y)===y)&&
     o.p>=pmin&&o.p<=pmax&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&
-    (!unseenOnly||!VISITED_IDS.has(String(o.id||""))));
+    (!unseenOnly||!VISITED_IDS.has(String(o.id||"")))&&
+    (!favOnly||FAVORITES_IDS.has(String(o.id||""))));
   const lexicalId=(a,b)=>String(a.id)<String(b.id)?-1:String(a.id)>String(b.id)?1:0;
   const originalRank=offer=>ORIGINAL_RANK.has(offer.id)?ORIGINAL_RANK.get(offer.id):Number.MAX_SAFE_INTEGER;
   const rankedTie=(a,b)=>originalRank(a)-originalRank(b)||lexicalId(a,b);
@@ -1524,6 +1535,25 @@ addEventListener("pagehide",saveNavigationState);
 $("grid").addEventListener("input",event=>{
   if(!event.target.closest(".cost-input"))return;
   updateCostEstimator(event.target.closest(".cost-estimator"));
+});
+
+$("grid").addEventListener("click",event=>{
+  const btn=event.target.closest(".heart-btn");
+  if(!btn)return;
+  const id=btn.dataset.favId;
+  if(!id)return;
+  if(FAVORITES_IDS.has(id)){
+    FAVORITES_IDS.delete(id);
+    btn.classList.remove("active");
+    btn.textContent="🤍";
+    btn.closest(".card")?.classList.remove("is-favorite");
+  }else{
+    FAVORITES_IDS.add(id);
+    btn.classList.add("active");
+    btn.textContent="❤️";
+    btn.closest(".card")?.classList.add("is-favorite");
+  }
+  writeIdSet(FAVORITES_KEY,FAVORITES_IDS);
 });
 
 let refreshPoll=null,awaitingRefresh=false,requestedRefreshMode="smart",requestedJobId="";
