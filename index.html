@@ -1434,8 +1434,7 @@ function applyAuction(){
       if(rowYear<yMin||rowYear>yMax)return false;
     }
     if(p&&!(typeof price==="number"&&price>=pmin&&price<=pmax))return false;
-    if(daysMax>0){
-      if(end===null)return false;
+    if(daysMax>0&&end!==null){
       const daysLeft=(end-nowMs)/(1000*60*60*24);
       if(daysLeft>daysMax)return false;
     }
