@@ -246,17 +246,19 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="20000-30000">20,000 — 30,000 €</option>
         <option value="30000-999999">فوق 30,000 €</option>
       </select>
-      <select class="f" id="fDays" aria-label="الوقت المتبقي للمزاد" hidden>
-        <option value="">كل المواعيد</option>
-        <option value="0.5">أقل من 12 ساعة</option>
-        <option value="1">أقل من 24 ساعة</option>
-        <option value="2">أقل من 48 ساعة</option>
-        <option value="3">أقل من 3 أيام</option>
-        <option value="5">أقل من 5 أيام</option>
-        <option value="7">أقل من أسبوع</option>
-        <option value="14">أقل من أسبوعين</option>
-        <option value="30">أقل من شهر</option>
-      </select>
+      <div id="auctionDaysWrap" hidden>
+        <select class="f" id="fDays" aria-label="الوقت المتبقي للمزاد">
+          <option value="">كل المواعيد</option>
+          <option value="0.5">أقل من 12 ساعة</option>
+          <option value="1">أقل من 24 ساعة</option>
+          <option value="2">أقل من 48 ساعة</option>
+          <option value="3">أقل من 3 أيام</option>
+          <option value="5">أقل من 5 أيام</option>
+          <option value="7">أقل من أسبوع</option>
+          <option value="14">أقل من أسبوعين</option>
+          <option value="30">أقل من شهر</option>
+        </select>
+      </div>
       <select class="f" id="fs" aria-label="ترتيب النتائج" aria-describedby="sortHelp">
         <option value="ranked">✨ أفضل قيمة مرصودة ضمن روابط متحقق منها</option>
         <option value="price">💶 الأقل سعراً باليورو</option>
@@ -1303,7 +1305,7 @@ function boot(payload,monitoredRows=null){
       clearSectionFilters();
       paintModeTabs($("fauction").checked);
       auctionScopeWrap.hidden=!$("fauction").checked;
-      if($("fDays"))$("fDays").parentElement.hidden=!$("fauction").checked;
+      if($("auctionDaysWrap"))$("auctionDaysWrap").hidden=!$("fauction").checked;
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
