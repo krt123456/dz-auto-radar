@@ -417,6 +417,18 @@ function recencyText(value){
     ageMinutes<1440?`منذ ${Math.floor(ageMinutes/60)} ساعة`:`منذ ${Math.floor(ageMinutes/1440)} يومًا`;
   return `${relative} · ${fmtTime(value)}`;
 }
+function countdownText(endMs){
+  if(endMs===null)return"";
+  const now=Date.now();
+  const diff=endMs-now;
+  if(diff<=0)return"انتهى المزاد";
+  const days=Math.floor(diff/(1000*60*60*24));
+  const hours=Math.floor((diff%(1000*60*60*24))/(1000*60*60));
+  const minutes=Math.floor((diff%(1000*60*60))/(1000*60));
+  if(days>0)return`${days} يوم ${hours} ساعة ${minutes} دقيقة`;
+  if(hours>0)return`${hours} ساعة ${minutes} دقيقة`;
+  return`${minutes} دقيقة`;
+}
 function paintFxStatus(){
   const note=$("fxnote");if(!note)return;
   note.classList.toggle("warn",FX_STATE==="fallback");
@@ -1478,6 +1490,7 @@ function auctionCard(row){
     </div>
     <div class="recency">
       ⏰ نهاية المزاد: <b>${endText}</b>
+      ${endMs?` · <b>${countdownText(endMs)}</b>`:""}
     </div>
     <div class="foot">${link}</div>
   </article>`;
