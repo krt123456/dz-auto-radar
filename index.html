@@ -1404,42 +1404,63 @@ function applyAuction(){
 function auctionCard(row){
   const id=String(row.id||""),href=safeUrl(row.url);
   const countryName=CN[row.country]||row.country;
-  const endMs=timestampMs(row.canonical_end_utc)||timestampMs(row.sale_event_utc);
+  const endMs=timestampMs(row.canonical_end_utc);
+  const eventMs=timestampMs(row.sale_event_utc);
+  const soonBadge=row.ends_soon?'<span class="badge b-live">تنتهي قريبًا ⏳</span>':'';
   const price=auctionPrice(row);
   const priceKind=row.price_kind||"current_bid";
+  const priceLabel=AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown;
+  const endLabel=priceKind==="current_bid"?"نهاية المزاد":"موعد البيع";
   const eligibility=row.eligibility_status||"eligible";
   const eligibilityClass=eligibility==="eligible"?"b-real":eligibility==="not_eligible"?"b-ineligible":"b-review";
-  const damage=row.damage||"";
-  const damageClass=damage.includes("Scrap")?"b-ineligible":damage.includes("Front")||damage.includes("Side")||damage.includes("Flood")?"b-review":"b-real";
-  const endText=endMs?fmtTime(endMs):"غير معلن";
-  const countdownText=endMs?countdownTo(endMs):"";
-  const isFav=FAVORITES_IDS.has(id);
-  const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">فتح المزاد ↗</a>`:
+  const eligibilityBadge=`<span class="badge ${eligibilityClass}">${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</span>`;
+  const priceBadge=`<span class="badge ${priceKind==="current_bid"?"b-live":"b-est"}">${esc(AUCTION_PRICE_KIND_LABELS[priceKind]||AUCTION_PRICE_KIND_LABELS.unknown)}</span>`;
+  const ref=row.ouedkniss_reference;
+  const europeanRef=!ref?auctionEuropeanReference(row):null;
+  const rankingMetric=auctionRankingMetric(row);
+  const comparableYear=auctionComparableYear(row),vin=auctionVinCandidate(row);
+  const referenceEvidence=ref
+    ?`<div class="evidence">متوسط واد كنيس المرصود: <b>${nf.format(ref.average_dzd)} دج</b> · ${nf.format(ref.sample_count)} إعلانات مشابهة · ليس سعر بيع مضمونًا</div>`
+    :europeanRef
+      ?`<div class="evidence">مرجع السوق الأوروبي المماثل: منخفض <b>${fmtMoney(europeanRef.lower_quartile_eur)}</b> · أوسط <b>${fmtMoney(europeanRef.median_eur)}</b> · ${nf.format(europeanRef.sample_count)} إعلانًا من ${nf.format(europeanRef.source_count)} عائلات مصادر و${nf.format(europeanRef.country_count)} دول · ${europeanRef.mileage_scope==="same_25000km_band"?"نفس فئة العداد":"نفس الموديل والسنة والوقود بمرجع محافظ عبر فئات العداد"}</div>`
+      :"";
+  const marginValue=rankingMetric?(rankingMetric.referenceKind==="ouedkniss"
+    ?`${nf.format(rankingMetric.marginDzd)} دج`
+    :fmtMoney(rankingMetric.marginEur)):"";
+  const marginEvidence=rankingMetric?`<div class="evidence">هامش الشراء المرصود قبل الشحن والجمارك وعمولة المزاد: <b>${marginValue} · ${fmtPct(rankingMetric.marginRatio*100)}</b> · معيار ترتيب محافظ، وليس ربحًا صافيًا مضمونًا</div>`:"";
+  const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="فتح المزاد: ${esc(row.title)}">فتح المزاد ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
-  return `<article class="card auction${isFav?" is-favorite":""}" role="listitem">
+  return `<article class="card auction" role="listitem">
     <div class="top">
-      <span class="flag">${FLAGS[row.country]||"🌍"}</span>
-      <span class="chip">${esc(row.source)}</span>
-      <span class="badge ${eligibilityClass}">${eligibility==="eligible"?"مؤهل":"يحتاج مراجعة"}</span>
-      ${damage?`<span class="badge ${damageClass}">${esc(damage)}</span>`:""}
-      <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
+      <span class="flag" role="img" aria-label="${esc(countryName)}">${FLAGS[row.country]||"🌍"}</span>
+      <span class="chip">${esc(row.source)}</span>${eligibilityBadge}${priceBadge}${soonBadge}
     </div>
-    <h2 class="title">${esc(row.title)}</h2>
+    <h2 class="title" title="${esc(row.title)}">${esc(row.title)}</h2>
     <div class="saving">
-      <strong>${typeof price==="number"?fmtMoney(price):"السعر غير ظاهر"}</strong>
-      <span>${priceKind==="current_bid"?"مزايدة حالية":"سعر إرشادي"}</span>
+      <strong>${typeof price==="number"?fmtMoney(price):"السعر غير ظاهر"}</strong><span>${esc(priceLabel)}</span>
     </div>
     <div class="meta">
-      <div>🗓️ <b>${row.year||"—"}</b></div>
-      <div>🛣️ <b>${row.mileage?nf.format(row.mileage)+" كم":"—"}</b></div>
-      <div>⛽ <b>${row.fuel?FUEL_AR(row.fuel):"—"}</b></div>
-      <div>📍 <b>${esc(row.location||countryName)}</b></div>
+      <div>🗓️ السنة <b>${comparableYear?nf.format(comparableYear):"—"}</b>${!row.year&&comparableYear?" <small>(مرجع سعري غير مؤهل للأهلية)</small>":""}</div>
+      <div>🛣️ العداد <b>${row.mileage?nf.format(row.mileage)+" كم":"—"}</b></div>
+      <div>⛽ الوقود <b>${row.fuel?FUEL_AR(row.fuel):"—"}</b></div>
+      <div>🌍 الدولة <b>${esc(countryName)}</b></div>
+      <div>🏛️ المصدر الرسمي <b>${esc(auctionSourceLabel(row.source))}</b></div>
     </div>
-    <div class="recency">
-      ⏰ نهاية المزاد: <b>${endText}</b>
-      ${countdownText?` · <b>${countdownText}</b>`:""}
+    <div class="recency">${endLabel}: <b>${endMs===null?"غير معلن":fmtTime(endMs)}</b>${eventMs!==null?` · موعد جلسة المزاد: <b>${fmtTime(eventMs)}</b>`:""} · آخر رصد ${esc(recencyText(row.last_seen_at))}</div>
+    ${referenceEvidence}
+    ${marginEvidence}
+    <div class="evidence">حالة الأهلية: <b>${esc(AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required)}</b> · ${esc(row.eligibility_reason||"تحتاج مراجعة شروط الاستيراد والمشاركة.")}</div>
+    ${row.registration_date?`<div class="recency">تاريخ التسجيل المعلن: <b>${esc(row.registration_date)}</b></div>`:""}
+    ${vin?`<div class="recency">رقم VIN المرصود: <b>${esc(vin)}</b> · يُستخدم لمراجعة تعارض سنة الموديل ولا يمنح الأهلية وحده</div>`:""}
+    ${row.price_label?`<div class="recency">وصف السعر في المصدر: <b>${esc(row.price_label)}</b></div>`:""}
+    ${row.bid_visibility?`<div class="recency">ظهور المزايدات: <b>${esc(row.bid_visibility)}</b></div>`:""}
+    ${row.damage?`<div class="evidence">الحالة/الضرر المعلن: <b>${esc(row.damage)}</b></div>`:""}
+    ${row.documents?`<div class="recency">الوثائق المعلنة: <b>${esc(row.documents)}</b></div>`:""}
+    <div class="evidence">شروط الدخول: ${esc(row.access_sale_note)}</div>
+    <div class="foot">
+      <span class="verification">دليل المصدر: ${esc(row.evidence)}</span>
+      ${link}
     </div>
-    <div class="foot">${link}</div>
   </article>`;
 }
 function verificationInfo(o){
@@ -1451,32 +1472,43 @@ function verificationInfo(o){
 }
 function card(o){
   const id=String(o.id||""),opened=VISITED_IDS.has(id),fresh=NEW_IDS.has(id);
-  const isFav=FAVORITES_IDS.has(id);
+  const historyBadge=fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':'';
   const verification=verificationInfo(o);
   const href=safeUrl(o.u);
   const link=verification.open&&href!=="#"?
-    `<a class="open${verification.recent?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${opened?"فتحه مجددًا":"فتح الإعلان"}${verification.recent?"":" ⚠"} ↗</a>`:
+    `<a class="open${verification.recent?"":" needs-check"}" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="${opened?"فتح الإعلان مجددًا":"فتح الإعلان"}: ${esc(o.t)}">${opened?"فتحه مجددًا":"فتح الإعلان"}${verification.recent?"":" ⚠"} ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
   const countryName=CN[o.c]||o.c;
-  return `<article class="card${fresh?" is-new":""}${opened?" is-visited":""}${isFav?" is-favorite":""}" role="listitem">
+  return `<article class="card${fresh?" is-new":""}${opened?" is-visited":""}" role="listitem">
     <div class="top">
-      <span class="flag">${FLAGS[o.c]||"🌍"}</span>
-      <span class="chip">${esc(o.m)}</span>
-      ${fresh?'<span class="badge b-new">جديد ✦</span>':opened?'<span class="badge b-opened">فتحته سابقًا</span>':''}
-      <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
+      <span class="flag" role="img" aria-label="${esc(countryName)}">${FLAGS[o.c]||"🌍"}</span>
+      <span class="chip">${esc(o.m)}</span>${historyBadge}${verification.badge}
     </div>
-    <h2 class="title">${esc(o.t)}</h2>
+    <h2 class="title" title="${esc(o.t)}">${esc(o.t)}</h2>
     <div class="saving">
-      <strong>${fmtMoney(o.p)}</strong><span>سعر الإعلان</span>
+      <strong>${fmtMoney(o.sv)}</strong><span>فرق مرصود عن السعر المنخفض لعروض مشابهة</span>
+    </div>
+    <div class="discounts">
+      <div class="metric">أقل من السعر المنخفض المعتاد لعروض مشابهة<strong>${fmtPct(o.sp)}</strong></div>
+      <div class="metric">أقل من السعر الأوسط لعروض مشابهة<strong>${fmtPct(o.dp)}</strong></div>
     </div>
     <div class="meta">
-      <div>🗓️ <b>${nf.format(o.y)}</b></div>
-      <div>🛣️ <b>${nf.format(o.km)} كم</b></div>
-      <div>⛽ <b>${FUEL_AR(o.f)}</b></div>
-      <div>🌍 <b>${esc(countryName)}</b></div>
+      <div>💰 سعر الإعلان المرصود (قبل الشحن والجمارك؛ شمول الضريبة غير مثبت) <b>${fmtMoney(o.p)}</b></div>
+      <div>◼ سعر منخفض لعروض مشابهة <b>${fmtMoney(o.q1)}</b></div>
+      <div>◉ السعر الأوسط لعروض مشابهة <b>${fmtMoney(o.mp)}</b></div>
+      <div>🗓️ السنة <b>${nf.format(o.y)}</b></div>
+      <div>🛣️ العداد <b>${nf.format(o.km)} كم</b></div>
+      <div>⛽ الوقود <b>${FUEL_AR(o.f)}</b></div>
+      <div>🌍 دولة الإعلان <b>${esc(countryName)}</b></div>
+      <div>🔎 المصدر <b>${esc(o.s)}</b></div>
     </div>
-    <div class="recency">🕐 ${esc(recencyText(o.ls))}</div>
-    <div class="foot">${link}</div>
+    ${costEstimator(o)}
+    <div class="evidence">دليل النظراء: <b>${nf.format(o.pn)}</b> إعلانًا · <b>${nf.format(o.ps)}</b> عائلات مصادر · <b>${nf.format(o.pc)}</b> دول</div>
+    <div class="recency">آخر رصد للإعلان: ${esc(recencyText(o.ls))}</div>
+    <div class="foot">
+      <span class="verification">${esc(verification.detail)}</span>
+      ${link}
+    </div>
   </article>`;
 }
 function nonNegativeCost(value){
