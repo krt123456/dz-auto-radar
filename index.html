@@ -530,9 +530,10 @@ function validateAuctionLane(payload){
 const WATCH_PRICE_KINDS=new Set(["current_bid","starting_bid","minimum_bid","guide_price","sealed_bid","hidden","unknown","minimum_offer","base_price"]);
 const WATCH_ELIGIBILITY=new Set(["eligible","review_required","not_eligible","conditional","unknown"]);
 const WATCH_MAX_AGE_MS=8*60*60*1000;
-function validateMonitoredAuctionRow(row){
+function validateMonitoredAuctionRow(row,sourceRegistry=AUCTION_RUNTIME_SOURCE_REGISTRY){
   if(typeof row!=="object"||!row||Array.isArray(row))throw contractFailure();
   const source=String(row.source_key||row.source||"").trim();
+  const sourceDefinition=sourceRegistry.get(source);
   const rawPriceKind=String(row.price_kind||"").trim();
   const rawEligibility=String(row.eligibility_status||"").trim();
   const priceKind=({minimum_offer:"minimum_bid",base_price:"starting_bid"})[rawPriceKind]||rawPriceKind;
@@ -547,9 +548,9 @@ function validateMonitoredAuctionRow(row){
   const country=String(row.country||"").trim().toUpperCase();
   const ref=row.ouedkniss_reference;
   if(typeof row.id!=="string"||!row.id.trim()||typeof row.url!=="string"||safeUrl(row.url)==="#"||
-     typeof row.title!=="string"||!row.title.trim()||!AUCTION_SOURCE_LABELS.has(source)||
-     !officialAuctionUrl(source,row.url)||!SCHENGEN_AUCTION_COUNTRIES.has(country)||
-     !(AUCTION_SOURCE_COUNTRIES.get(source)||[]).includes(country)||
+     typeof row.title!=="string"||!row.title.trim()||!sourceDefinition||
+     !officialAuctionUrl(source,row.url,sourceRegistry)||!SCHENGEN_AUCTION_COUNTRIES.has(country)||
+     String(row.registry_key||"").trim()!==source||Number(row.registry_priority)!==sourceDefinition.priority||
      !WATCH_PRICE_KINDS.has(rawPriceKind)||!WATCH_ELIGIBILITY.has(rawEligibility)||
      typeof row.eligibility_reason!=="string"||!row.eligibility_reason.trim()||
      !Number.isFinite(lastSeenMs)||lastSeenAge < -5*60*1000||lastSeenAge>WATCH_MAX_AGE_MS||
@@ -575,14 +576,16 @@ function validateOfficialAuctionWatch(value,lane){
      value.lane!=="official_auction_watch"||typeof value.registry_digest!=="string"||
      !lane||value.registry_digest!==lane.registry_digest||!Array.isArray(value.rows)||
      value.row_count!==value.rows.length||typeof value.source_reports!=="object"||value.source_reports===null)throw contractFailure();
+  const sourceRegistry=parseAuctionRegistryDigest(value.registry_digest);
   const generated=timestampMs(value.generated_at_utc),age=Date.now()-generated;
   if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
   const ids=new Set(),urls=new Set(),rows=[];
   for(const raw of value.rows){
-    const row=validateMonitoredAuctionRow(raw);
+    const row=validateMonitoredAuctionRow(raw,sourceRegistry);
     if(ids.has(row.id)||urls.has(row.url))throw contractFailure();
     ids.add(row.id);urls.add(row.url);rows.push(row);
   }
+  AUCTION_RUNTIME_SOURCE_REGISTRY=sourceRegistry;
   return rows;
 }
 function strictAsMonitored(row){
@@ -686,10 +689,43 @@ const AUCTION_SOURCE_COUNTRIES=new Map([
   ["sodnedrazbe",["SI"]],["e-arveres-mnv",["HU"]],["ropk",["SK"]],
   ["nva-latvia",["LV"]]
 ]);
-const auctionSourceLabel=value=>AUCTION_SOURCE_LABELS.get(String(value||""))||String(value||"");
-const officialAuctionUrl=(source,value)=>{try{
+let AUCTION_RUNTIME_SOURCE_REGISTRY=new Map();
+function parseAuctionRegistryDigest(raw){
+  let value;
+  try{value=JSON.parse(String(raw||""));}catch(error){throw contractFailure();}
+  if(!value||typeof value!=="object"||Array.isArray(value)||
+     typeof value.registry_sha256_source!=="string"||!value.registry_sha256_source.trim()||
+     !Array.isArray(value.sources)||value.sources.length===0)throw contractFailure();
+  const registry=new Map();
+  for(const item of value.sources){
+    const key=String(item&&item.key||"").trim();
+    const priority=Number(item&&item.priority);
+    if(!key||registry.has(key)||!Number.isInteger(priority)||priority<1||
+       !Array.isArray(item&&item.domains)||item.domains.length===0)throw contractFailure();
+    const domains=[];
+    for(const rawDomain of item.domains){
+      const domain=String(rawDomain||"").trim().toLowerCase();
+      try{
+        const parsed=new URL(`https://${domain}`);
+        if(!domain||parsed.hostname!==domain||parsed.pathname!=="/"||parsed.port||
+           parsed.username||parsed.password)throw contractFailure();
+      }catch(error){throw contractFailure();}
+      if(!domains.includes(domain))domains.push(domain);
+    }
+    registry.set(key,{key,domains,priority,
+      name:typeof item.name==="string"&&item.name.trim()?item.name.trim():key});
+  }
+  return registry;
+}
+const auctionSourceLabel=value=>{
+  const key=String(value||"");
+  return AUCTION_SOURCE_LABELS.get(key)||AUCTION_RUNTIME_SOURCE_REGISTRY.get(key)?.name||key.replaceAll("-"," ");
+};
+const officialAuctionUrl=(source,value,registry=AUCTION_RUNTIME_SOURCE_REGISTRY)=>{try{
   const hostname=new URL(String(value||"")).hostname.toLowerCase().replace(/^www\./,"");
-  return (AUCTION_SOURCE_DOMAINS.get(String(source||""))||[]).some(domain=>hostname===domain||hostname.endsWith(`.${domain}`));
+  const runtime=registry.get(String(source||""));
+  const domains=runtime?runtime.domains:(AUCTION_SOURCE_DOMAINS.get(String(source||""))||[]);
+  return domains.some(domain=>hostname===domain||hostname.endsWith(`.${domain}`));
 }catch(error){return false;}};
 const normalizeSortMode=value=>SORT_MODES.has(String(value||""))?String(value):"ranked";
 const normalizeAuctionSortMode=value=>AUCTION_SORT_MODES.has(String(value||""))?String(value):"auction_soon";
@@ -997,10 +1033,7 @@ function populateFilterOptions(auctionMode){
   const countries=[...new Set(rows.map(countryOf).filter(Boolean))].sort();
   setOptions("fc","كل الدول",countries,c=>`${FLAGS[c]||"🌍"} ${esc(CN[c]||c)}`);
   const observedSources=[...new Set(rows.map(sourceOf).filter(Boolean))];
-  const sources=auctionMode
-    ? [...AUCTION_SOURCE_CATALOG.map(item=>item[0]),
-       ...observedSources.filter(source=>!AUCTION_SOURCE_LABELS.has(String(source)))]
-    : observedSources.sort((a,b)=>a.localeCompare(b));
+  const sources=observedSources.sort((a,b)=>String(a).localeCompare(String(b)));
   setOptions("fsrc","كل المصادر",sources,s=>esc(auctionMode?auctionSourceLabel(s):s));
   if(auctionMode){
     const fuels=["petrol_or_hybrid","petrol","hybrid","diesel","electric","unknown"];
