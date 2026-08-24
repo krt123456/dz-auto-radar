@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-08-24T15:44:22.282178+00:00",
+  "generated_at_utc": "2026-08-24T18:17:07.391098+00:00",
   "contract": {
     "document_entries": 129,
     "canonical_identities": 118,
@@ -36,12 +36,12 @@
       12
     ],
     "verified_complete": 1,
-    "technical_complete_research_only": 7,
-    "blocked": 79,
-    "incomplete": 31,
-    "resolved_without_silent_omission": 87,
-    "enumeration_complete": 12,
-    "classification_complete": 12,
+    "technical_complete_research_only": 13,
+    "blocked": 100,
+    "incomplete": 4,
+    "resolved_without_silent_omission": 114,
+    "enumeration_complete": 22,
+    "classification_complete": 22,
     "production_publishable": 1
   },
   "batch_summary": {
@@ -58,33 +58,33 @@
       "verified_complete": 0
     },
     "3": {
-      "blocked": 4,
-      "incomplete": 6,
+      "blocked": 9,
+      "incomplete": 1,
       "technical_complete_research_only": 0,
       "verified_complete": 0
     },
     "4": {
-      "blocked": 5,
-      "incomplete": 5,
-      "technical_complete_research_only": 0,
+      "blocked": 6,
+      "incomplete": 2,
+      "technical_complete_research_only": 2,
       "verified_complete": 0
     },
     "5": {
-      "blocked": 8,
-      "incomplete": 2,
+      "blocked": 10,
+      "incomplete": 0,
       "technical_complete_research_only": 0,
       "verified_complete": 0
     },
     "6": {
-      "blocked": 8,
-      "incomplete": 2,
+      "blocked": 10,
+      "incomplete": 0,
       "technical_complete_research_only": 0,
       "verified_complete": 0
     },
     "7": {
-      "blocked": 7,
-      "incomplete": 3,
-      "technical_complete_research_only": 0,
+      "blocked": 9,
+      "incomplete": 0,
+      "technical_complete_research_only": 1,
       "verified_complete": 0
     },
     "8": {
@@ -94,14 +94,14 @@
       "verified_complete": 0
     },
     "9": {
-      "blocked": 3,
-      "incomplete": 5,
-      "technical_complete_research_only": 1,
+      "blocked": 4,
+      "incomplete": 1,
+      "technical_complete_research_only": 4,
       "verified_complete": 1
     },
     "10": {
-      "blocked": 6,
-      "incomplete": 4,
+      "blocked": 10,
+      "incomplete": 0,
       "technical_complete_research_only": 0,
       "verified_complete": 0
     },
@@ -112,8 +112,8 @@
       "verified_complete": 0
     },
     "12": {
-      "blocked": 4,
-      "incomplete": 4,
+      "blocked": 8,
+      "incomplete": 0,
       "technical_complete_research_only": 0,
       "verified_complete": 0
     }
@@ -1525,28 +1525,25 @@
         "status_detail": "public_index_discovered"
       },
       "access": {
-        "status": "public",
-        "blocker": "Lots are publicly readable and registration is needed to bid. No explicit republication licence was located; Auctim's official information site states all rights reserved.",
+        "status": "blocked",
+        "blocker": "The current official https://www.auctim.com/robots.txt request returned HTTP 403. That is not treated as permission to retry the Cars & Vehicles route with a different client or infer an API. No explicit republication licence was located.",
         "evidence_urls": [
           "https://info.auctim.com/en/get-started-with-auctim",
           "https://info.auctim.com/hubfs/Legal/How%20Auctim%20works.pdf"
-        ],
-        "status_detail": "public_read_registration_to_bid"
+        ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py",
-        "status_detail": "prototype_not_source_specific",
-        "kind_detail": "generic_browser_heuristic"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "Freeze the Cars & Vehicles category total and stable lot IDs; request the largest normal UI page size (official guide says up to 70), traverse every remaining page, deduplicate lot IDs, and assert unique IDs equal the frozen total before visiting each detail.",
-        "discovered_count": 48,
+        "status": "blocked",
+        "method": "No catalogue request is made after the official robots endpoint returns HTTP 403. Do not infer a permitted route or use a browser/login workaround.",
+        "discovered_count": 0,
         "visited_count": 0,
-        "proof": "The official Cars & Vehicles category declared 48 lots at audit time. No source-specific traversal or ID equality assertion was executed, so the number is discovery metadata only.",
-        "status_detail": "not_run"
+        "proof": "batch34_source_a_public_preflight.live.json records the HTTP 403 robots boundary and zero emitted rows.",
+        "status_detail": "blocked_before_catalogue_by_robots"
       },
       "classification": {
         "status": "not_started",
@@ -1562,16 +1559,16 @@
         "status_detail": "not_integrated"
       },
       "publication": {
-        "status": "pending",
-        "basis": "Request written Auctim permission or obtain a counsel-approved limited factual-use basis before publishing normalized offers.",
+        "status": "blocked",
+        "basis": "Obtain written Auctim crawler permission or an official read feed that explicitly covers catalogue reuse before any collection or publication.",
         "evidence_urls": [
           "https://info.auctim.com/en/get-started-with-auctim",
           "https://info.auctim.com/en/contact"
         ],
-        "status_detail": "pending_review"
+        "status_detail": "blocked_authorized_access_and_reuse_basis_required"
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending"
+      "overall_status": "blocked",
+      "overall_status_detail": "blocked_robots_http_403_and_no_reuse_basis"
     },
     {
       "canonical_identity": "aurena.at",
@@ -1611,18 +1608,16 @@
       },
       "connector": {
         "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py",
-        "status_detail": "prototype_not_source_specific",
-        "kind_detail": "generic_browser_heuristic"
+        "kind": "source_specific",
+        "path": "remaining_a_sources_public_preflight.js::aurenaPreflight",
+        "kind_detail": "source_specific_fail_closed_preflight"
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "Freeze the current-auctions index; collect every stable auction ID; for each auction collect every lot ID and compare with its declared Posten count; then classify only vehicle lots. Abort and restart if the index count changes during the snapshot.",
+        "status": "partial",
+        "method": "The official robots/sitemap/index/linked manifest were reviewed. No public documented catalogue feed/API or stable auction-ID contract was established, so no endpoint is inferred or requested.",
         "discovered_count": null,
         "visited_count": 0,
-        "proof": "The official index publicly declared 69,235 lots in 183 auctions at audit time, but that is an all-category total, not a vehicle total. No source-specific traversal or vehicle-count invariant has been executed.",
-        "status_detail": "not_run"
+        "proof": "remaining_a_sources_public_preflight.live.json records the public SPA-shell and manifest boundary with zero emitted rows."
       },
       "classification": {
         "status": "not_started",
@@ -1634,7 +1629,7 @@
       "integration": {
         "status": "not_started",
         "path": "",
-        "test": "",
+        "test": "test_remaining_a_sources_public_preflight.js",
         "status_detail": "not_integrated"
       },
       "publication": {
@@ -1885,14 +1880,13 @@
         "status_detail": "public_registry_and_csv_discovered"
       },
       "access": {
-        "status": "public",
-        "blocker": "The Očevidnik registry and its CSV export are public. Search may present reCAPTCHA and must never be bypassed. Participation in e-Dražba requires a supported digital certificate/e-ID and a contracted service account.",
+        "status": "blocked",
+        "blocker": "The current e-Dražba entry requires the advanced electronic-signature support and a token/smart card to continue into the service. It is not a public vehicle catalogue and must not be automated. The separate PONIP public export remains a distinct incomplete source.",
         "evidence_urls": [
           "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute",
           "https://www.fina.hr/javne-usluge/e-drazba",
           "https://info.fina.hr/javne-usluge/e-drazba/dokumenti-za-koristenje-e-drazbe"
-        ],
-        "status_detail": "public_registry_certificate_to_bid"
+        ]
       },
       "connector": {
         "status": "not_implemented",
@@ -1900,12 +1894,12 @@
         "path": ""
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "Download the official public CSV once per snapshot, filter movable-property records to road vehicles, deduplicate stable auction/item IDs, and compare the CSV count with the public upcoming/in-progress views. Visit each retained detail once and account for every ID. Stop rather than solve any reCAPTCHA challenge.",
-        "discovered_count": null,
+        "status": "blocked",
+        "method": "Do not enter the certified signing service. Any future public-export work belongs to the separate ponip.fina.hr identity and still needs vehicle-atomic reconciliation.",
+        "discovered_count": 0,
         "visited_count": 0,
-        "proof": "FINA documents that the Očevidnik is public and the UI exposes an official CSV download, but no CSV snapshot was captured or vehicle-filtered in this audit; therefore no count or completeness invariant has passed.",
-        "status_detail": "not_run"
+        "proof": "batch34_source_a_public_preflight.live.json records the certified-service boundary and zero emitted rows.",
+        "status_detail": "blocked_before_service_login"
       },
       "classification": {
         "status": "not_started",
@@ -1921,17 +1915,17 @@
         "status_detail": "not_integrated"
       },
       "publication": {
-        "status": "pending",
-        "basis": "The official documentation states the registry is public and provides a CSV export, which is a strong technical basis; Croatian public-sector reuse and personal-data minimization still require explicit approval before publication.",
+        "status": "blocked",
+        "basis": "Do not publish from the certified e-Dražba service. A separate PONIP export requires an approved factual-data/reuse and privacy basis before any publication.",
         "evidence_urls": [
           "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute",
           "https://ponip.fina.hr/ocevidnik-web/preuzmi/csv",
           "https://www.fina.hr/javne-usluge/e-drazba/javna-objava"
         ],
-        "status_detail": "pending_review"
+        "status_detail": "blocked_service_boundary_and_reuse_basis_required"
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending"
+      "overall_status": "blocked",
+      "overall_status_detail": "blocked_certified_signing_service_boundary"
     },
     {
       "canonical_identity": "fahrzeuge.dorotheum.com",
@@ -1959,13 +1953,12 @@
         "status_detail": "public_event_catalogues_discovered"
       },
       "access": {
-        "status": "public",
-        "blocker": "Event catalogues and lot lists are public, while online bidding requires myDOROTHEUM registration. The catalogue footer states all rights reserved, so republication has not been accepted.",
+        "status": "blocked",
+        "blocker": "The current official vehicle index footer states ‘Alle Rechte vorbehalten’ (all rights reserved). Without permission covering automated catalogue extraction and downstream reuse, this source is blocked before lot traversal.",
         "evidence_urls": [
           "https://fahrzeuge.dorotheum.com/de/a/124408/",
           "https://fahrzeuge.dorotheum.com/en/c/terms-and-conditions-171/"
-        ],
-        "status_detail": "public_read_registration_to_bid"
+        ]
       },
       "connector": {
         "status": "not_implemented",
@@ -1973,12 +1966,12 @@
         "path": ""
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "Enumerate every current vehicle/technology event from the official index, freeze event IDs, read each event's declared object count, traverse all numbered lot links or the official lot-list PDF, and assert unique lot IDs equal every event total and the union covers every frozen event.",
-        "discovered_count": null,
+        "status": "blocked",
+        "method": "No event/lot traversal occurs until written permission covers automated extraction and downstream reuse.",
+        "discovered_count": 0,
         "visited_count": 0,
-        "proof": "The index exposed eight upcoming vehicle/technology event entries. The sampled official event 124408 declared and listed 44 objects, but the other events were not traversed; this is partial discovery, not completeness proof.",
-        "status_detail": "not_run"
+        "proof": "batch34_source_a_public_preflight.live.json records the official rights reservation and zero emitted rows.",
+        "status_detail": "blocked_before_enumeration_explicit_rights_reservation"
       },
       "classification": {
         "status": "not_started",
@@ -1994,16 +1987,16 @@
         "status_detail": "not_integrated"
       },
       "publication": {
-        "status": "pending",
-        "basis": "Written Dorotheum permission or a counsel-approved limited factual-use basis is required; the site marks the catalogue all rights reserved.",
+        "status": "blocked",
+        "basis": "Written Dorotheum permission covering extraction and republication is required; the current site marks the catalogue all rights reserved.",
         "evidence_urls": [
           "https://fahrzeuge.dorotheum.com/de/a/124408/",
           "https://fahrzeuge.dorotheum.com/en/c/terms-and-conditions-171/"
         ],
-        "status_detail": "pending_review"
+        "status_detail": "blocked_explicit_rights_reservation"
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending"
+      "overall_status": "blocked",
+      "overall_status_detail": "blocked_explicit_rights_reservation"
     },
     {
       "canonical_identity": "sales.nra.bg",
@@ -2032,13 +2025,12 @@
         "status_detail": "public_index_discovered"
       },
       "access": {
-        "status": "public",
-        "blocker": "Catalogue and details are public, but each notice can use open or sealed bidding and may require local/offline submission and a 20% deposit. Participation rules must be read per sale; no single click-to-bid assumption is valid.",
+        "status": "blocked",
+        "blocker": "The current official https://sales.nra.bg/robots.txt request returned HTTP 403. That is not treated as permission to crawl the vehicle catalogue, retry with a different client, or infer an undocumented API.",
         "evidence_urls": [
           "https://sales.nra.bg/2",
           "https://sales.nra.bg/16"
-        ],
-        "status_detail": "public_read_sale_specific_participation"
+        ]
       },
       "connector": {
         "status": "not_implemented",
@@ -2046,12 +2038,12 @@
         "path": ""
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "Freeze the first-page declared current vehicle total, walk p=1 while the official Next control exists, collect stable detail/announcement IDs, deduplicate, and assert unique IDs equal the frozen total. Abort/restart if the declared total changes during traversal; retain sale status including postponed/terminated entries.",
-        "discovered_count": 986,
+        "status": "blocked",
+        "method": "No vehicle catalogue request is made after the official robots endpoint returns HTTP 403. Do not use a browser, login or undocumented endpoint as a workaround.",
+        "discovered_count": 0,
         "visited_count": 0,
-        "proof": "The official vehicle catalogue declared 986 current sales at audit time and exposed numbered pagination. This audit did not visit and account for every detail ID, so 986 is a header total, not harvested/classified coverage.",
-        "status_detail": "not_run"
+        "proof": "batch34_source_a_public_preflight.live.json records the HTTP 403 robots boundary and zero emitted rows.",
+        "status_detail": "blocked_before_catalogue_by_robots"
       },
       "classification": {
         "status": "not_started",
@@ -2067,16 +2059,16 @@
         "status_detail": "not_integrated"
       },
       "publication": {
-        "status": "pending",
-        "basis": "Official public notices are available, but Bulgarian public-sector reuse, personal-data minimization and document-redaction rules need an explicit accepted basis before republication.",
+        "status": "blocked",
+        "basis": "Obtain NRA crawler permission or an official public export/API with an explicit reuse and personal-data scope before collection or publication.",
         "evidence_urls": [
           "https://sales.nra.bg/16",
           "https://sales.nra.bg/2"
         ],
-        "status_detail": "pending_review"
+        "status_detail": "blocked_authorized_access_and_reuse_basis_required"
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending"
+      "overall_status": "blocked",
+      "overall_status_detail": "blocked_robots_http_403_and_no_reuse_basis"
     },
     {
       "canonical_identity": "vavato.com",
@@ -2163,62 +2155,58 @@
         "zapori.mjs.bg"
       ],
       "catalogue": {
-        "status": "partial",
+        "status": "verified",
         "url": "https://zapori.mjs.bg/#/",
         "evidence_urls": [
           "https://zapori.mjs.bg/",
           "https://www.mjs.bg/home/index/730e8e10-9e0b-48a3-910d-71fda944c94c",
           "https://www.mjs.bg/home/index/19701049-6bc8-4355-a278-4b5658803df1"
-        ],
-        "status_detail": "public_spa_entry_discovered"
+        ]
       },
       "access": {
         "status": "public",
-        "blocker": "The Ministry portal exposes Public Sale Announcements and Electronic Public Auctions through a JavaScript SPA. Participation/registered bidder operations require qualified electronic identification/signature; the public vehicle-filtered catalogue API and its pagination contract have not yet been identified.",
+        "blocker": "The anonymous announcements catalogue and its bundle-declared JSON list are public. Participation and registered-bidder operations require qualified electronic identification/signature and were not entered. External publication remains blocked until the Ministry approves a catalogue-specific public-sector reuse basis and privacy/redaction scope.",
         "evidence_urls": [
           "https://zapori.mjs.bg/",
           "https://www.mjs.bg/home/index/730e8e10-9e0b-48a3-910d-71fda944c94c",
           "https://mjs.bg/api/part/GetBlob?hash=B6B35C28DD13E2062537CAF39BC95F14"
-        ],
-        "status_detail": "public_read_qes_to_bid"
+        ]
       },
       "connector": {
-        "status": "not_implemented",
-        "kind": "none",
-        "path": ""
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "remaining_three_public_watch.py::collect_zapori"
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "First document the SPA's public, unauthenticated announcements endpoint from normal browser network traffic; filter movable assets/road vehicles; freeze its reported total/cursor set; traverse every page/cursor and assert stable unique announcement IDs equal the frozen total. Stop if authentication or CAPTCHA is required.",
-        "discovered_count": null,
-        "visited_count": 0,
-        "proof": "Only the official SPA entry and official Ministry description were verified. No public vehicle total, API contract, page traversal or stable-ID accounting was proven.",
-        "status_detail": "not_run"
+        "status": "complete",
+        "method": "Use the official bundle-declared anonymous POST /api/announcements/list contract with status=1, freeze totalCount, traverse zero-based pageIndex at the UI pageSize=10, require a correct terminal remainder and unique IDs equal totalCount, re-read page zero, then repeat the complete pass.",
+        "discovered_count": 78,
+        "visited_count": 78,
+        "proof": "The 2026-08-24T17:44:18Z staging run completed two passes. Each reconciled totalCount=78 across page counts 10+10+10+10+10+10+10+8, 78 unique announcement IDs and a stable first-page reread. Membership SHA-256 7ff04b571fae2c5c56b11c31fbf208194419f58c2dbc52466dfa5f92be104b9a and allowlisted-content SHA-256 257e1d2c868f21130f0a07ca651f5d20c1a75ef33c8ab97d888e3f51994caab7 matched across passes."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
-        "classified_count": 0,
-        "counts": {},
-        "status_detail": "not_run"
+        "status": "complete",
+        "classifiable_count": 78,
+        "classified_count": 78,
+        "counts": {
+          "non_vehicle_announcement": 70,
+          "vehicle_announcement": 8
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": "",
-        "status_detail": "not_integrated"
+        "status": "path_defined",
+        "path": "remaining_three_public_watch.py -> remaining_three_public_evidence.json; deliberately absent from production registry/publisher/deploy",
+        "test": "test_remaining_three_public_watch.py"
       },
       "publication": {
-        "status": "pending",
-        "basis": "The announcements are official public-sector records, but an explicit Bulgarian public-sector reuse basis and the privacy/redaction scope must be confirmed before republication.",
+        "status": "blocked",
+        "basis": "The Ministry publishes a formal procedure for reuse of public-sector information, but no decision or licence covering this catalogue and its permitted privacy/redaction scope was supplied. Technical access is not treated as publication permission.",
         "evidence_urls": [
           "https://www.mjs.bg/home/index/730e8e10-9e0b-48a3-910d-71fda944c94c",
-          "https://mjs.bg/api/part/GetBlob?hash=B6B35C28DD13E2062537CAF39BC95F14"
-        ],
-        "status_detail": "pending_review"
+          "https://mjs.bg/home/index/fd66bf97-7337-4411-85cd-47d7722c2120"
+        ]
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "auction24.cz",
@@ -2236,50 +2224,45 @@
         "auction24.cz"
       ],
       "catalogue": {
-        "status": "partial",
+        "status": "verified",
         "url": "https://auction24.cz/en/category/car",
         "evidence_urls": [
           "https://auction24.cz/en/category/car",
           "https://auction24.cz/en/terms"
-        ],
-        "status_detail": "public_paginated_category"
+        ]
       },
       "access": {
         "status": "public",
-        "blocker": "The official category renders a changing total through a dynamic interface. Public browsing is available, while bidding uses an account/deposit workflow. The existing prototype has no source-specific page-union invariant and no explicit catalogue-republication licence was located.",
+        "blocker": "The official car category is anonymously readable and permits the audited path under its current robots policy. Bidding uses an account/deposit workflow, and no explicit catalogue-republication licence was located.",
         "evidence_urls": [
           "https://auction24.cz/en/category/car",
           "https://auction24.cz/en/terms"
-        ],
-        "status_detail": "public_read_registration_to_bid"
+        ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py",
-        "status_detail": "prototype_not_source_specific",
-        "kind_detail": "generic_browser_prototype"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "auction24_cz_public_probe.js::runResearchProbe"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "Freeze total T and page count P from the Cars category; traverse pages 1..P through the documented UI; collect distinct /item/i... IDs; assert page cardinalities and union size equal T; visit all details; restart if T changes during capture.",
+        "status": "complete",
+        "method": "After a robots guard, traverse every official UI page until the declared terminal range, require contiguous 24-card pages except the final page, reconcile the unique data-cy-id union to the declared total, then repeat the entire snapshot and require the same ordered-ID SHA-256.",
         "discovered_count": 188,
-        "visited_count": 0,
-        "proof": "The official rendered page on 2026-08-24 showed 1-24 of 188 and page 1 of 8. Isolated raw-page probes confirmed HTTP 200 and total 188 but exposed only partial hydration IDs, not the 188-ID union. Therefore 188 is a declared total, not a completion result.",
-        "status_detail": "declared_total_only"
+        "visited_count": 188,
+        "proof": "auction24_cz_public_probe.live-v2.json records two complete eight-page passes (24×7 + 20), 188/188 unique category-card IDs in each pass, identical ordered-ID SHA-256 values, and second_pass_verified=true."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
-        "classified_count": 0,
-        "counts": {},
-        "status_detail": "not_run"
+        "status": "complete",
+        "classifiable_count": 188,
+        "classified_count": 188,
+        "counts": {
+          "vehicle_category_member": 188
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": "",
-        "status_detail": "not_integrated"
+        "status": "tested",
+        "path": "run_auction24_cz_live_probe.js",
+        "test": "test_auction24_cz_public_probe.js + test_run_auction24_cz_live_probe.js + auction24_cz_public_probe.live-v2.json"
       },
       "publication": {
         "status": "pending",
@@ -2289,8 +2272,7 @@
         ],
         "status_detail": "pending_written_permission"
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending_page_union_and_permission"
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "autopoint.eu",
@@ -2310,53 +2292,46 @@
         "autopoint.eu"
       ],
       "catalogue": {
-        "status": "partial",
+        "status": "verified",
         "url": "https://autopoint.eu/buy",
         "evidence_urls": [
           "https://autopoint.eu/",
           "https://autopoint.eu/buy",
           "https://autopoint.eu/faq",
           "https://autopoint.eu/terms"
-        ],
-        "status_detail": "public_dynamic_group_cards"
+        ]
       },
       "access": {
         "status": "public",
-        "blocker": "The public home page exposes changing auction-group summaries, but the /buy snapshot did not expose a stable complete set of group and item IDs. Entitlements also differ between company and individual auctions. Registration, approval and a security deposit are required to participate, and no explicit data-republication licence was found.",
+        "blocker": "The anonymous /buy page is public; registration, approval and a deposit are required only to participate. Both staging passes explicitly reported No Listings Available and exposed empty listings/listingGroups server containers. No recurring-extraction or external-republication licence was found, so the empty snapshot remains research-only.",
         "evidence_urls": [
           "https://autopoint.eu/",
           "https://autopoint.eu/faq",
           "https://autopoint.eu/terms"
-        ],
-        "status_detail": "public_summary_registration_and_deposit_to_bid"
+        ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py",
-        "status_detail": "prototype_not_source_specific",
-        "kind_detail": "generic_browser_prototype"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "remaining_three_public_watch.py::collect_autopoint"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "Freeze all active public auction-group IDs and each group's declared car count in one browser snapshot; visit every visible item ID under the same entitlement; assert the group-count sum equals the distinct item union; restart if any group changes or closes during capture.",
-        "discovered_count": null,
+        "status": "complete",
+        "method": "Require the server-rendered /buy page to expose the explicit No Listings Available marker, empty listings and listingGroups containers in __NEXT_DATA__, and zero item/group links; repeat twice and fail closed if any non-empty state appears before a non-empty total/group contract is implemented.",
+        "discovered_count": 0,
         "visited_count": 0,
-        "proof": "The official home page showed active group cards and the read-only /buy request returned HTTP 200, but its static response exposed no stable group/item ID set. Discoverable historical group URLs do not prove the current complete catalogue.",
-        "status_detail": "not_proven"
+        "proof": "Two staging passes each proved the explicit empty marker, empty server-side listings and listingGroups containers, and zero item/group links. Empty membership SHA-256 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945 and stable-contract SHA-256 44ab3d526c1b00b3b4571d8efe02bc06314df5c585f0efe4b5386fd57d04a4b3 matched. Zero is accepted only under these explicit source-specific empty invariants."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
+        "status": "complete",
+        "classifiable_count": 0,
         "classified_count": 0,
-        "counts": {},
-        "status_detail": "not_run"
+        "counts": {}
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": "",
-        "status_detail": "not_integrated"
+        "status": "path_defined",
+        "path": "remaining_three_public_watch.py -> remaining_three_public_evidence.json; deliberately absent from production registry/publisher/deploy",
+        "test": "test_remaining_three_public_watch.py"
       },
       "publication": {
         "status": "pending",
@@ -2364,11 +2339,9 @@
         "evidence_urls": [
           "https://autopoint.eu/terms",
           "https://autopoint.eu/contact"
-        ],
-        "status_detail": "pending_written_permission"
+        ]
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "pending_source_specific_connector_and_permission"
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "bca.com/en/dk",
@@ -2550,18 +2523,16 @@
       },
       "connector": {
         "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py",
-        "status_detail": "prototype_generic_http_only",
-        "kind_detail": "generic_http_research"
+        "kind": "source_specific",
+        "path": "remaining_a_sources_public_preflight.js::caraukcePreflight",
+        "kind_detail": "source_specific_fail_closed_preflight"
       },
       "enumeration": {
         "status": "partial",
-        "method": "Freeze the homepage Nabídka total and every active auction/open-competition URL; enumerate every public ID on those pages; assert the distinct ID union equals the frozen total; then visit and normalize every detail, restarting if the total or group set changes.",
+        "method": "The public OpenAukce HTML exposed 23 unique item IDs while the public site counter was 130. robots disallows /api/ and sitemap exposed no group union, so no total traversal is attempted.",
         "discovered_count": 130,
         "visited_count": 0,
-        "proof": "At 2026-08-24T11:00:03Z the official homepage returned HTTP 200 and declared Nabídka 130. The read-only static probe extracted zero active catalogue URLs, so union=130 was not proved. Public sampled group pages demonstrate stable vehicle IDs but cannot establish completeness by themselves.",
-        "status_detail": "declared_total_only"
+        "proof": "remaining_a_sources_public_preflight.live.json records the 23-ID public subset, 130 counter, API boundary and zero emitted rows."
       },
       "classification": {
         "status": "not_started",
@@ -2573,7 +2544,7 @@
       "integration": {
         "status": "not_started",
         "path": "",
-        "test": "",
+        "test": "test_remaining_a_sources_public_preflight.js",
         "status_detail": "not_integrated"
       },
       "publication": {
@@ -2675,63 +2646,58 @@
         "ponip.fina.hr"
       ],
       "catalogue": {
-        "status": "partial",
+        "status": "verified",
         "url": "https://ponip.fina.hr/ocevidnik-web/pretrazivanje/pokretnina",
         "evidence_urls": [
           "https://ponip.fina.hr/ocevidnik-web/pretrazivanje/pokretnina",
           "https://ponip.fina.hr/ocevidnik-web/preuzmi/csv",
-          "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute"
-        ],
-        "status_detail": "official_public_registry_and_csv_export"
+          "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute",
+          "https://ponip.fina.hr/ocevidnik-web/get/vrsta/objekta/prodaje/pokretnine/list"
+        ]
       },
       "access": {
         "status": "public",
-        "blocker": "The official CSV is a complete all-asset registry snapshot, not a vehicle-atomic feed. Rows labelled imovina or pokretnina can contain bundled assets, so vehicle offers cannot be proved complete without opening the official detail records and splitting multi-asset lots. No explicit catalogue-republication licence was identified.",
+        "blocker": "The official CSV is row-complete but not vehicle-atomic: imovina and generic pokretnina rows can bundle multiple assets. FINA's current official terms restrict site content to private non-commercial use and prohibit copying, display, transmission or distribution without written consent; the official information page routes reuse through a request procedure.",
         "evidence_urls": [
           "https://ponip.fina.hr/ocevidnik-web/preuzmi/csv",
-          "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute"
-        ],
-        "status_detail": "public_read_official_export"
+          "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute",
+          "https://www.fina.hr/info/uvjeti-koristenja",
+          "https://info.fina.hr/info/pravo-na-pristup-informacijama"
+        ]
       },
       "connector": {
         "status": "prototype",
         "kind": "source_specific",
-        "path": "batch4_probe_catalogues.py",
-        "status_detail": "probe_only_not_connector",
-        "kind_detail": "official_csv_read_only_probe"
+        "path": "remaining_three_official_probe.py; ponip_public_types_probe.py"
       },
       "enumeration": {
         "status": "partial",
         "method": "Download one timestamped official CSV; account for every row and unique auction ID; select active or future rows; open each official detail; split bundled imovina/pokretnina into atomic assets; then assert every CSV row is classified, excluded with a reason, or expanded into accounted child records.",
         "discovered_count": 11095,
         "visited_count": 11095,
-        "proof": "Read-only probe at 2026-08-24T11:00Z received HTTP 200 and 10,338,449 bytes. Snapshot date was 2026-08-23: 11,095 rows, 9,313 unique auction IDs, and type totals 10,280 nekretnina + 695 pokretnina + 62 imovina + 58 pravo = 11,095. There were 598 active/future rows. This proves CSV-row accounting only, not atomic vehicle completeness.",
-        "status_detail": "registry_snapshot_enumerated_not_vehicle_atomic"
+        "proof": "Two staging passes returned the same 10,338,449-byte CSV and SHA-256 3ff95c36b2bf4c3a3b63bb2ce5357691cbbf21767df4cb7a9620faefed38fdd9. Snapshot 2026-08-23 contains 11,095 rows, 9,313 unique auction IDs, type totals 10,280 nekretnina + 695 pokretnina + 62 imovina + 58 pravo, and 598 active/future rows. The page-declared JSON taxonomy verified the Motorno vozilo family, but this still does not split imovina or generic bundled rows into atomic vehicles."
       },
       "classification": {
-        "status": "partial",
+        "status": "blocked",
         "classifiable_count": null,
         "classified_count": 0,
-        "counts": {},
-        "status_detail": "not_complete_non_atomic_lots"
+        "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": "",
-        "status_detail": "not_integrated"
+        "test": "test_remaining_three_public_watch.py verifies the two-pass export hash and fail-closed status"
       },
       "publication": {
-        "status": "pending",
-        "basis": "The official export supports discovery, but public availability is not treated as permission to republish descriptions, documents, or images. Accept only an approved factual-data basis or written FINA permission.",
+        "status": "blocked",
+        "basis": "FINA's official terms restrict website content to private and non-commercial purposes and prohibit copying, display, transmission or distribution without FINA's written consent. Obtain consent or an approved licensed feed before any external publication.",
         "evidence_urls": [
           "https://ponip.fina.hr/ocevidnik-web/preuzmi/csv",
-          "https://ponip.fina.hr/ocevidnik-web/preuzmi/upute"
-        ],
-        "status_detail": "pending_written_permission_or_approved_public_data_basis"
+          "https://www.fina.hr/info/uvjeti-koristenja",
+          "https://info.fina.hr/info/pravo-na-pristup-informacijama"
+        ]
       },
-      "overall_status": "incomplete",
-      "overall_status_detail": "incomplete_vehicle_granularity_and_publication_basis"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "portaldrazeb.cz",
@@ -2922,18 +2888,16 @@
       },
       "connector": {
         "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py",
-        "status_detail": "prototype_not_source_specific",
-        "kind_detail": "generic_browser_prototype"
+        "kind": "source_specific",
+        "path": "remaining_a_sources_public_preflight.js::veacomPreflight",
+        "kind_detail": "source_specific_fail_closed_preflight"
       },
       "enumeration": {
         "status": "partial",
-        "method": "Freeze the current/upcoming auction identity and dates; obtain the official auction PDF export; collect every vehicle ID from the HTML/PDF; assert both ID sets and their totals match; visit every /vehicle/detail/{id}; restart if the advertised auction changes.",
+        "method": "The public upcoming-auction route timed out during the bounded anonymous read. With no documented terminal catalogue, total or ID contract, the probe emits zero rows and does not retry through login or an inferred endpoint.",
         "discovered_count": null,
         "visited_count": 0,
-        "proof": "The official site advertised the 24-26 August 2026 auction and exposed public vehicle summaries plus an auction PDF export route. The audit did not establish an authoritative total or visit every detail, so completeness is unproved.",
-        "status_detail": "not_proven"
+        "proof": "remaining_a_sources_public_preflight.live.json records the robots/sitemap/public-route observation and zero emitted rows."
       },
       "classification": {
         "status": "not_started",
@@ -2945,7 +2909,7 @@
       "integration": {
         "status": "not_started",
         "path": "",
-        "test": "",
+        "test": "test_remaining_a_sources_public_preflight.js",
         "status_detail": "not_integrated"
       },
       "publication": {
@@ -3494,43 +3458,46 @@
       },
       "access": {
         "status": "public",
-        "blocker": "The catalogue is publicly readable, while bidding requires registration. The official rules state that the site and all content are copyright protected; no publication/reuse licence was located.",
+        "blocker": "The catalogue is anonymously readable and robots.txt allows /autooksjonid/. Bidding requires registration. The official rules state that www.romu.ee and all its content are protected by copyright; no recurring-extraction or republication licence was located.",
         "evidence_urls": [
           "https://www.romu.ee/autooksjonid/",
           "https://www.romu.ee/reeglid/"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_b_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_catalogue_first_view_minimum_only",
-        "discovered_count": 34,
-        "visited_count": 0,
-        "proof": "The official catalogue view exposed 34 lot links during the audit, but it supplied no authoritative total/pagination invariant. The existing generic browser prototype is configured for /en/cars rather than the verified /autooksjonid/ route."
+        "status": "complete",
+        "method": "two_complete_passes_over_the_single_server_rendered_product_list; reconcile product nodes, unique product IDs and URLs; fail if an actual next/pagination element appears",
+        "discovered_count": 32,
+        "visited_count": 32,
+        "proof": "The 2026-08-24T16:38:55Z staging run completed two passes with 32/32 unique product IDs in each pass. Membership SHA-256 68cf87e01e9affdc4ff2029d2cff7036fba7013b0182eca8856d581f2dde12d8 and stable-content SHA-256 c49de5059e18fabe7af8cda04e649032aa1fa4383271ed7ccc0ac2265fb79c49 matched across passes. See group_b_public_catalogue_evidence.json."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 34,
-        "classified_count": 0,
-        "counts": {}
+        "status": "complete",
+        "classifiable_count": 32,
+        "classified_count": 32,
+        "counts": {
+          "non_vehicle": 6,
+          "vehicle": 26
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": "No source-specific connector or monitored-input path exists."
+        "status": "path_defined",
+        "path": "group_b_public_catalogue_watch.py -> group_b_public_catalogue_evidence.json; deliberately absent from registry/publisher/deploy",
+        "test": "Two-pass staging evidence and parser/ledger tests pass; publication remains fail-closed."
       },
       "publication": {
-        "status": "pending",
-        "basis": "Obtain a written content/reuse permission or an official feed licence before republishing lot data; the public rules only state copyright protection.",
+        "status": "blocked",
+        "basis": "The official rules state that www.romu.ee and all its content are protected by copyright. Obtain written recurring-extraction and external-republication permission or a licensed official feed before production use.",
         "evidence_urls": [
           "https://www.romu.ee/reeglid/"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "weby.ee",
@@ -3558,43 +3525,46 @@
       },
       "access": {
         "status": "public",
-        "blocker": "Search and auction summaries are publicly readable; bidding requires registration/authentication. Clause 1.8 says the webpage and all it contains are copyrighted, and no reuse licence was located.",
+        "blocker": "Search and auction summaries are anonymously readable and robots.txt declares the official sitemap. Bidding requires registration. Clause 1.8 says the copyright of the webpage and all it contains belongs to OÜ Plusmerk; no recurring-extraction or republication licence was located.",
         "evidence_urls": [
           "https://weby.ee/auction_items",
           "https://weby.ee/terms"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_b_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_search_first_view_minimum_only",
-        "discovered_count": 25,
-        "visited_count": 0,
-        "proof": "The official search view exposed 25 lot links. The home page separately advertised future auction groups totalling 27 lots, while no total_count/page_info or reproducible pagination invariant was exposed; therefore 25 is only a minimum, not completeness."
+        "status": "complete",
+        "method": "two_complete_passes_over_official_numbered_pagination; stop at the declared current last page with no next control; deduplicate stable item IDs",
+        "discovered_count": 37,
+        "visited_count": 37,
+        "proof": "The staging connector traversed page 1 (25 rows) and terminal page 2 (12 rows) twice. Each pass produced 37/37 unique IDs; membership SHA-256 01c93f3bc7c6437ef00cd3a8fa2ccded5ad34c21647c845b3b8f9093211b7bb8 and stable-content SHA-256 2858f222fcd721575d629475d4137f7db0f8c1c421d8800ff6113e6bbeeb5eab matched. See group_b_public_catalogue_evidence.json."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 25,
-        "classified_count": 0,
-        "counts": {}
+        "status": "complete",
+        "classifiable_count": 37,
+        "classified_count": 37,
+        "counts": {
+          "non_vehicle": 0,
+          "vehicle": 37
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": "Only a generic research fetch path exists; no source-specific enumerator or monitored-input integration exists."
+        "status": "path_defined",
+        "path": "group_b_public_catalogue_watch.py -> group_b_public_catalogue_evidence.json; deliberately absent from registry/publisher/deploy",
+        "test": "Two-pass staging evidence and parser/ledger tests pass; publication remains fail-closed."
       },
       "publication": {
-        "status": "pending",
-        "basis": "Obtain written reuse/publication permission or a licensed official feed before integrating lot content.",
+        "status": "blocked",
+        "basis": "Official term 1.8 assigns copyright in the webpage and all it contains to OÜ Plusmerk. Obtain the owner's written recurring-extraction and republication permission or a licensed feed before production use.",
         "evidence_urls": [
           "https://weby.ee/terms"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "agorastore.fr",
@@ -3817,46 +3787,44 @@
       },
       "access": {
         "status": "restricted",
-        "blocker": "The professional portal exposes sales and a vehicle count publicly, but registration requests company, SIRET and VAT details plus a human verification code; account-gated functionality was not accessed and the verification challenge was not bypassed.",
+        "blocker": "The legacy professional portal and successor /vehicules route are public, but sale access links lead to professional registration requiring company, SIRET and VAT details plus a human verification code. The portal displays Copyright 2026 and its CGU/CGV through an in-app control; no licensed complete feed or external-republication grant was established. Account-gated functionality and the human check were not accessed or bypassed.",
         "evidence_urls": [
           "https://pro.encheres-vo.com/portail.html",
           "https://pro.encheres-vo.com/inscription.html"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "After reuse clearance, replace the generic sampler with a source-specific connector: freeze the portal total, enumerate every sale ID and all vehicle offsets, deduplicate stable vehicle references, verify every per-sale subtotal, and require the global unique reference count to equal the frozen portal total with zero failures.",
-        "discovered_count": 162,
-        "visited_count": 39,
-        "proof": "The official portal exposed 162 vehicles in the current public snapshot. The 2026-08-23 generic research run scraped only three pages and reported 39 rows; 13 rows survived its downstream sample filter. There is no full-catalogue invariant, so this is explicitly partial."
+        "status": "blocked",
+        "method": "stop_at_professional_registration_human_verification_and_missing_reuse_feed_boundary",
+        "discovered_count": null,
+        "visited_count": 0,
+        "proof": "Current official probes returned HTTP 200 for the legacy portal and successor /vehicules route, while both robots endpoints returned 404 and the official sitemap route returned 404. The legacy page exposes volatile per-sale summaries but no global finite total; the successor shell exposes no server-rendered total/pageInfo. The prior 162/39 observations are not current completeness evidence and are retired."
       },
       "classification": {
-        "status": "partial",
-        "classifiable_count": 39,
-        "classified_count": 13,
-        "counts": {
-          "eligible_sample_rows": 13
-        }
+        "status": "blocked",
+        "classifiable_count": null,
+        "classified_count": 0,
+        "counts": {}
       },
       "integration": {
-        "status": "path_defined",
-        "path": "planned: encheres_vo_official_watch.py -> auction_refresh.sh -> runtime/encheres_vo_official_watch.json -> official auction lane; not wired",
-        "test": ""
+        "status": "blocked",
+        "path": "",
+        "test": "No login, professional registration, human verification or in-app account route was used; no connector was wired."
       },
       "publication": {
-        "status": "pending",
-        "basis": "The portal exposes CGU and CGV links and a copyright notice, but no machine-readable grant permitting systematic extraction and republication was located. Obtain written reuse permission or an official feed before publication.",
+        "status": "blocked",
+        "basis": "The official portal displays a copyright notice and account-bound CGU/CGV, while no public complete-inventory feed or recurring-extraction/republication grant was established. Obtain written permission and a source-approved feed before collection or publication.",
         "evidence_urls": [
           "https://pro.encheres-vo.com/portail.html",
           "https://pro.encheres-vo.com/inscription.html"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "interencheres.com",
@@ -4078,7 +4046,7 @@
       },
       "access": {
         "status": "restricted",
-        "blocker": "The catalogue is publicly readable, but the official page says these electronic auctions are reserved for automotive professionals and account registration is required to bid. France and Portugal are one canonical identity; the country selector on the same official catalogue must be handled as scope, not as a duplicate source.",
+        "blocker": "The public /pro page is readable and currently advertises 2,157 vehicles, but the electronic auctions are reserved for automotive professionals and bidding requires an account. The official footer states Copyright 2026, Tous droits réservés VPauto, and no recurring-extraction or republication grant was located. France and Portugal remain one canonical identity selected inside the same catalogue.",
         "evidence_urls": [
           "https://vpauto.eu/pro",
           "https://www.vpauto.fr/vente-electronique",
@@ -4091,32 +4059,34 @@
         "path": ""
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "After written reuse clearance, freeze the Search header total; enumerate every displayed sale and every stable vehicle reference across the country selector; deduplicate by VPauto vehicle reference; restart if the frozen total changes; require unique references to equal the frozen total with zero page or detail failures.",
-        "discovered_count": 1937,
-        "visited_count": 0,
-        "proof": "The official catalogue header exposed 1,937 vehicles on 2026-08-24. This is a header observation only, not an enumeration invariant, and no source-specific connector exists."
+        "status": "blocked",
+        "method": "rights_and_professional_access_stop_after_public_catalogue_route_review",
+        "discovered_count": 2157,
+        "visited_count": 72,
+        "proof": "The current official /pro response advertised 2,157 vehicles and exposed 72 unique public vehicle links plus the public POST search action /pro/vehicle/list. A non-mutating empty search returned HTTP 200, but no crawl was continued: the volatile header is not a terminal invariant, professional access governs the service, and the official site reserves all rights."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
-        "classified_count": 0,
-        "counts": {}
+        "status": "blocked",
+        "classifiable_count": 72,
+        "classified_count": 72,
+        "counts": {
+          "vehicle_public_sample": 72
+        }
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": ""
+        "test": "No source-specific connector was created or wired. Unblock only with a source-approved complete feed and field-level reuse rights."
       },
       "publication": {
-        "status": "pending",
-        "basis": "No explicit licence permitting systematic catalogue extraction and republication was located. Obtain written permission or an official feed before integrating or publishing rows.",
+        "status": "blocked",
+        "basis": "The official VPauto footer reserves all rights, while the service is for registered automotive professionals. Obtain written VPauto permission or a licensed complete-inventory feed covering recurring extraction, retention and external republication.",
         "evidence_urls": [
           "https://vpauto.eu/pro",
           "https://www.vpauto.fr/communication-partenariats"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "womauktion.com@de",
@@ -4339,44 +4309,46 @@
         ]
       },
       "access": {
-        "status": "public",
-        "blocker": "The operating rules say public auction data may be viewed by anyone, while bidding requires Ügyfélkapu/EÁF login and a tax identifier. No blanket catalogue-reuse or republication licence was located in the official materials reviewed.",
+        "status": "blocked",
+        "blocker": "The current official robots.txt returned HTTP 200 with User-agent: * and Disallow: /. Therefore no catalogue, terms, API/feed, sitemap or successor-route enumeration was requested in this recheck. Historical public-view observations do not override the current automation boundary.",
         "evidence_urls": [
+          "https://arveres.nav.gov.hu/robots.txt",
           "https://arveres.nav.gov.hu/web/Reszletesszabalyok.html",
           "https://arveres.nav.gov.hu/web/EAF_adatvedelmi_tajekoztatoja_12.18.html"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_vehicle_category_snapshot_all_rows_no_source_specific_connector",
-        "discovered_count": 64,
-        "visited_count": 64,
-        "proof": "At the audit snapshot, the official announced Jármű page stated 63 displayed rows and the active Jármű page stated 1 displayed row. Those rows were visible in the public tables, but the existing prototype points to the nonexistent /en/vehicles route and provides no durable source-specific synchronization invariant."
+        "status": "blocked",
+        "method": "robots_preflight_fail_closed_zero_catalogue_requests",
+        "discovered_count": null,
+        "visited_count": 0,
+        "proof": "The current robots response SHA-256 is 9030bd8b2047e008eaa20006e5ca64f64f5cb7eeb028c0b5aa93e85b04d06d60 and contains User-agent: * / Disallow: /. The earlier 63+1 snapshot is retained only as historical context, not a current count. See group_b_route_probe.json."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 64,
+        "status": "blocked",
+        "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": "The generic collector is intentionally excluded from auction_refresh.sh pending source acceptance; its configured route is not the verified NAV catalogue path."
+        "test": "Fail-closed robots evidence only; no NAV request was made after preflight and no production file was changed."
       },
       "publication": {
-        "status": "pending",
-        "basis": "Public viewing is explicit, but external bulk reuse/republication is not. Obtain NAV clarification, written permission, or an official reusable feed before publishing derived listings.",
+        "status": "blocked",
+        "basis": "Current robots.txt disallows all paths for the audit user agent, and no source-issued reusable feed or publication licence is recorded. Obtain written NAV authorization or an explicitly permitted licensed feed before any automated collection or publication.",
         "evidence_urls": [
+          "https://arveres.nav.gov.hu/robots.txt",
           "https://arveres.nav.gov.hu/web/Reszletesszabalyok.html"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "astegiudiziarie.it",
@@ -4542,27 +4514,30 @@
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_b_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_total_metadata_non_atomic_pages_no_source_specific_connector",
-        "discovered_count": 103,
-        "visited_count": 0,
-        "proof": "One official view reported 104 total lots and 103 vehicles across three pages; a later non-atomic page view reported 102 total and 101 vehicles. The changing total prevents a consistent snapshot, and the generic root fetcher has no source total/page reconciliation."
+        "status": "complete",
+        "method": "two_complete_passes_reconciling_declared_all_vehicle_nonvehicle_totals; vehicle_page_size_48_and_terminal_remainder; unique_detail_IDs",
+        "discovered_count": 121,
+        "visited_count": 121,
+        "proof": "At 2026-08-24T16:38:55Z both staging passes reconciled Allt=121, Ökutæki=120 and Lausafjármunir=1. Vehicle page counts were 48+48+24 and the non-vehicle category contained 1 unique ID. Membership SHA-256 24e39f6dcdcfab26ea8ff61bc12e672364b92c14585d85336f86923f2ddfdb2a and stable-content SHA-256 cb3b18b1c5d7462fdfce0c8a3e11abd8f98ada309d283243bfe08cfed68c0d89 matched across passes."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 103,
-        "classified_count": 0,
-        "counts": {}
+        "status": "complete",
+        "classifiable_count": 121,
+        "classified_count": 121,
+        "counts": {
+          "non_vehicle": 1,
+          "vehicle": 120
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": "The generic collector is disabled and no source-specific atomic paginator/snapshot contract exists."
+        "status": "path_defined",
+        "path": "group_b_public_catalogue_watch.py -> group_b_public_catalogue_evidence.json; deliberately absent from registry/publisher/deploy",
+        "test": "Two-pass staging evidence and source-specific terminal reconciliation pass; no production file was changed."
       },
       "publication": {
         "status": "pending",
@@ -4572,7 +4547,7 @@
           "https://www.bilauppbod.is/pages/view/skilmalarseljanda"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "carmarket.ayvens.com@gr",
@@ -4663,9 +4638,10 @@
         ]
       },
       "access": {
-        "status": "public",
-        "blocker": "The current announced and active movable-property tables are publicly readable; bidding uses the official login. The official downloads page identifies current 2026-03-30 usage/data rules, but no reusable public-feed licence was verified in this audit.",
+        "status": "blocked",
+        "blocker": "The current official robots.txt returned HTTP 200 with User-agent: * and Disallow: /. Therefore the announced/active tables, downloads, terms, API/feed and sitemap routes were not requested in this recheck. Historical anonymous visibility does not override the current automation boundary.",
         "evidence_urls": [
+          "https://e-arveres.mnv.hu/robots.txt",
           "https://e-arveres.mnv.hu/index-meghirdetesek-ingosag.html",
           "https://e-arveres.mnv.hu/index-letoltesek-ingatlan.html"
         ]
@@ -4676,34 +4652,32 @@
         "path": "additional_schengen_official_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_single_page_snapshot_and_static_connector_review",
-        "discovered_count": 28,
-        "visited_count": 28,
-        "proof": "The official announced table stated 1-28 of 28 and the active table stated that no data were displayable. The live connector was not run pending acceptance. Its _hungary_pages loop is capped at five pages and does not reconcile the official declared total, so code execution would not itself prove durable completeness."
+        "status": "blocked",
+        "method": "robots_preflight_fail_closed_zero_catalogue_requests",
+        "discovered_count": null,
+        "visited_count": 0,
+        "proof": "The current robots response SHA-256 is 81af7362864c0e6960c8294456790db344749680465d7216c0827c69c7d2dc8a and contains User-agent: * / Disallow: /. The earlier 28-row snapshot is historical only. The existing connector was not run and must remain quarantined under this boundary."
       },
       "classification": {
-        "status": "partial",
-        "classifiable_count": 28,
-        "classified_count": 28,
-        "counts": {
-          "non_vehicle_or_attachment_by_title": 14,
-          "vehicle_candidate_by_title": 14
-        }
+        "status": "blocked",
+        "classifiable_count": null,
+        "classified_count": 0,
+        "counts": {}
       },
       "integration": {
-        "status": "path_defined",
+        "status": "blocked",
         "path": "auction_refresh.sh:112-115 -> additional_schengen_official_watch.py -> build_auction_board.py",
-        "test": "py -3 test_additional_schengen_official_watch.py: 17 tests passed. This is synthetic/unit coverage only; no live collection or publication run was performed while source acceptance and reuse authority remain pending."
+        "test": "The existing path was not executed or edited. Current robots evidence requires it to remain fail-closed/quarantined until MNV authorizes a permitted interface."
       },
       "publication": {
-        "status": "pending",
-        "basis": "Confirm the current MNV usage rules permit automated extraction and external republication, or obtain a licensed official feed, before enabling publication of derived lots.",
+        "status": "blocked",
+        "basis": "Current robots.txt disallows all paths for the audit user agent and no source-issued reusable feed is recorded. Obtain written MNV authorization or an explicitly permitted licensed feed before automated collection or publication.",
         "evidence_urls": [
+          "https://e-arveres.mnv.hu/robots.txt",
           "https://e-arveres.mnv.hu/index-letoltesek-ingatlan.html"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "gobid.it",
@@ -5629,32 +5603,34 @@
       ],
       "catalogue": {
         "status": "verified",
-        "url": "https://auctionmaster.com/en/content/transport",
+        "url": "https://auctionmaster.com/en/c/cars-and-other-transport/?categorie=1",
         "evidence_urls": [
-          "https://auctionmaster.com/en/content/transport",
-          "https://auctionmaster.com/en/auctions/9143",
-          "https://auctionmaster.com/en/auctions/3670/auction-conditions"
+          "https://auctionmaster.com/en/c/cars-and-other-transport/?categorie=1",
+          "https://auctionmaster.com/robots.txt",
+          "https://auctionmaster.com/sitemap.xml",
+          "https://auctionmaster.com/sitemap_en.xml"
         ]
       },
       "access": {
         "status": "public",
-        "blocker": "Auction and lot pages are publicly discoverable and the site exposes registration/login for bidding. The transport catalogue is JavaScript/iframe-driven and no atomic current open-lot total or official machine-readable feed was identified.",
+        "blocker": "The sitemap-declared transport category route is publicly readable but its initial HTML is a React shell with no atomic current transport-only total, auction links, pagination terminal or explicit feed/export link. robots.txt declares Crawl-delay: 10, excludes archive/sorted/query/PDF routes and points to the sitemap; the English sitemap mixes categories and lifecycle states. No undocumented internal REST route was called.",
         "evidence_urls": [
-          "https://auctionmaster.com/en/content/transport",
-          "https://auctionmaster.com/en/auctions/9143"
+          "https://auctionmaster.com/en/c/cars-and-other-transport/?categorie=1",
+          "https://auctionmaster.com/robots.txt",
+          "https://auctionmaster.com/sitemap_en.xml"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
         "status": "partial",
-        "method": "Build an Auctionmaster-specific adapter that enumerates open auction IDs from the official transport catalogue and then every /auctions/{id}/lots page, freezes each auction's open-lot count, deduplicates stable auction/lot identifiers, rejects archived/closed lots when producing the current set, and asserts every per-auction count plus the global sum with zero detail failures.",
+        "method": "The source-specific fail-closed preflight reads only the official robots file, sitemap index, English sitemap and sitemap-declared cars-and-other-transport category route while respecting Crawl-delay: 10 and all disallows. It emits zero rows unless an official documented feed or public page contract freezes current transport IDs and total, states a finite terminal, and permits a later two-pass unique-ID traversal; it never constructs or calls an undocumented API.",
         "discovered_count": null,
         "visited_count": 0,
-        "proof": "The official transport catalogue was verified, but it did not expose an atomic current total to the audited public response. The local browser prototype queried the guessed /en/vehicles route and reported 0 rows from one page; that route and zero result do not prove completeness."
+        "proof": "The 2026-08-24 public-route evidence in auctionmaster_public_route_preflight.live.json records robots.txt (200), sitemap.xml (200), sitemap_en.xml (200) and the sitemap-declared category route (200). The English sitemap had 3,693 URLs, including 75 auction base paths, 2,872 lot paths and 48 transport-category paths, but it did not identify a current-open transport subset or lifecycle-complete total. The actual category HTML remained a React shell with no auction links, count, terminal pagination or explicit feed/export link. The preflight records zero undocumented API calls and returns zero rows, so the exhausted safe routes support incomplete only."
       },
       "classification": {
         "status": "not_started",
@@ -5710,32 +5686,31 @@
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_c_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "Build a PKO-specific paginator. Freeze the official header total, enumerate every page and stable auction token, assert that page N changes its identifier set, deduplicate tokens, visit every detail, and require unique visited tokens to equal the frozen total with zero failures. Re-read the header at the end and restart on turnover; then retain only eligible vehicle classes.",
-        "discovered_count": 211,
-        "visited_count": 3,
-        "proof": "The official catalogue header exposed 211 matching auctions on the audited snapshot. The local generic run reported 9 row observations across 3 pages, but only 3 unique PKO rows survived in schengen_wide_watch.json (BMW X4, Fiat Ducato and Mercedes-Benz S 580 Maybach). Repetition across pages and 3/211 coverage fail the enumeration invariant."
+        "status": "complete",
+        "method": "Use the official /pub/all/vehicles category, freeze its declared result total, parse exactly one stable token per article.list-item, follow only the official 'Następna strona' link until absent, reject loops, duplicate IDs within/across pages, empty/short pages, total drift, excess rows or HTTP/challenge errors, and repeat the full traversal with identical membership and stable-content hashes.",
+        "discovered_count": 97,
+        "visited_count": 97,
+        "proof": "The isolated VPS evidence at 2026-08-24T16:49:49Z reflects the current vehicle-category boundary, not the earlier all-category 211 observation. Each pass followed ten official pages and independently reconciled advertised=visited=unique=classified=97; membership and stable-content SHA-256 values matched and snapshot_verified=true."
       },
       "classification": {
-        "status": "partial",
-        "classifiable_count": 3,
-        "classified_count": 3,
+        "status": "complete",
+        "classifiable_count": 97,
+        "classified_count": 97,
         "counts": {
-          "light_commercial_vehicle": 1,
-          "non_vehicle": 0,
-          "passenger_car": 2,
-          "unknown": 0
+          "light_commercial_vehicle": 29,
+          "passenger_car": 67,
+          "trailer": 1
         }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": ""
+        "status": "tested",
+        "path": "group_c_public_catalogue_watch.py -> group_c_public_catalogue_watch.live.json",
+        "test": "python3 -m unittest -v test_group_c_public_catalogue_watch.py (8 tests PASS on isolated VPS staging); live two-pass balance 97=67 passenger+29 light-commercial+1 trailer."
       },
       "publication": {
         "status": "pending",
@@ -5745,7 +5720,7 @@
           "https://aukcje.pkoleasing.pl/en/auctions/list/pub/all/all"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "auksjonen.no",
@@ -5842,27 +5817,30 @@
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_c_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "Freeze the set of official active auction numbers and every advertised per-auction item total, enumerate each official 'Bekijk veiling' target and all of its stable lot identifiers, retain the originating Automotive Auctions auction number, deduplicate lots, and require each auction count plus the global sum to match the frozen overview. Restart if any auction or count changes during traversal.",
-        "discovered_count": 402,
-        "visited_count": 0,
-        "proof": "On 2026-08-24 the official overview displayed 18 active auctions whose advertised item counts summed to 402 (1+10+50+4+75+31+59+11+3+4+1+1+43+35+71+1+1+1). No lot-level enumeration was performed, and the local generic prototype returned 0 rows from one root page, so 402 is only a mixed-category summary count."
+        "status": "complete",
+        "method": "Freeze the official 'Nu in de veiling' section up to its next h2 boundary, every active auction number, URL and advertised item count; fetch every official 'Bekijk veiling' target, enumerate data-lotId objects, reject malformed/duplicate/short auctions and global duplicates, reconcile every auction and global sum, then repeat the entire traversal and require identical active boundary, membership and stable-content hashes.",
+        "discovered_count": 400,
+        "visited_count": 400,
+        "proof": "The isolated VPS evidence at 2026-08-24T16:49:49Z captured the live post-turnover boundary (18 active auctions, 400 advertised objects). Both full passes independently produced advertised=visited=unique=classified=400; every auction matched its own declared count, active-boundary/membership/stable-content hashes matched, and snapshot_verified=true."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
-        "classified_count": 0,
-        "counts": {}
+        "status": "complete",
+        "classifiable_count": 400,
+        "classified_count": 400,
+        "counts": {
+          "passenger_or_light_commercial_vehicle": 398,
+          "watercraft": 2
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": ""
+        "status": "tested",
+        "path": "group_c_public_catalogue_watch.py -> group_c_public_catalogue_watch.live.json",
+        "test": "python3 -m unittest -v test_group_c_public_catalogue_watch.py (8 tests PASS on isolated VPS staging); live two-pass balance 400=398 passenger/light-commercial+2 watercraft."
       },
       "publication": {
         "status": "pending",
@@ -5871,7 +5849,7 @@
           "https://www.automotive-auctions.nl/nl/algemene-voorwaarden/"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "bca.com/en/BCA-Norway",
@@ -6030,35 +6008,35 @@
         ]
       },
       "access": {
-        "status": "restricted",
-        "blocker": "The Luxembourg business catalogue is publicly observable, but the official terms allow only registered professional clients into the used-vehicle market. Registration requires company, VAT, identity and supporting documents, and the form says activity code 45.1 (motor-vehicle trade) is required to buy. No authorized account or official feed was supplied for this audit.",
+        "status": "blocked",
+        "blocker": "The official Luxembourg terms state that only registered professional clients may access the used-vehicle market. Registration requires company, VAT, identity and supporting documents, and the official form requires an eligible motor-vehicle trade activity. No source-issued account, licensed feed, or written extraction/republication authorization was supplied; the audit stopped at the anonymous boundary.",
         "evidence_urls": [
           "https://www.clickar.com/lu/francais/terms-and-conditions",
           "https://www.clickar.com/lu/francais/business/register"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "Replace the generic /en/vehicles guess with a Clickar Luxembourg-specific adapter. At the start of a run, freeze the official auction and vehicle totals, enumerate every stable auction and vehicle identifier, deduplicate identifiers across sale modes, re-read the totals at the end, and accept only when all frozen totals equal unique visited identifiers with zero page/detail errors; restart if the catalogue changes during the run.",
-        "discovered_count": 0,
+        "status": "blocked",
+        "method": "Anonymous review covered the official Luxembourg business page, sales terms and registration route. The gated used-vehicle market was not entered; no login, credential use, CAPTCHA handling or undocumented API call was attempted. Unlock only with a source-issued account/feed whose contract defines finite totals, pagination, stable identifiers and permitted automation.",
+        "discovered_count": null,
         "visited_count": 0,
-        "proof": "The official Luxembourg business page stated on 2026-08-24 that no auctions were currently running. The local generic research snapshot also returned 0 rows from one page. An observed zero is not a completeness invariant because the prototype targets the non-canonical guessed path /en/vehicles and has no Clickar total or stable-ID assertion."
+        "proof": "The anonymous page's observed zero active auctions is not a completeness invariant for the terms-restricted professional market. Official terms and registration materials establish the credential boundary; therefore no complete catalogue membership or two-pass stable-ID proof can be produced safely without source authorization."
       },
       "classification": {
-        "status": "not_started",
+        "status": "blocked",
         "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": ""
+        "test": "Blocked at the official professional-registration boundary; no anonymous complete-catalogue connector can be tested."
       },
       "publication": {
         "status": "pending",
@@ -6068,7 +6046,7 @@
           "https://www.clickar.com/lu/francais/business"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "elicytacje.mf.gov.pl",
@@ -6251,27 +6229,30 @@
         ]
       },
       "connector": {
-        "status": "not_implemented",
-        "kind": "none",
-        "path": ""
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_c_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "partial",
-        "method": "Resolve the current Valletta post/auction UUID from the official all-auctions response, freeze its advertised lot total and state, enumerate every category and page through public routes, deduplicate stable lot IDs, and require the per-category sums and global unique total to equal the frozen advertised total with zero failures. Re-run after the scheduled opening and restart if the state or total changes mid-run.",
+        "status": "complete",
+        "method": "Resolve the Valletta post UUID from the official home card, follow its official redirect to the auction UUID, freeze the declared lot total, follow only official rel=next links until the disabled/absent terminal, deduplicate stable lot UUIDs, and reject loops, duplicates, short pages, HTTP/challenge errors, total drift, UUID drift or second-pass membership/content drift.",
         "discovered_count": 9,
-        "visited_count": 0,
-        "proof": "On 2026-08-24 the official all-auctions page advertised Valletta, MT as Preparing, scheduled to open 2026-08-26 08:00Z, with 9 lots. Those nine lots were not individually enumerated and their categories were not exposed in the audited summary, so this is only a header observation, not proof of nine classifiable vehicles."
+        "visited_count": 9,
+        "proof": "The isolated VPS run generated group_c_public_catalogue_watch.live.json at 2026-08-24T16:49:49Z. Both passes resolved the same post and auction UUIDs and independently reconciled advertised=visited=unique=classified=9 with identical membership and stable-content SHA-256 values; snapshot_verified=true and the official next link was terminal."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
-        "classified_count": 0,
-        "counts": {}
+        "status": "complete",
+        "classifiable_count": 9,
+        "classified_count": 9,
+        "counts": {
+          "non_vehicle": 7,
+          "vehicle_offer": 2
+        }
       },
       "integration": {
-        "status": "not_started",
-        "path": "",
-        "test": ""
+        "status": "tested",
+        "path": "group_c_public_catalogue_watch.py -> group_c_public_catalogue_watch.live.json",
+        "test": "python3 -m unittest -v test_group_c_public_catalogue_watch.py (8 tests PASS on isolated VPS staging); live two-pass balance 9=2 vehicle_offer+7 non_vehicle."
       },
       "publication": {
         "status": "pending",
@@ -6281,7 +6262,7 @@
           "https://online-auction.state.gov/en-US/Auction/HowItWorks/d4d5d2ab-8fbd-4029-98db-8b08da5d7ad3"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "autorola.pt",
@@ -6440,8 +6421,8 @@
         ]
       },
       "access": {
-        "status": "restricted",
-        "blocker": "BCA Poland is B2B-only. A professional automotive business, valid VAT number, company documents, account approval, credentials, and acceptance of the applicable country terms are required for full marketplace access. The public pages do not expose an auditable Poland-only inventory invariant.",
+        "status": "blocked",
+        "blocker": "BCA Poland is B2B-only. The official account and buying guides require a professional automotive business, valid VAT/tax number, company documents, approval, credentials and acceptance of country terms before stock access. Anonymous pages expose only a 6,000+ cross-border platform lower bound, not a finite Poland-only catalogue. No source-issued account or licensed feed was supplied, so the audit stopped at the official access boundary.",
         "evidence_urls": [
           "https://www.bca.com/pl_PL/Support-EU/BCA-account",
           "https://www.bca.com/pl_PL/buy-with-us/guide-to-buying"
@@ -6453,22 +6434,22 @@
         "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_platform_lower_bound_only_no_traversal",
+        "status": "blocked",
+        "method": "official_home_account_buying_guide_and_terms_review_only_no_credentials_no_catalogue_traversal",
         "discovered_count": 6000,
         "visited_count": 0,
-        "proof": "The official Polish buying page advertises 6,000+ vehicles on the BCA platform. This is a lower bound for the cross-border platform, not a Poland-origin total, and no stable public pagination or total invariant was found."
+        "proof": "The official Polish buying page advertises 6,000+ vehicles on the wider BCA platform. It is a non-finite cross-border lower bound, not a Poland-origin membership set. Complete stock requires approved credentials; no login, CAPTCHA, undocumented API or source-issued credentials were used."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 6000,
+        "status": "blocked",
+        "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": "No bca-pl source-specific connector or monitored-input integration exists."
+        "test": "Blocked until BCA supplies an authorized complete-inventory feed/account contract and reuse terms; no connector was run."
       },
       "publication": {
         "status": "pending",
@@ -6478,7 +6459,7 @@
           "https://www.bca.com/pl_PL/buy-with-us/guide-to-buying"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "bca.com/en_PT",
@@ -6505,8 +6486,8 @@
         ]
       },
       "access": {
-        "status": "restricted",
-        "blocker": "BCA Portugal is a B2B marketplace. Full stock access requires an approved professional automotive buyer account, tax/VAT eligibility, documents, credentials, and acceptance of Portuguese BCA terms. No anonymous Portugal-only total or public pagination invariant was found.",
+        "status": "blocked",
+        "blocker": "BCA Portugal is a B2B marketplace. Official account guidance and Portuguese terms limit participation to eligible automotive professionals and require tax/VAT status, documents, approval, credentials and terms acceptance. Anonymous pages expose no finite Portugal-only stock total or public pagination invariant. No source-issued account or licensed feed was supplied, so the audit stopped at the official access boundary.",
         "evidence_urls": [
           "https://www.bca.com/en/pt/menu-/How-to-Register/",
           "https://www.bca.com/pt_PT/Support-EU/BCA-account",
@@ -6519,22 +6500,22 @@
         "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_catalogue_shell_no_country_total_no_traversal",
+        "status": "blocked",
+        "method": "official_portugal_home_account_buying_and_country_terms_review_only_no_credentials_no_catalogue_traversal",
         "discovered_count": null,
         "visited_count": 0,
-        "proof": "The official site verifies Portuguese sales, a sales calendar, vehicle search, and online auction formats, but only describes thousands of vehicles weekly and exposes no auditable current Portugal-only total to anonymous users."
+        "proof": "The official site verifies Portuguese sales and auction formats, but no anonymous finite Portugal-only inventory boundary is exposed. Full stock access is credentialed and restricted to qualifying professionals; no login, CAPTCHA, undocumented API or source-issued credentials were used."
       },
       "classification": {
-        "status": "not_started",
+        "status": "blocked",
         "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": "No bca-pt source-specific connector or monitored-input integration exists."
+        "test": "Blocked until BCA supplies an authorized complete-inventory feed/account contract and reuse terms; no connector was run."
       },
       "publication": {
         "status": "pending",
@@ -6544,7 +6525,7 @@
           "https://www.bca.com/pt_PT/Support-EU/BCA-account"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "carmarket.ayvens.com@ro",
@@ -6769,8 +6750,8 @@
         ]
       },
       "access": {
-        "status": "restricted",
-        "blocker": "Anonymous catalogue summaries are visible, but bidding, saved searches, some VIP auctions, and transaction details require registration/login and the customer agreement. The .pl identity resolves operationally to the Polish locale of the global exleasingcar.com inventory rather than a separately enumerable Polish stock.",
+        "status": "blocked",
+        "blocker": "The Polish locale exposes anonymous global summary counters, while saved searches, VIP auctions, bidding and transaction details require registration/login. It is not a separately enumerable Poland-origin stock. More decisively, section 6.1 of the official customer agreement forbids copying, distributing or publicizing website material without written consent. No written consent, country-scoped feed or source-issued account was supplied.",
         "evidence_urls": [
           "https://www.exleasingcar.com/pl/login",
           "https://www.exleasingcar.com/pl/auction-info",
@@ -6783,32 +6764,32 @@
         "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_locale_global_counter_only_no_pagination_invariant",
+        "status": "blocked",
+        "method": "official_polish_locale_catalogue_login_auction_info_and_customer_agreement_review_only_no_login_or_traversal",
         "discovered_count": 11120,
         "visited_count": 0,
-        "proof": "The official Polish locale snapshot dated 2026-08-20 displayed 11,120 online vehicles and country subtotals summing to the same number. It is volatile global inventory, not Poland-origin inventory, and no source-specific traversal was run."
+        "proof": "The official Polish locale snapshot displayed 11,120 online vehicles as a volatile global counter, not Poland-origin membership. No country-scoped total/terminal contract exists anonymously, and the official agreement's written-consent requirement prevents proceeding to recurring extraction or republication without authorization."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 11120,
+        "status": "blocked",
+        "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": "No exleasingcar-pl connector or monitored-input integration exists."
+        "test": "Blocked by the official written-consent clause and absence of a Poland-scoped licensed feed; no connector was run."
       },
       "publication": {
-        "status": "pending",
-        "basis": "The official page states all rights reserved and the customer agreement governs access. Obtain a written reuse licence or official feed before recurring extraction or republication.",
+        "status": "blocked",
+        "basis": "Section 6.1 of the official agreement states that copying, distributing and publicizing website material without written consent is strictly forbidden. Publication remains blocked until Exleasingcar grants written field-level reuse rights or a licensed feed.",
         "evidence_urls": [
           "https://www.exleasingcar.com/pl",
           "https://www.exleasingcar.com/text/pdf/private/Contract_Exleasingcar_EN.pdf"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "exleasingcar.ro",
@@ -6835,8 +6816,8 @@
         ]
       },
       "access": {
-        "status": "restricted",
-        "blocker": "Anonymous catalogue summaries are visible, but bidding, saved searches, VIP auctions, and transaction functions require registration/login and the customer agreement. The .ro identity resolves operationally to the Romanian locale of the global exleasingcar.com inventory, not a separately enumerable Romania-origin stock.",
+        "status": "blocked",
+        "blocker": "The Romanian locale exposes anonymous global summary counters, while saved searches, VIP auctions, bidding and transaction functions require registration/login. It is not a separately enumerable Romania-origin stock. Section 6.1 of the official customer agreement forbids copying, distributing or publicizing website material without written consent. No written consent, country-scoped feed or source-issued account was supplied.",
         "evidence_urls": [
           "https://www.exleasingcar.com/ro/login",
           "https://www.exleasingcar.com/ro/auction-info",
@@ -6844,37 +6825,37 @@
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "official_locale_global_filter_counter_only_no_pagination_invariant",
+        "status": "blocked",
+        "method": "official_romanian_locale_catalogue_login_auction_info_and_customer_agreement_review_only_no_login_or_traversal",
         "discovered_count": 10467,
         "visited_count": 0,
-        "proof": "The official Romanian catalogue snapshot displayed a 10,467-result filter count. It is volatile global inventory and not a Romania-origin total; the existing generic prototype points to exleasingcar.ro/en/vehicles instead of the verified exleasingcar.com Romanian route and was not run."
+        "proof": "The official Romanian locale displayed a 10,467-result filter counter for volatile global inventory, not Romania-origin membership. No country-scoped total/terminal contract exists anonymously, and the official agreement's written-consent requirement prevents recurring extraction or republication without authorization."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 10467,
+        "status": "blocked",
+        "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": "schengen_browser_watch.py is a generic research prototype with an unverified host/path; no source-specific enumeration test or production integration exists."
+        "test": "Blocked by the official written-consent clause and absence of a Romania-scoped licensed feed; no connector was run."
       },
       "publication": {
-        "status": "pending",
-        "basis": "The official page states all rights reserved and the customer agreement governs access. Obtain a written reuse licence or official feed before recurring extraction or republication.",
+        "status": "blocked",
+        "basis": "Section 6.1 of the official agreement states that copying, distributing and publicizing website material without written consent is strictly forbidden. Publication remains blocked until Exleasingcar grants written field-level reuse rights or a licensed feed.",
         "evidence_urls": [
           "https://www.exleasingcar.com/ro/licita%C5%A3ii-auto",
           "https://www.exleasingcar.com/text/pdf/private/Contract_Exleasingcar_EN.pdf"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "manheim.pt",
@@ -7639,7 +7620,7 @@
         "autoauction24.ch"
       ],
       "catalogue": {
-        "status": "partial",
+        "status": "verified",
         "url": "https://autoauction24.ch/",
         "evidence_urls": [
           "https://autoauction24.ch/",
@@ -7648,45 +7629,48 @@
         ]
       },
       "access": {
-        "status": "unknown",
-        "blocker": "The official root returned a 200 React application shell titled Auto Auction and robots.txt contained no disallow rule, but the static shell exposed no catalogue, count, terms, registration policy, or stable route in the auditable response. A later public asset request timed out. No login or private API was attempted.",
+        "status": "public",
+        "blocker": "robots.txt allows the public application and API. The official JavaScript bundle declares https://autoauction24.ch/api and getnextevent, which anonymously exposes the complete event cars array. The same bundle's copyright notice says reproduction of any elements requires the copyright holder's prior written consent.",
         "evidence_urls": [
           "https://autoauction24.ch/",
           "https://autoauction24.ch/robots.txt"
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_browser_watch.py"
+        "status": "implemented",
+        "kind": "source_specific",
+        "path": "group_b_public_catalogue_watch.py"
       },
       "enumeration": {
-        "status": "not_started",
-        "method": "First obtain an official catalogue route or supported feed plus an authoritative total/pagination contract. Only then freeze the total, traverse every allowed page/cursor to stable vehicle IDs, deduplicate, re-read the total, and require discovered=visited with zero failures; the current SPA root alone defines no safe enumeration boundary.",
-        "discovered_count": null,
-        "visited_count": 0,
-        "proof": "A direct public probe on 2026-08-24 received HTTP 200 and a 959-byte create-react-app shell; robots.txt allowed crawling but no catalogue invariant was exposed. The retained generic browser snapshot scraped one page and produced zero rows, which is not proof of zero offers."
+        "status": "complete",
+        "method": "two_complete_passes_over_the_official_bundle_declared_nonpaginated_getnextevent_cars_arrays; deduplicate event/car IDs",
+        "discovered_count": 41,
+        "visited_count": 41,
+        "proof": "At 2026-08-24T16:38:55Z two staging passes each returned event 206 with 41/41 unique car IDs. Membership SHA-256 e307d84ea16697499ea2bb1dbb22895f04c18c51939b17a6e0b1aefbf2fd0bdc and stable-content SHA-256 ed0996820c37e3b3c59798d05bb37353e1bf83a5dec953d0a1c06792bf22f88d matched. The official bundle SHA-256 is 77d6de91854888ca5f74f3e762fa450802bcd472beb84b8f7f2f7c8db492a43b."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": null,
-        "classified_count": 0,
-        "counts": {}
+        "status": "complete",
+        "classifiable_count": 41,
+        "classified_count": 41,
+        "counts": {
+          "non_vehicle": 0,
+          "vehicle": 41
+        }
       },
       "integration": {
         "status": "path_defined",
-        "path": "schengen_browser_watch.py -> schengen_wide_watch.json (generic research only; configured /en/vehicles route is unverified)",
-        "test": "The retained 2026-08-23 report has row_count=0 and pages_scraped=1; no verified catalogue route, terminal pagination condition, or source-specific test exists."
+        "path": "group_b_public_catalogue_watch.py -> group_b_public_catalogue_evidence.json; deliberately absent from registry/publisher/deploy",
+        "test": "Two-pass staging evidence and source-specific JSON/parser tests pass; no production file was changed."
       },
       "publication": {
-        "status": "pending",
-        "basis": "robots.txt permits crawling but is not a content licence. No official terms or reuse grant was found in the public shell, so written AutoAuction 24 AG permission or a licensed feed is required before recurring extraction or publication.",
+        "status": "blocked",
+        "basis": "The official bundle's English copyright notice states that rights in website content belong to AutoAuction 24 AG or named holders and that reproduction of any elements requires prior written consent. Obtain that consent or a licensed feed before recurring publication.",
         "evidence_urls": [
           "https://autoauction24.ch/",
           "https://autoauction24.ch/robots.txt"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "ayvens.com/en-ch",
@@ -7846,7 +7830,7 @@
       },
       "access": {
         "status": "public",
-        "blocker": "The active event, all 33 item cards, descriptions and bids are anonymously visible. Account creation/login is required for bidding. The site states All Rights Reserved and no supported bulk-feed or republication licence was located.",
+        "blocker": "The active event and its 33 item cards are anonymously visible, and account login is required only for bidding. However, section 13 of the official terms says the website, services and content are protected by copyright and database rights and warns that unauthorized use or copying may infringe those rights and result in damages.",
         "evidence_urls": [
           "https://bilwebauctions.se/en/auktion",
           "https://bilwebauctions.se/en/kopa-bil",
@@ -7854,37 +7838,37 @@
         ]
       },
       "connector": {
-        "status": "prototype",
-        "kind": "generic_research",
-        "path": "schengen_wide_official_watch.py; schengen_browser_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "A Bilweb-specific connector must freeze the set of ongoing event IDs from /en/auktion, read each event's explicit item count, enumerate every stable sell-ID once, reconcile per-event and global totals after deduplication, and repeat the event-index/count read to detect rollover while the run is in progress.",
+        "status": "blocked",
+        "method": "Inspect only the anonymous current-event index and one current event snapshot, then stop before recurring enumeration because the official terms reserve copyright and database rights.",
         "discovered_count": 33,
         "visited_count": 0,
-        "proof": "The official auction index identified one ongoing event, and its official event page displayed All, 33 items with stable sell identifiers. The retained generic snapshot scraped one page and produced zero Bilweb rows; it did not traverse the verified event route or prove the 33-item invariant."
+        "proof": "The current official index returned HTTP 200 and identified one ongoing event; its event page returned HTTP 200 and displayed 33 items. No recurring/two-pass connector was built because the same official terms expressly protect both copyright and database rights and warn against unauthorized use/copying."
       },
       "classification": {
-        "status": "not_started",
+        "status": "blocked",
         "classifiable_count": 33,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "path_defined",
-        "path": "schengen_wide_official_watch.py / schengen_browser_watch.py -> schengen_wide_watch.json (generic research only; not an accepted monitored input)",
-        "test": "The 2026-08-23 retained report has row_count=0 and pages_scraped=1. No Bilweb-specific event-total, sell-ID, classification, or merge test exists."
+        "status": "blocked",
+        "path": "",
+        "test": "No source-specific recurring connector or production integration was created; the existing generic zero-row snapshot is not accepted evidence."
       },
       "publication": {
-        "status": "pending",
-        "basis": "Public display and buyer/export terms do not grant recurring extraction or republication. Obtain Bilweb Auctions' written permission or a licensed official feed defining retention and external display rights.",
+        "status": "blocked",
+        "basis": "Section 13 protects the website and content with copyright and database rights and warns that unauthorized use or copying may cause an infringement and damages. Obtain Bilweb Auctions' written permission or a licensed feed before recurring collection or external publication.",
         "evidence_urls": [
           "https://bilwebauctions.se/en/auktionsvillkor",
           "https://bilwebauctions.se/en/auktion"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "blinto.se",
@@ -7911,8 +7895,8 @@
         ]
       },
       "access": {
-        "status": "public",
-        "blocker": "Vehicle catalogue cards and current bids are anonymously readable. Bidding requires a manually reviewed account; the official buyer information limits foreign registration to companies within the EU and requires acceptance of the customer terms. No reuse licence was supplied.",
+        "status": "blocked",
+        "blocker": "robots.txt allows the category root but disallows /w/, which is the numbered pagination route. The first allowed /category/fordon request returned HTTP 403 with a Cloudflare Just a moment challenge. The challenge and robots-disallowed page 2 were not bypassed; bidding also requires a manually reviewed account.",
         "evidence_urls": [
           "https://www.blinto.se/category/fordon",
           "https://www.blinto.se/buyinfo",
@@ -7925,32 +7909,32 @@
         "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "A future Blinto-specific connector must freeze a vehicle-category total from one consistent response, follow the official /category/fordon/w/N sequence until the terminal next-page condition, collect unique detail IDs, re-fetch page one, and assert the frozen total equals unique visited items with no skipped, duplicate, or failed pages.",
+        "status": "blocked",
+        "method": "Apply robots preflight, stop before the disallowed /w/ route, then fail closed when the allowed category root returns an HTTP 403 Cloudflare challenge; issue zero pagination requests.",
         "discovered_count": null,
         "visited_count": 0,
-        "proof": "Official pages expose the vehicle category and numbered /w/N pages, but contemporaneous official page renders exposed inconsistent platform-wide regional counters (1,385 and 1,213) and no stable vehicle-only terminal total. No Blinto connector or retained source report exists; therefore no discovered count is asserted."
+        "proof": "The current allowed category request returned HTTP 403, 5,598 bytes, SHA-256 7c9a89dfa6e117031021506655fd1bdc7d0945751d048b604348407e402d68c4 and the marker Just a moment. robots.txt SHA-256 ea9d7919092e559f49ecb3f9b4c43b5e993feea60421faf892a045250eb9f80a explicitly disallows /w/."
       },
       "classification": {
-        "status": "not_started",
+        "status": "blocked",
         "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": ""
+        "test": "No Cloudflare, robots or account boundary was crossed; no connector was created or wired."
       },
       "publication": {
-        "status": "pending",
-        "basis": "The buyer terms authorize customer use of the online auction service but do not grant automated catalogue extraction, database reuse, or external republication. Obtain written Blinto permission or an official feed agreement before integration.",
+        "status": "blocked",
+        "basis": "Complete enumeration cannot be performed without crossing a current Cloudflare challenge and a robots-disallowed pagination route, and no external-republication grant is recorded. Obtain an official licensed feed or written allowlisting and reuse permission.",
         "evidence_urls": [
           "https://www.blinto.se/buyerterms",
           "https://www.blinto.se/buyinfo"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "klaravik.se",
@@ -8043,8 +8027,8 @@
         ]
       },
       "access": {
-        "status": "public",
-        "blocker": "Catalogue summaries, auction pages, item identifiers, bids and end times are anonymously readable. Registration, login and acceptance of the auction/member terms are required to bid; anonymous visibility does not establish permission for recurring extraction or republication.",
+        "status": "blocked",
+        "blocker": "The canonical .com host and Swedish successor returned HTTP 202 with an empty body for robots.txt, root, Fordon, auctions, terms and sitemap routes under the honest audit user agent. This is an anti-robot/verification boundary; no JavaScript challenge, login or alternate-client bypass was attempted.",
         "evidence_urls": [
           "https://psauction.se/fordon",
           "https://psauction.se/kopa/sa-koper-du/registrera-dig-pa-ps",
@@ -8057,32 +8041,32 @@
         "path": ""
       },
       "enumeration": {
-        "status": "partial",
-        "method": "A future source-specific connector must freeze the Fordon category count, enumerate all active auction IDs, traverse each auction with the site's explicit antal and sida controls, deduplicate stable item IDs across auctions, and re-fetch the category and auction totals to prove a stable discovered=visited fixed point with zero failures.",
-        "discovered_count": 155,
+        "status": "blocked",
+        "method": "Fail closed after repeated anonymous checks of the canonical robots, catalogue, category, terms, sitemap and official successor routes all returned HTTP 202 with empty bodies.",
+        "discovered_count": null,
         "visited_count": 0,
-        "proof": "An official PS Auction Fordon snapshot displayed 155 category items and exposed auction/item pagination controls, but the snapshot is volatile and no source-specific traversal ran. PS Auction Sweden is absent from the retained local source reports and has no connector, so 155 is only point-in-time discovery metadata, not a completeness invariant."
+        "proof": "All five current public route probes returned HTTP 202, zero bytes and the empty-body SHA-256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855. The former 155 observation is historical and is not retained as a current count. See group_b_route_probe.json."
       },
       "classification": {
-        "status": "not_started",
-        "classifiable_count": 155,
+        "status": "blocked",
+        "classifiable_count": null,
         "classified_count": 0,
         "counts": {}
       },
       "integration": {
-        "status": "not_started",
+        "status": "blocked",
         "path": "",
-        "test": ""
+        "test": "No challenge/login bypass and no production integration; unblocking requires a source-approved feed or allowlisted public interface."
       },
       "publication": {
-        "status": "pending",
-        "basis": "The official buyer terms govern registration and transactions but no bulk extraction or external republication licence was located. Obtain written PS Auction permission or a licensed feed before recurring ingestion or publication.",
+        "status": "blocked",
+        "basis": "Current public access is stopped by a repeated HTTP 202 empty robot-verification boundary, and no licensed recurring-extraction/republication feed is recorded. Obtain PS Auction allowlisting and written reuse rights or a licensed feed.",
         "evidence_urls": [
           "https://psauction.se/kopa/villkor/auktions-och-medlemsvillkor",
           "https://psauction.se/fordon"
         ]
       },
-      "overall_status": "incomplete"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "restwertboerse.ch",
