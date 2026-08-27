@@ -20,6 +20,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "autobid"', content)
         for variable in (
             "AUTOBID_WATCH",
+            "EXLEASINGCAR_WATCH",
             "ASTE_WATCH",
             "KLARAVIK_WATCH",
             "VEACOM_WATCH",

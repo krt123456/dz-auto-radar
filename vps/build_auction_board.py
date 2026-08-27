@@ -80,6 +80,9 @@ SCHENGEN_COUNTRIES = frozenset({
     "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
 })
 SOURCE_COUNTRY_OVERRIDES = {
+    # Exleasingcar presents one cross-border inventory under a single public
+    # catalogue; the asset country is read from each card's official flag.
+    "exleasingcar": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }

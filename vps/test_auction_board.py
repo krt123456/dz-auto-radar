@@ -339,6 +339,37 @@ check("conditional eligibility remains review-required",
 check("broad watch preserves connector evidence fields",
       normalized["mileage"] == 12000 and normalized["registration_date"] == "2024-03-12" and
       normalized["bid_visibility"] == "hidden_on_pvp" and normalized["price_label"] == "Prezzo base")
+exleasingcar_raw = {
+    "id": "exleasingcar:18763435",
+    "source_key": "exleasingcar",
+    "url": "https://www.exleasingcar.com/en/auto-details/18763435",
+    "title": "ABARTH 500",
+    "country": "DE",
+    "category": "vehicle",
+    "year": 2021,
+    "fuel": "petrol",
+    "price_amount": 7098,
+    "price_currency": "EUR",
+    "price_kind": "minimum_bid",
+    "last_seen_at": "2026-08-17T05:45:00Z",
+    "eligibility_status": "review_required",
+    "eligibility_reason": "Catalogue card requires auction review.",
+    "adapter_authorized": True,
+}
+exleasingcar_normalized, exleasingcar_reason = bab._normalize_monitored_row(
+    exleasingcar_raw, generated_at=watch_now
+)
+check("cross-border Exleasingcar card enters broad watch",
+      exleasingcar_normalized is not None and exleasingcar_reason == "" and
+      exleasingcar_normalized["country"] == "DE" and
+      exleasingcar_normalized["eligibility_status"] == "review_required")
+exleasingcar_unmarked, exleasingcar_unmarked_reason = bab._normalize_monitored_row(
+    dict(exleasingcar_raw, id="exleasingcar:unmarked", adapter_authorized=False),
+    generated_at=watch_now,
+)
+check("unmarked pending Exleasingcar input remains fail-closed",
+      exleasingcar_unmarked is None and exleasingcar_unmarked_reason == "source_not_publishable",
+      negative=True)
 eligible_claim = dict(pvp_raw, id="pvp-giustizia:claim", eligibility_status="eligible")
 claimed, _ = bab._normalize_monitored_row(eligible_claim, generated_at=watch_now)
 check("connector cannot promote a broad row into the strict eligible lane",

@@ -31,6 +31,7 @@ RETRADE_WATCH="$STATE/runtime/retrade_official_auction_watch.json"
 TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_watch.json"
 AUKSJONEN_WATCH="$STATE/runtime/auksjonen_watch.json"
 AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"
+EXLEASINGCAR_WATCH="$STATE/runtime/exleasingcar_official_auction_watch.json"
 SOURCE_ADAPTER_WATCH="$STATE/runtime/source_adapter_watch.json"
 PUBLIC_WATCH="$ROOT/mobile_site_local/official_auction_watch.json"
 
@@ -157,6 +158,12 @@ run_official_watch "autobid" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
   --max-ids "${RADAR_AUTOBID_MAX_IDS:-20000}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "exleasingcar" \
+  python3 /opt/sonardeals-radar/exleasingcar_official_watch.py \
+  --out "$EXLEASINGCAR_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
+  --workers "${RADAR_EXLEASINGCAR_WATCH_WORKERS:-4}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "troostwijk"   python3 /opt/sonardeals-radar/troostwijk_fetcher.py   --out "$TROOSTWIJK_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
@@ -195,7 +202,7 @@ for watch_file in \
   "$BOE_KRONO_WATCH" "$FR_CZ_DE_WATCH" "$ZOLL_WATCH" "$BE_PL_PT_WATCH" \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
-  "$AUTOBID_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
+  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
   "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then
