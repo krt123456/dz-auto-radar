@@ -157,8 +157,9 @@ const REGISTRY = JSON.stringify({
     ["licytacje-komornik", ["licytacje.komornik.pl"]],
     ["nabidka-majetku", ["nabidkamajetku.gov.cz"]],
     ["vebeg", ["vebeg.de"]],
-  ].map(([key, domains], index) => ({
-    key, domains, priority: index + 1, publication_status: "migration", name: key,
+    ["auto1", ["auto1.com"], "blocked"],
+  ].map(([key, domains, publicationStatus], index) => ({
+    key, domains, priority: index + 1, publication_status: publicationStatus || "migration", name: key,
   })),
 });
 
@@ -364,6 +365,20 @@ try {
       eligibility_reason: "Remote bidder identity requirements are not met.",
       access_sale_note: "DNI/NIE and bank requirements apply.", evidence: "official-boe",
     },
+    {
+      id: "auto1-adapter", source: "auto1", source_key: "auto1",
+      registry_key: "auto1", registry_priority: 13,
+      url: "https://www.auto1.com/offer/adapter-lot", title: "Configured AUTO1 feed",
+      model: "Configured AUTO1 feed", country: "DE", year: 2025, mileage: 12000,
+      fuel: "petrol", seller: "configured feed", price_amount: 12345,
+      price_currency: "EUR", price_eur: null, price_kind: "unknown",
+      price_label: "configured source feed", bid_visibility: "source feed",
+      canonical_end_utc: futureIso, last_seen_at: nowIso,
+      eligibility_status: "review_required",
+      eligibility_reason: "Configured adapter feed requires offer review.",
+      access_sale_note: "Configured source feed.", evidence: "source-adapter:auto1",
+      adapter_authorized: true,
+    },
   ];
   const broadPayload = {
     ...payload,
@@ -383,6 +398,16 @@ try {
     "all-official scope must merge broad monitoring with strict rows");
   evaluate(broad, "apply();");
   check(evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"), "broad PVP row must be visible in all-official scope");
+  check(evaluate(broad, "VIEW.some(row=>row.id==='auto1-adapter')"),
+    "configured adapter row must be visible even when its registry source is otherwise blocked");
+  broad.__unmarkedAdapter = { ...broadRows.find(row => row.id === "auto1-adapter"), adapter_authorized: false };
+  let unmarkedRejected = false;
+  try {
+    evaluate(broad, "validateMonitoredAuctionRow(__unmarkedAdapter)");
+  } catch (error) {
+    unmarkedRejected = error && error.message === "contract";
+  }
+  check(unmarkedRejected, "a blocked source must still require the generated adapter marker");
   const broadCard = evaluate(broad, "auctionCard(VIEW.find(row=>row.id==='pvp-4620200'))");
   check(broadCard.includes("MG ZS 2024") && broadCard.includes("Current bid and foreign bidder access require review.") &&
     !broadCard.includes("المزايدة الحالية الظاهرة"), "base price and conditional eligibility must be labelled honestly");

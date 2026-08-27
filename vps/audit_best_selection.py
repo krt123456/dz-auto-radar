@@ -20,8 +20,16 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 try:
+    from .listing_condition import (
+        DAMAGE_PARTS_REPAIR_PATTERN,
+        condition_exclusion_reason,
+    )
     from .source_identity import autoscout24_non_detail_url
 except ImportError:
+    from listing_condition import (
+        DAMAGE_PARTS_REPAIR_PATTERN,
+        condition_exclusion_reason,
+    )
     from source_identity import autoscout24_non_detail_url
 
 
@@ -72,13 +80,7 @@ SEMANTIC_PRICE_PATTERNS = (
     ("finance-only", re.compile(r"\b(?:financement|finanzierung|kredyt|flex\s+lease|loa|lld)\b")),
     ("takeover-fee", re.compile(r"\b(?:odstepne|takeover)\b")),
 )
-RISK_PATTERN = re.compile(
-    r"\b(?:salvage|accident(?:ed)?|damaged|unfall|motorschaden|bastler|epave|"
-    # Text is accent-folded before matching. Keep the French participles
-    # explicit so endommagement/endommager do not become broad false positives.
-    r"endommag(?:e|ee|es|ees)|"
-    r"sinistr\w*|uszkodz\w*|powypadk\w*|pour\s+pieces|parts\s+only|non\s+runner)\b"
-)
+RISK_PATTERN = DAMAGE_PARTS_REPAIR_PATTERN
 FORBIDDEN_ECONOMICS_FIELDS = frozenset(
     {
         "pr", "ep", "prd", "roi", "er", "rd", "ld", "cd", "ci", "cb", "cr",
@@ -317,7 +319,7 @@ def full_ranked_candidates(
         if reason is not None:
             counts["semantic_price_rejections"] += 1
             continue
-        if RISK_PATTERN.search(normalized_semantic_text(title)):
+        if condition_exclusion_reason(title):
             counts["risk_rejections"] += 1
             continue
         normalized_title = normalized_semantic_text(title)
@@ -463,7 +465,7 @@ def eligible(offer: dict[str, Any]) -> bool:
     median_discount = num(offer.get("dp"))
     return (
         semantic_price_reason(title) is None
-        and RISK_PATTERN.search(normalized_semantic_text(title)) is None
+        and condition_exclusion_reason(title) is None
         and valid_https_url(offer.get("u"))
         and not autoscout24_non_detail_url(offer.get("u"))
         and valid_timestamp(offer.get("ls"))
@@ -722,9 +724,7 @@ def audit_payload(
         for offer in published
     )
     risk_count = sum(
-        RISK_PATTERN.search(normalized_semantic_text(
-            f"{offer.get('t', '')} {offer.get('m', '')}"
-        )) is not None
+        condition_exclusion_reason(offer.get("t", ""), offer.get("m", "")) is not None
         for offer in published
     )
     confirmed_dead_count = sum(integer(offer.get("v")) == -1 for offer in published)

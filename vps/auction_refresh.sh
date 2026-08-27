@@ -30,6 +30,7 @@ SCHENGEN_WIDE_WATCH="$STATE/runtime/schengen_wide_official_auction_watch.json"
 RETRADE_WATCH="$STATE/runtime/retrade_official_auction_watch.json"
 TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_watch.json"
 AUKSJONEN_WATCH="$STATE/runtime/auksjonen_watch.json"
+SOURCE_ADAPTER_WATCH="$STATE/runtime/source_adapter_watch.json"
 PUBLIC_WATCH="$ROOT/mobile_site_local/official_auction_watch.json"
 
 mkdir -p "$STATE/logs" "$STATE/runtime" /home/krt/eu_harvest
@@ -166,17 +167,28 @@ run_official_watch "schengen-wide"   python3 /opt/sonardeals-radar/schengen_wide
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "retrade"   python3 /opt/sonardeals-radar/retrade_official_auction_watch.py   --out "$RETRADE_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "source-adapters-118" \
+  python3 /opt/sonardeals-radar/run_source_adapter_watch.py \
+  --out "$SOURCE_ADAPTER_WATCH" \
+  --config-dir "${RADAR_AUCTION_SOURCE_ADAPTER_CONFIG_DIR:-/etc/sonardeals-radar/auction-source-feeds}" \
+  --feed-root "${RADAR_AUCTION_SOURCE_ADAPTER_FEED_ROOT:-$STATE/authorized-feeds}" \
+  --work-dir "$STATE/runtime/source-adapter-work" \
+  --timeout-seconds "${RADAR_SOURCE_ADAPTER_TIMEOUT_SEC:-120}" \
+  --workers "${RADAR_SOURCE_ADAPTER_WORKERS:-6}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 
 for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do
   wait "$watch_pid"
 done
 
 MONITORED_INPUT_ARGS=()
-# Generic, PVP, Retrade, and e-Leiloes collection remains disabled pending source acceptance.
+# The generated adapter bridge reports all 118 source identities and merges
+# every configured source feed into the same public auction watch.
 for watch_file in \
   "$BOE_KRONO_WATCH" "$FR_CZ_DE_WATCH" "$ZOLL_WATCH" "$BE_PL_PT_WATCH" \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
-  "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH"; do
+  "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
+  "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then
     MONITORED_INPUT_ARGS+=(--monitored-input "$watch_file")
   else

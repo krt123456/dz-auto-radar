@@ -1,0 +1,1191 @@
+{
+  "schema_version": 1,
+  "linux_target": true,
+  "canonical_identity_count": 118,
+  "runtime": "auction_source_adapter_runtime.py",
+  "runtime_sha256": "7f6df422fa4b89884aeaba06a22a72f7004544c746325830f6e1169ff2bf079c",
+  "ledger": "source_completion_ledger.json",
+  "ledger_sha256": "a83a56f114290d4b1627d6f46969e445750ee5aa5b28b59e53add2cc5be58828",
+  "sources": [
+    {
+      "canonical_identity": "auto1.com",
+      "batch": 1,
+      "launcher": "auto1_com_a889b3ab00.py",
+      "launcher_sha256": "19fd98d7502f27327557a9ab168a2b24e0fc91f8525b0138d91baffe4bf5f2e2",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "autobid.de",
+      "batch": 1,
+      "launcher": "autobid_de_ecf7578c63.py",
+      "launcher_sha256": "64e10b9fc782642d5ee8f4605d526655db86d939ed9a8db0e2ee1193779a98de",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "autobid_official_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "autoproff.com",
+      "batch": 1,
+      "launcher": "autoproff_com_da08fe98e1.py",
+      "launcher_sha256": "8e4208ab2e5c14f187024ba24ccd4290efa1701db390c0289350ca074da3ad28",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "autorola.eu",
+      "batch": 1,
+      "launcher": "autorola_eu_e0b7f72083.py",
+      "launcher_sha256": "7758601cbcb97e1d79b338257a67d34bccb7ce2f7883083ce5b000098fcafb59",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com",
+      "batch": 1,
+      "launcher": "bca_com_a10a5f1db7.py",
+      "launcher_sha256": "aad5acaec0030f116358190dd8ab00893af1b74f29c27a96013bf33adcb2d906",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "carmarket.ayvens.com@global",
+      "batch": 1,
+      "launcher": "carmarket_ayvens_com_global_1848b115af.py",
+      "launcher_sha256": "d7fee403feda990fcfb94e457237524ed7cb1c65df1e11a55a299fbb75b45f19",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "caronsale.com",
+      "batch": 1,
+      "launcher": "caronsale_com_98e5a941e9.py",
+      "launcher_sha256": "94dd54a25c88aa8ac0dee479158ed383eec45065d93bed3082bc211f8f5ad7dd",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "ecarstrade.com",
+      "batch": 1,
+      "launcher": "ecarstrade_com_4184377120.py",
+      "launcher_sha256": "b26e66b4c22e92c1e6abbc39668cff64205d9b2314f7f7bb2a3a6c0641e8bebc",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "manheim.eu",
+      "batch": 1,
+      "launcher": "manheim_eu_f173b2ad4e.py",
+      "launcher_sha256": "35f23090271235d35fa5dce02483f54dbb94a58ad1b1bba5408560c404f84078",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "openlane.eu",
+      "batch": 1,
+      "launcher": "openlane_eu_cab9d0847c.py",
+      "launcher_sha256": "ddb35efb126b6d56d3146582f5aa9a1e70f985dd9a89b1a3cc86a2b1d0d06744",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "2trde.com",
+      "batch": 2,
+      "launcher": "2trde_com_bfd0c30589.py",
+      "launcher_sha256": "9bb602a91bdbc08c277d677c29b588552e451fa51698487e31ef358bb8366f5a",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "automotivetradecenter.com",
+      "batch": 2,
+      "launcher": "automotivetradecenter_com_fa5462a77c.py",
+      "launcher_sha256": "728425e8c552bb9ef449630ec53da21ca7c1ef39140195b5a1a192d8829f771e",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "batch2_atc_probe.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "b2b.2ndmove.eu",
+      "batch": 2,
+      "launcher": "b2b_2ndmove_eu_7c2a0d37db.py",
+      "launcher_sha256": "735898f19f9e63f80f4b9e61592ad1824789b1707038682a01a97468669155eb",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "carcollect.com",
+      "batch": 2,
+      "launcher": "carcollect_com_c904a268e3.py",
+      "launcher_sha256": "1fae3119fdb4e0384d86bbf026e761eb63e11715d18e8f100c7ae8ace30a250a",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "eu.ironplanet.com",
+      "batch": 2,
+      "launcher": "eu_ironplanet_com_2f859e983d.py",
+      "launcher_sha256": "6d70b85afac9ad96a0f5a3ce89555744fc7deaaade451ea7802e06da452fa5af",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "exleasingcar.com",
+      "batch": 2,
+      "launcher": "exleasingcar_com_db66d4ebba.py",
+      "launcher_sha256": "bd89d6f423730ba6f26895c28f013a61c48b61175830720a3a54ea205f0dc1c9",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "manheim-express.eu",
+      "batch": 2,
+      "launcher": "manheim_express_eu_976309a880.py",
+      "launcher_sha256": "44ca31de929a415f40a92aa81442b8da887d8762f0dfe161e4b41e88c97aa434",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "rbauction.eu",
+      "batch": 2,
+      "launcher": "rbauction_eu_4a40daf58f.py",
+      "launcher_sha256": "36c29d9ee73d397bb6eac767314264f9a7c3916bb088f1177aefc7826ba81f1b",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "troostwijkauctions.com",
+      "batch": 2,
+      "launcher": "troostwijkauctions_com_64cad7f942.py",
+      "launcher_sha256": "0fd76ebb630404f8706e050b1e9ac5a15ccbfa236893cdac27de29cc446bcf8d",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "womauktion.com@global",
+      "batch": 2,
+      "launcher": "womauktion_com_global_a40e1c2c72.py",
+      "launcher_sha256": "a113c57137a2475ca7aa6007de04d4089cfc2d72800c7e2ab495c744857edcff",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "auctim.com",
+      "batch": 3,
+      "launcher": "auctim_com_2fa31d01cf.py",
+      "launcher_sha256": "5cc72ed06455ff4508e2a99ad8593e5029d3009b160384c9d28b7b6d5ae34bf8",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "aurena.at",
+      "batch": 3,
+      "launcher": "aurena_at_665b3164b9.py",
+      "launcher_sha256": "57d6178a7dfadac5a8e0b4e47c0f8bec262db06a84a9486d23dd6b7ac86c5c1f",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "remaining_a_sources_public_preflight.js::aurenaPreflight",
+      "overall_status": "incomplete"
+    },
+    {
+      "canonical_identity": "autorola.at",
+      "batch": 3,
+      "launcher": "autorola_at_8931645d10.py",
+      "launcher_sha256": "648cfc50bed6d84dd3626810c2d453d0ffbce8a69c973ac70131710071335e77",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/en_BE",
+      "batch": 3,
+      "launcher": "bca_com_en_be_527d33f385.py",
+      "launcher_sha256": "6e77e1dc14e79cb508cf9dc4950fe5c328079032410e7e63c777e39198128777",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "cars2click.com",
+      "batch": 3,
+      "launcher": "cars2click_com_2ef6f16d45.py",
+      "launcher_sha256": "10165c2029469c167580d8a03e71abf44d4dd68e0868172adce9d4094d4a7a87",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "edrazba.fina.hr",
+      "batch": 3,
+      "launcher": "edrazba_fina_hr_42479d5541.py",
+      "launcher_sha256": "b6c4f04800bc566741fc8c5118f0b22bee531e0d3fb02a6960b7310542312cf3",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "fahrzeuge.dorotheum.com",
+      "batch": 3,
+      "launcher": "fahrzeuge_dorotheum_com_9a6f51ba57.py",
+      "launcher_sha256": "1fb749666e338d29eaae44b644379620a1be5eb1eb8c2bf0f9bb9c0227844b18",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "sales.nra.bg",
+      "batch": 3,
+      "launcher": "sales_nra_bg_73450d21e0.py",
+      "launcher_sha256": "163f4bcd48cb930754b6f8f55cbc8ea89b77a0891440294f26bacf5fd6211338",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "vavato.com",
+      "batch": 3,
+      "launcher": "vavato_com_351b76ec0a.py",
+      "launcher_sha256": "5444cc7858efa2161ff51c6e22526e0428d11ceb83313b7380c3015c3d4830d3",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "zapori.mjs.bg",
+      "batch": 3,
+      "launcher": "zapori_mjs_bg_bc06300a23.py",
+      "launcher_sha256": "8dc1faade66c23ad4af50351c3de3048294780b0e78c39361a23a8292fcead9d",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "remaining_three_public_watch.py::collect_zapori",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "auction24.cz",
+      "batch": 4,
+      "launcher": "auction24_cz_3a5539870b.py",
+      "launcher_sha256": "d270f18f83ca63be473c834773fbe0a8999fa1ddd3e2cadf345f75671b53a104",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "auction24_cz_public_probe.js::runResearchProbe",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "autopoint.eu",
+      "batch": 4,
+      "launcher": "autopoint_eu_41c9f044e1.py",
+      "launcher_sha256": "ad1c8dd60af0dd9447e45554eac604b941b66a7dcc0c6a7ee30c51efa6dd1a3f",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "remaining_three_public_watch.py::collect_autopoint",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "bca.com/en/dk",
+      "batch": 4,
+      "launcher": "bca_com_en_dk_15abeee72d.py",
+      "launcher_sha256": "d34efb27e6722f3d1d367e7792d7d228124f68c7212d59dbd21817625b3eaa91",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "campenauktioner.dk",
+      "batch": 4,
+      "launcher": "campenauktioner_dk_86a027bdc5.py",
+      "launcher_sha256": "cd535883b040f5c1bdc22d264db09f73d17a913b39482760f51cd4156ea4b855",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "caraukce.cz",
+      "batch": 4,
+      "launcher": "caraukce_cz_643a7ba881.py",
+      "launcher_sha256": "15d71d83a1885789bf4bdcb636cc118ee0a62cdab4d9954af078ba6020557f7c",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "remaining_a_sources_public_preflight.js::caraukcePreflight",
+      "overall_status": "incomplete"
+    },
+    {
+      "canonical_identity": "klaravik.dk",
+      "batch": 4,
+      "launcher": "klaravik_dk_4363670536.py",
+      "launcher_sha256": "39740ba2b6ef9dba2e39d994dc9edd55b1465f394c24d370826b1dc4d17d4715",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_smart_browser.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "ponip.fina.hr",
+      "batch": 4,
+      "launcher": "ponip_fina_hr_17a2eb3882.py",
+      "launcher_sha256": "5439a0ab45d3f9964e45dca7d1a11b09ad572f9ec87c603665e1b6f364893ba5",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "remaining_three_official_probe.py; ponip_public_types_probe.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "portaldrazeb.cz",
+      "batch": 4,
+      "launcher": "portaldrazeb_cz_402e6ba5ba.py",
+      "launcher_sha256": "1791fc1166fd8f76fa1419946846258ffa142588cf1a34d5b1fc228d5228e354",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "retrade.eu",
+      "batch": 4,
+      "launcher": "retrade_eu_aaf00642ba.py",
+      "launcher_sha256": "4db53ba27fec43dfb7267f4d42b787277806cdec5ef0efa6f789e147056bfc44",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "retrade_official_auction_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "veacom.cz",
+      "batch": 4,
+      "launcher": "veacom_cz_5af4d90e33.py",
+      "launcher_sha256": "03db5d83c130e2d1bfa6a93d0f61aafd17f67a920910776036dd8d5493ee224a",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "remaining_a_sources_public_preflight.js::veacomPreflight",
+      "overall_status": "incomplete"
+    },
+    {
+      "canonical_identity": "alcopa-auction.fr",
+      "batch": 5,
+      "launcher": "alcopa_auction_fr_170149a345.py",
+      "launcher_sha256": "dbe877ac4252235eeaf3440b5f9b68d0f84459215abe76ee56f16da08252ead2",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "avariilised-autod.ee",
+      "batch": 5,
+      "launcher": "avariilised_autod_ee_58cff0de34.py",
+      "launcher_sha256": "8a0b0003512e82ded1f76f46652defe8e4ed915f44bb46ff4c748089f1ec3f08",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "copart.fi",
+      "batch": 5,
+      "launcher": "copart_fi_6677275a91.py",
+      "launcher_sha256": "207c3f9534e9f045d8dcfbfb6b1eeaa4704f4d85d48521c936402df7601ead90",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "copart_schengen_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "encheres-domaine.gouv.fr",
+      "batch": 5,
+      "launcher": "encheres_domaine_gouv_fr_d1cb5106f6.py",
+      "launcher_sha256": "45268ea77edfc264bb34ebaa6931715f1801eed08f35cbfba93ca829e837482a",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "fr_cz_de_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "huutokaupat.com",
+      "batch": 5,
+      "launcher": "huutokaupat_com_701e8a50f4.py",
+      "launcher_sha256": "49237c329f0cf0668d703a4feb3323b1cc1df85a938ba95888b7dd65f251ff84",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "kiertonet.fi",
+      "batch": 5,
+      "launcher": "kiertonet_fi_fd9653dfc4.py",
+      "launcher_sha256": "056a0576715b54746e3b3ee294e4390bd362c81a0d530cd4949e63b754789750",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "oksjonikeskus.ee",
+      "batch": 5,
+      "launcher": "oksjonikeskus_ee_d3da42c522.py",
+      "launcher_sha256": "b73ed12d2da4c2e063a7002c92caeb74c15a9f99ce765c0343b9bdbfecb78540",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "additional_schengen_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "psauction.fi",
+      "batch": 5,
+      "launcher": "psauction_fi_26f0de4f3a.py",
+      "launcher_sha256": "d948b100875807ddf0fbfb541e5225e8a86f50b136f721966f65eb939446b9fb",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "romu.ee",
+      "batch": 5,
+      "launcher": "romu_ee_333d23da89.py",
+      "launcher_sha256": "c663c57479db6286669ef87b517724b5c35f6701c023bd59bf55ef5b2244e2a0",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_b_public_catalogue_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "weby.ee",
+      "batch": 5,
+      "launcher": "weby_ee_7c4c87821c.py",
+      "launcher_sha256": "5853c7d943adf570e00a69d80fe3771923609597af5062aa9673a23d2914ac8d",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_b_public_catalogue_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "agorastore.fr",
+      "batch": 6,
+      "launcher": "agorastore_fr_86e7934634.py",
+      "launcher_sha256": "2efceb60a4730eb3cb3683e2ca2a874d16e7a00f636f4364731fe8d23f39e77c",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "auto-auctions.gr",
+      "batch": 6,
+      "launcher": "auto_auctions_gr_7f4240550b.py",
+      "launcher_sha256": "1baf184802679135ae5d379d48e2c9734e7377463aed7eb22e8ac3f91c27c753",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "copart.de",
+      "batch": 6,
+      "launcher": "copart_de_66d124c30f.py",
+      "launcher_sha256": "cc30fd093ab156a412c60390e33c61630598eb06dc1c4a0d213cef0c3eb37fb2",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "copart_schengen_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "encheres-vo.com",
+      "batch": 6,
+      "launcher": "encheres_vo_com_04562a8ccb.py",
+      "launcher_sha256": "cf97edc022e50755f8f013180fcc9bea2ff589d49660964775cf575e8ac46759",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "interencheres.com",
+      "batch": 6,
+      "launcher": "interencheres_com_b371ca7bdd.py",
+      "launcher_sha256": "17cc73f5f9d56a303b578a4c409c66749b5d1731e1f84b17eaf4ef841cf2da4a",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "justiz-auktion.de",
+      "batch": 6,
+      "launcher": "justiz_auktion_de_c46e21b9de.py",
+      "launcher_sha256": "d4562b4a00f7b8e9d867b2bdbd8e59e714f0bd5a92a98801e0151c403a084508",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "fr_cz_de_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "vebeg.de",
+      "batch": 6,
+      "launcher": "vebeg_de_05dca106dc.py",
+      "launcher_sha256": "c4ed8e32c6a64c6ee991ec74d290cefc5e466c30c474eec7f8c072498b143ee1",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "vpauto.eu",
+      "batch": 6,
+      "launcher": "vpauto_eu_bb2cb0ef2b.py",
+      "launcher_sha256": "9573def17e9172822ae8dc3fa931d8c3fbdb9f01feb563b12ba89300e912a983",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "womauktion.com@de",
+      "batch": 6,
+      "launcher": "womauktion_com_de_a63dfd4979.py",
+      "launcher_sha256": "01e662a198b57dbb2ddf6b21a361faa4ec97443138e4bdde9393e0a2bb5fd385",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "zoll-auktion.de",
+      "batch": 6,
+      "launcher": "zoll_auktion_de_224f686fff.py",
+      "launcher_sha256": "81a9bf6b1158fe7da35e3ce6503a18c8fb5a69274c3acf587546506fa8c27f3c",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "zoll_official_auction_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "arveres.mbvk.hu",
+      "batch": 7,
+      "launcher": "arveres_mbvk_hu_b35aa5ca6c.py",
+      "launcher_sha256": "bd0603e31bde0c36d9c992fb3cc1143ed94f26f8f698dc284123869eb191f1bf",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "arveres.nav.gov.hu",
+      "batch": 7,
+      "launcher": "arveres_nav_gov_hu_1a5494576a.py",
+      "launcher_sha256": "b959a24f0ff45af9e0cf0bb45ff9684e29d911d6bd7fe4d6786d059eea337cec",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "astegiudiziarie.it",
+      "batch": 7,
+      "launcher": "astegiudiziarie_it_ce8038af43.py",
+      "launcher_sha256": "3929d260c42286d801ac9bd4aae53963f07f4288ff7d28dd0d673fb245b200a0",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/it",
+      "batch": 7,
+      "launcher": "bca_com_it_13da2e914e.py",
+      "launcher_sha256": "9cf77735be00aa6676eb8c359cbaa18d56a0a23da8805a52b2e72e94f921bb79",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bilauppbod.is",
+      "batch": 7,
+      "launcher": "bilauppbod_is_34d56f2eff.py",
+      "launcher_sha256": "190d4d42e9deeb148e63f05f961f5f8bad18e7d60c66e37cb287b3db81c5b506",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_b_public_catalogue_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "carmarket.ayvens.com@gr",
+      "batch": 7,
+      "launcher": "carmarket_ayvens_com_gr_eed2e868ff.py",
+      "launcher_sha256": "f144088be99cf95c032536346505b186a5d4723ae0784894d30c3c1b5bd13ed8",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "e-arveres.mnv.hu",
+      "batch": 7,
+      "launcher": "e_arveres_mnv_hu_d173ef671a.py",
+      "launcher_sha256": "7377f911cf985e3ec6b62a73b3651733d3e05f8fa086e7c0062c7045c547885f",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "additional_schengen_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "gobid.it",
+      "batch": 7,
+      "launcher": "gobid_it_decf9da08f.py",
+      "launcher_sha256": "e3e307e6403ff684f358427de3f750e2e26ed97ed78313e6a08ff5f44c9ee7be",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "industrialdiscount.com",
+      "batch": 7,
+      "launcher": "industrialdiscount_com_bbdb8e7e9e.py",
+      "launcher_sha256": "1e9c14e39cadf097d1ed393a86fb25951df9317669e1624dcb0c3a6881df1bc1",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "pvp.giustizia.it",
+      "batch": 7,
+      "launcher": "pvp_giustizia_it_2542ce6c33.py",
+      "launcher_sha256": "f558634f13762dc4a14289e11de98eafe5dbbe3740ff0007ee53afd66026c5ef",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "pvp_official_auction_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "autoa.bid",
+      "batch": 8,
+      "launcher": "autoa_bid_218708bf5b.py",
+      "launcher_sha256": "187d67b41e0c6e55c420bfdbe7a8d961e180f26b272efb5e8b1fc91e45f9e5a2",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "registry:autoa-bid",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "autorola.lu",
+      "batch": 8,
+      "launcher": "autorola_lu_12ad17e99d.py",
+      "launcher_sha256": "2dce938e7b7187f09d37eb6b6047b2202ff17ef060a5982b32db0141cc23d403",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "registry:autorola-lu",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "avcars.eu",
+      "batch": 8,
+      "launcher": "avcars_eu_77aec0d9db.py",
+      "launcher_sha256": "f0dc3baf1c6b7833800cd8d0eedaefc486e261458b0b7d6fbff4cdb2a59f59f7",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "registry:avcars",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/en_CH",
+      "batch": 8,
+      "launcher": "bca_com_en_ch_08f1688c4a.py",
+      "launcher_sha256": "d749ca6b6d340c1ff265aa1122f80a730d44de41498b84db5db2ccc4cf29a606",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "carauktion.ch",
+      "batch": 8,
+      "launcher": "carauktion_ch_a8d01db159.py",
+      "launcher_sha256": "e769bd98c13aabc9e9c958c1b2e8121b31b8d56e7e5ee887d3838a842039ed77",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "registry:carauktion-ch",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "carmarket.ayvens.com@lu",
+      "batch": 8,
+      "launcher": "carmarket_ayvens_com_lu_6731efc790.py",
+      "launcher_sha256": "f5d01587ddc6b21f8e03d630fb5647ade095fbdfd4d967de27a0e04a624dbf73",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "evarzytynes.lt",
+      "batch": 8,
+      "launcher": "evarzytynes_lt_a97e4a2d31.py",
+      "launcher_sha256": "51816077451f25bd5f0b199bad95369daec0171ea52c8d0935bd0ff8ee92ee85",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "evarzytynes_lt_public_probe.py::run_probe",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "evg.auction",
+      "batch": 8,
+      "launcher": "evg_auction_0ac357c6f5.py",
+      "launcher_sha256": "2bb9a5ccac419af45faf58b45ddc31e2572d7b04d7de70d750b0ecf019f4e4b8",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "registry:evg-auction",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "izsoles.ta.gov.lv",
+      "batch": 8,
+      "launcher": "izsoles_ta_gov_lv_03b3210956.py",
+      "launcher_sha256": "4fad8e70037b1231506ac60cfc6521fe7d8be939fb1fdbe70ee02869ca240056",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "izsoles_ta_official_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "utrupe.lv",
+      "batch": 8,
+      "launcher": "utrupe_lv_acbebd85c9.py",
+      "launcher_sha256": "dac87dd3a144e6ca2f524301ce619e95cb8f7f5b8764705fd474821351f36ae7",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "auctionmaster.com",
+      "batch": 9,
+      "launcher": "auctionmaster_com_c58a5defa7.py",
+      "launcher_sha256": "f94aa3dfd8b0ffbf61e93afe1b093b9692ef2582138f871df7672aa7917b6261",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "incomplete"
+    },
+    {
+      "canonical_identity": "aukcje.pkoleasing.pl",
+      "batch": 9,
+      "launcher": "aukcje_pkoleasing_pl_cf03eb4b42.py",
+      "launcher_sha256": "27de7726603498433f5cfe9a948d4cc128c52cb05be4b8c8e4e2b7cf05f8eab6",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_c_public_catalogue_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "auksjonen.no",
+      "batch": 9,
+      "launcher": "auksjonen_no_da00367fc2.py",
+      "launcher_sha256": "e8ca39312bc5c08e853ae2aed93b5c248faecfd08994162b8c9fea2d6112c10e",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "automotive-auctions.nl",
+      "batch": 9,
+      "launcher": "automotive_auctions_nl_a1b0bd3b37.py",
+      "launcher_sha256": "b724d9e54212cb3b2c6d88b2a1c95be349781c720282a13fb4ba31029d1aaeed",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_c_public_catalogue_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "bca.com/en/BCA-Norway",
+      "batch": 9,
+      "launcher": "bca_com_en_bca_norway_1ec06ee529.py",
+      "launcher_sha256": "7b10b9a8a7d6250df018f71e3a175bd50e6f66f1bfc779020d1b0a841dcf0dc6",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/en_NL",
+      "batch": 9,
+      "launcher": "bca_com_en_nl_89500e60b7.py",
+      "launcher_sha256": "1dce81079659f48779ef6f97dfdb4742a1877664fdd23c1f85f085c1200449bc",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "clickar.com",
+      "batch": 9,
+      "launcher": "clickar_com_349d6c2dd2.py",
+      "launcher_sha256": "c04dd0e6bcc6fdc785c590839ee4b7518b71a2c76588abbebfac179ec8bc43c4",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "elicytacje.mf.gov.pl",
+      "batch": 9,
+      "launcher": "elicytacje_mf_gov_pl_a8caa53d51.py",
+      "launcher_sha256": "fa5b35d4e5dc6571b072ad6ce9ebadc5746fe0384470dd5d13dfad50172ab2cc",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "elicytacje_kas_official_watch.py",
+      "overall_status": "verified_complete"
+    },
+    {
+      "canonical_identity": "licytacje.komornik.pl",
+      "batch": 9,
+      "launcher": "licytacje_komornik_pl_7c01172c05.py",
+      "launcher_sha256": "967f8a0d0ec98f30498b97b8983584e720658cc150f76f3fe7512bc31d91f343",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "be_pl_pt_official_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "online-auction.state.gov",
+      "batch": 9,
+      "launcher": "online_auction_state_gov_e1a83cb692.py",
+      "launcher_sha256": "ebe05803925ba84c6e329f0c86d610417121687f0791399d290d99d2389be32f",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_c_public_catalogue_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "autorola.pt",
+      "batch": 10,
+      "launcher": "autorola_pt_85f4febb9c.py",
+      "launcher_sha256": "97f796d0da5c9eaa4005f67411110bf13d71fa7cf2b4e19986782a841f18d75e",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "autorola.sk",
+      "batch": 10,
+      "launcher": "autorola_sk_408ca02125.py",
+      "launcher_sha256": "c2176c76284db8cd447b2e25cef9d77e0b647050769e890f0ab89366f4d9b448",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/en_PL",
+      "batch": 10,
+      "launcher": "bca_com_en_pl_811b6057e1.py",
+      "launcher_sha256": "35f4a679c4d7c71ffe178ce33563a57079b3385cb3dab8ea5d29558f8e822cdb",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/en_PT",
+      "batch": 10,
+      "launcher": "bca_com_en_pt_c5eec505c8.py",
+      "launcher_sha256": "679a8adfa6cd444dda689a127c9ceb3f0ef96121c5c39da24c2cd2507221eb43",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "carmarket.ayvens.com@ro",
+      "batch": 10,
+      "launcher": "carmarket_ayvens_com_ro_81913b44c1.py",
+      "launcher_sha256": "d298a963bc8b75dada5780f073b0194b7a71bae4e2cd16e96bcaf35dc471f75b",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "carmarket.ayvens.com@sk",
+      "batch": 10,
+      "launcher": "carmarket_ayvens_com_sk_79f12a608d.py",
+      "launcher_sha256": "ca15c80885c06a5d5f6e389398e86be87121adcb9cf08f020600372a7c73b56a",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "e-leiloes.pt",
+      "batch": 10,
+      "launcher": "e_leiloes_pt_1e4be3339a.py",
+      "launcher_sha256": "714e2df31496343f8d45ed0707b00f0bfe12753694d24231e512678e57cd4624",
+      "connector_status": "prototype",
+      "connector_kind": "source_specific",
+      "connector_path": "be_pl_pt_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "exleasingcar.pl",
+      "batch": 10,
+      "launcher": "exleasingcar_pl_c8f993e0f2.py",
+      "launcher_sha256": "80a81be6e1b983bba683443930294b95f59e4c16249064fbfc3666f7f68f82f1",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "exleasingcar.ro",
+      "batch": 10,
+      "launcher": "exleasingcar_ro_d00adf7ec9.py",
+      "launcher_sha256": "45a42396d375b045b97431b08191f3cd830ffb336941db26e9410e4d72b35ebf",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "manheim.pt",
+      "batch": 10,
+      "launcher": "manheim_pt_89d20457fb.py",
+      "launcher_sha256": "091072b1948d8f13a3b973c8a97166dd74eb76a9685dca40b847bc217b205590",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "manheim_pt_official_catalogue_probe.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "alcopa-auction.es",
+      "batch": 11,
+      "launcher": "alcopa_auction_es_6b361cdcb3.py",
+      "launcher_sha256": "6de3335104e72c45f08dee966db5b7b280ba26bb237eefe678b20685f22d1bbd",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "auktionstorget.kronofogden.se",
+      "batch": 11,
+      "launcher": "auktionstorget_kronofogden_se_8c5b7b8065.py",
+      "launcher_sha256": "4c93d80203ad25960d892701e9d90c8eb7a42458628d8d7de46685b1d6226e72",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "boe_kronofogden_watch_fetcher.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "bca.com/en_ES",
+      "batch": 11,
+      "launcher": "bca_com_en_es_b1e23125e6.py",
+      "launcher_sha256": "647472c20a7cc54de67b02651808f68d8d2ae36f961a6d577c36a4db063bdc9c",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "copart.es",
+      "batch": 11,
+      "launcher": "copart_es_feab761114.py",
+      "launcher_sha256": "ea850ae1b37a1165b987100a46ad354607d4e5232557548b2725966cc26da3a3",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "copart_schengen_official_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "edrazbe.si",
+      "batch": 11,
+      "launcher": "edrazbe_si_1a18de65c0.py",
+      "launcher_sha256": "29e77802782823f460585686a836ac741dc5335f28003468be0c7193cca69bc1",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "edrazbe_si_public_probe.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "escrapalia.com",
+      "batch": 11,
+      "launcher": "escrapalia_com_24deca69d6.py",
+      "launcher_sha256": "e182bf582511f44a64d07c296df675b0e7423f2af7a1253b2506b457c9c2f52b",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "kvdcars.com",
+      "batch": 11,
+      "launcher": "kvdcars_com_cda39c7d3d.py",
+      "launcher_sha256": "b3029057d0504e4e462c47eca3eb6f35fe8535bb7defd8567532f99191a5a147",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "northgatetrade.es",
+      "batch": 11,
+      "launcher": "northgatetrade_es_2fbb7b6f38.py",
+      "launcher_sha256": "6115abd98d36fd99b92495894453ae36958f20127df7c45fd686fba640e45e7f",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "sodnedrazbe.si",
+      "batch": 11,
+      "launcher": "sodnedrazbe_si_51be5ad226.py",
+      "launcher_sha256": "08cd64d5502ed39df7a3e07db54ae32d75b37793a07ea46fceb7c345e4e2e9d9",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "additional_schengen_official_watch.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "subastas.boe.es",
+      "batch": 11,
+      "launcher": "subastas_boe_es_adf8fc8760.py",
+      "launcher_sha256": "864b70f0b59d4c5955c8c4e5c06e62b26d22e610accc34449a32923f08443aee",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "boe_kronofogden_watch_fetcher.py",
+      "overall_status": "technical_complete_research_only"
+    },
+    {
+      "canonical_identity": "autoauction24.ch",
+      "batch": 12,
+      "launcher": "autoauction24_ch_2941b29ad0.py",
+      "launcher_sha256": "6c58baa4715c90252da0d24fad3bef865517bbe8b1dcf2a22ad7db1eac84156a",
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "group_b_public_catalogue_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "ayvens.com/en-ch",
+      "batch": 12,
+      "launcher": "ayvens_com_en_ch_462ee2c8db.py",
+      "launcher_sha256": "82d187480e8586959bb95eab5b4ee13680f8687fb1a430e5586f76bfdd1d2876",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bca.com/en/se",
+      "batch": 12,
+      "launcher": "bca_com_en_se_c790bbff9e.py",
+      "launcher_sha256": "3c4e83d7d5e7c40ec21b7b82e838356f496103eb2237271b9df8792d3a378d22",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "bilwebauctions.se",
+      "batch": 12,
+      "launcher": "bilwebauctions_se_805649529b.py",
+      "launcher_sha256": "7e0d4fd228d36f0cf92ce134d1f74796ea05ca41e206d8fd5733b74a89860aad",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "blinto.se",
+      "batch": 12,
+      "launcher": "blinto_se_ea709df297.py",
+      "launcher_sha256": "53711de6d4f0a16c50bf8582c9f206e7cffe72980f4a1a209534acf10b92e2a1",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "klaravik.se",
+      "batch": 12,
+      "launcher": "klaravik_se_c4513a1751.py",
+      "launcher_sha256": "98ff92ca2345c1bc9c4d8484ea775fb955f7ff683e44c8652da607f8aa8996c2",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_wide_official_watch.py; schengen_browser_watch.py",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "psauction.com",
+      "batch": 12,
+      "launcher": "psauction_com_4e6e1c5fb2.py",
+      "launcher_sha256": "cea2a1f6e371f8801b025bb2d4df20057ad29fd0a59699c6714b170d6a1aa389",
+      "connector_status": "not_implemented",
+      "connector_kind": "none",
+      "connector_path": "",
+      "overall_status": "blocked"
+    },
+    {
+      "canonical_identity": "restwertboerse.ch",
+      "batch": 12,
+      "launcher": "restwertboerse_ch_08df419832.py",
+      "launcher_sha256": "6a1ee38a814e98f42a6f25675f9f94114b58569104940ec89c492a9c13029dba",
+      "connector_status": "prototype",
+      "connector_kind": "generic_research",
+      "connector_path": "schengen_browser_watch.py",
+      "overall_status": "blocked"
+    }
+  ]
+}

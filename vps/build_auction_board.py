@@ -27,7 +27,8 @@ from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from auction_registry import (
     auction_source_by_key,
-    auction_source_for_url,
+    auction_source_publication_status,
+    auction_url_matches_source,
     source_has_explicit_auction_semantics,
     registry_digest_json,
 )
@@ -78,7 +79,10 @@ SCHENGEN_COUNTRIES = frozenset({
     "FR", "GR", "HR", "HU", "IS", "IT", "LI", "LT", "LU", "LV",
     "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
 })
-SOURCE_COUNTRY_OVERRIDES = {"justiz-auktion": frozenset({"DE", "AT"})}
+SOURCE_COUNTRY_OVERRIDES = {
+    "justiz-auktion": frozenset({"DE", "AT"}),
+    "retrade": frozenset({"DK", "FI", "NO", "SE"}),
+}
 # Founder directive (mgr-fb167017e21a4f598f763b1211af2888): the auction lane
 # shows ONLY model years 2023-2026 (cars eligible for import to Algeria in
 # 2026, i.e. not more than ~3 years old), and year 2023 rows additionally
@@ -227,9 +231,18 @@ def auction_rows(
         if reg is None:
             excluded("not_in_registry")
             continue
-        matched_reg = auction_source_for_url(url)
-        if matched_reg is None or matched_reg.key != reg.key:
+        if auction_source_publication_status(reg.key) not in {"accepted", "migration"}:
+            excluded("source_not_publishable")
+            continue
+        if not auction_url_matches_source(url, reg.key):
             excluded("domain_mismatch")
+            continue
+        country_code = str(country or "").strip().upper()
+        allowed_countries = SOURCE_COUNTRY_OVERRIDES.get(
+            reg.key, frozenset({reg.country.upper()})
+        )
+        if country_code not in SCHENGEN_COUNTRIES or country_code not in allowed_countries:
+            excluded("country_mismatch")
             continue
         if not source_has_explicit_auction_semantics(source, raw_json):
             excluded("no_explicit_auction_semantics")
@@ -296,7 +309,7 @@ def auction_rows(
             "url": url,
             "title": " ".join(str(title or "").split()),
             "model": str(model or "").strip(),
-            "country": str(country or "").strip().upper(),
+            "country": country_code,
             "year": int(year) if year else None,
             "mileage": int(mileage) if mileage else None,
             "fuel": str(fuel or "").strip(),
@@ -392,10 +405,15 @@ def _normalize_monitored_row(
     if not source or not row_id or not url or not title:
         return None, "missing_identity"
     registry = auction_source_by_key(source)
-    matched_registry = auction_source_for_url(url)
     if registry is None:
         return None, "not_in_registry"
-    if matched_registry is None or matched_registry.key != registry.key:
+    adapter_authorized = value.get("adapter_authorized") is True
+    if (
+        auction_source_publication_status(registry.key) not in {"accepted", "migration"}
+        and not adapter_authorized
+    ):
+        return None, "source_not_publishable"
+    if not auction_url_matches_source(url, registry.key):
         return None, "domain_mismatch"
     country = str(value.get("country") or registry.country).strip().upper()
     allowed_countries = SOURCE_COUNTRY_OVERRIDES.get(
@@ -416,7 +434,11 @@ def _normalize_monitored_row(
     price = _positive_number(value.get("price_eur"))
     if price is None and price_currency == "EUR":
         price = price_amount
-    if price_kind in {"current_bid", "starting_bid", "minimum_bid", "guide_price"} and price is None:
+    if (
+        price_kind in {"current_bid", "starting_bid", "minimum_bid", "guide_price"}
+        and price is None
+        and price_amount is None
+    ):
         return None, "priced_kind_without_price"
     if price_kind in {"hidden", "unknown"}:
         price = None
@@ -432,6 +454,10 @@ def _normalize_monitored_row(
         return None, "bad_end"
     if end is not None and end <= generated_at:
         return None, "already_ended"
+    raw_event = value.get("sale_event_utc") or value.get("scheduled_sale_at")
+    event = parse_canonical_end(raw_event) if raw_event not in (None, "") else None
+    if raw_event not in (None, "") and event is None:
+        return None, "bad_sale_event"
 
     last_seen = parse_canonical_end(value.get("last_seen_at") or value.get("observed_at_utc"))
     if last_seen is None:
@@ -473,10 +499,14 @@ def _normalize_monitored_row(
         "title": title,
         "model": " ".join(str(value.get("model") or "").split()),
         "country": country,
+        "asset_country": country,
+        "category": " ".join(str(value.get("category") or "unknown").split()).lower(),
+        "category_raw": " ".join(str(value.get("category_raw") or "").split()).lower(),
         "year": optional_int("year"),
         "mileage": optional_int("mileage") if value.get("mileage") not in (None, "") else optional_int("mileage_km"),
         "fuel": " ".join(str(value.get("fuel") or "").split()),
         "seller": " ".join(str(value.get("seller") or "").split()),
+        "location": " ".join(str(value.get("location") or "").split()),
         "price_eur": price,
         "price_kind": price_kind,
         "price_currency": price_currency,
@@ -485,9 +515,13 @@ def _normalize_monitored_row(
         ),
         "price_label": " ".join(str(value.get("price_label") or "").split()),
         "bid_visibility": " ".join(str(value.get("bid_visibility") or "").split()),
+        "bid_count": optional_int("bid_count"),
+        "minimum_next_bid": _positive_number(value.get("minimum_next_bid")),
+        "reserve_met": value.get("reserve_met") if isinstance(value.get("reserve_met"), bool) else None,
         "registration_date": " ".join(str(value.get("registration_date") or "").split()),
         "canonical_end_utc": end.isoformat() if end else None,
         "sale_end_utc": end.isoformat() if end else None,
+        "sale_event_utc": event.isoformat() if event else None,
         "ends_soon": bool(end and end - generated_at <= dt.timedelta(hours=END_SOON_HOURS)),
         "first_seen_at": value.get("first_seen_at"),
         "last_seen_at": last_seen.isoformat(),
@@ -496,6 +530,17 @@ def _normalize_monitored_row(
         "access_sale_note": " ".join(str(
             value.get("access_sale_note") or _access_sale_note(registry.country)
         ).split()),
+        "raw_evidence_ref": " ".join(str(value.get("raw_evidence_ref") or "").split()),
+        "publication_attribution": " ".join(str(
+            value.get("publication_attribution") or ""
+        ).split()),
+        "publication_license": " ".join(str(
+            value.get("publication_license") or ""
+        ).split()),
+        "publication_license_url": " ".join(str(
+            value.get("publication_license_url") or ""
+        ).split()),
+        "adapter_authorized": adapter_authorized,
         "evidence": registry.evidence,
     }, ""
 
@@ -562,8 +607,6 @@ def monitored_rows(
             seen_urls.add(row["url"])
             output.append(row)
     output.sort(key=lambda row: (
-        0 if row["eligibility_status"] == "eligible" else
-        1 if row["eligibility_status"] == "review_required" else 2,
         parse_canonical_end(row.get("canonical_end_utc")) or dt.datetime.max.replace(tzinfo=UTC),
         row["registry_priority"],
         row["id"],
@@ -616,6 +659,8 @@ def connector_report_summary(input_paths: Sequence[Path]) -> Dict[str, Dict[str,
     count_keys = (
         "current_or_future_rows", "vehicle_rows", "current_or_future",
         "accepted", "open_drz_vehicle_rows", "car_and_van_rows",
+        "normalized_active", "catalogue_total", "discovered_unique",
+        "current_or_future_vehicle_rows",
     )
     for path in input_paths:
         try:
@@ -642,7 +687,7 @@ def connector_report_summary(input_paths: Sequence[Path]) -> Dict[str, Dict[str,
             errors = raw.get("errors")
             if not error and isinstance(errors, list) and errors:
                 error = "; ".join(str(value) for value in errors[:2])
-            status = str(raw.get("status") or "").strip().lower()
+            status = str(raw.get("status") or raw.get("connector_status") or "").strip().lower()
             if error:
                 status = "error"
             elif status not in {"ok", "partial", "blocked", "error"}:
@@ -658,6 +703,7 @@ def connector_report_summary(input_paths: Sequence[Path]) -> Dict[str, Dict[str,
                 "connector_generated_at_utc": generated,
                 "connector_declared_rows": declared_rows,
                 "connector_error": error[:300] or None,
+                "connector_capture_id": str(raw.get("raw_capture_id") or "")[:100] or None,
             }
     return output
 

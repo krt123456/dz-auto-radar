@@ -28,11 +28,16 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import listing_availability as lifecycle
+from listing_condition import (
+    DAMAGE_PARTS_REPAIR_PATTERN,
+    condition_exclusion_reason,
+)
 from auction_registry import (
     auction_source_by_key,
-    auction_source_for_url,
+    auction_url_matches_source,
     registry_digest_json,
 )
+from auction_source_completion import derive_overall_status, inventory_groups
 from source_identity import autoscout24_non_detail_url
 
 
@@ -59,9 +64,15 @@ DEFAULT_SELECTION_AUDIT = Path(
 DEFAULT_OFFICIAL_AUCTION_WATCH = (
     DEFAULT_ROOT / "mobile_site_local" / "official_auction_watch.json"
 )
+DEFAULT_AUCTION_SOURCE_INVENTORY = Path(
+    "/opt/sonardeals-radar/auction_source_inventory.json"
+)
+DEFAULT_SOURCE_COMPLETION_LEDGER = Path(
+    "/opt/sonardeals-radar/source_completion_ledger.json"
+)
 OFFICIAL_AUCTION_WATCH_SCHEMA_VERSION = 1
 OFFICIAL_AUCTION_WATCH_MAX_AGE = timedelta(hours=8)
-OFFICIAL_AUCTION_WATCH_MAX_ROWS = 20_000
+OFFICIAL_AUCTION_WATCH_MAX_ROWS = 50_000
 OFFICIAL_AUCTION_PRICE_KINDS = frozenset({
     "current_bid", "starting_bid", "minimum_bid", "guide_price",
     "sealed_bid", "hidden", "unknown",
@@ -76,6 +87,10 @@ SCHENGEN_COUNTRIES = frozenset(
         "MT", "NL", "NO", "PL", "PT", "RO", "SE", "SI", "SK",
     }
 )
+OFFICIAL_AUCTION_SOURCE_COUNTRY_OVERRIDES = {
+    "justiz-auktion": frozenset({"DE", "AT"}),
+    "retrade": frozenset({"DK", "FI", "NO", "SE"}),
+}
 COMPACT_OFFER_FIELDS = frozenset(
     {
         "id", "m", "t", "p", "q1", "mp", "sv", "sp", "dp", "pn",
@@ -124,13 +139,7 @@ SEMANTIC_PRICE_PATTERNS = (
     ("finance-only", re.compile(r"\b(?:financement|finanzierung|kredyt|flex\s+lease|loa|lld)\b")),
     ("takeover-fee", re.compile(r"\b(?:odstepne|takeover)\b")),
 )
-RISK_PATTERN = re.compile(
-    r"\b(?:salvage|accident(?:ed)?|damaged|unfall|motorschaden|bastler|epave|"
-    # Text is accent-folded before matching. Keep the French participles
-    # explicit so endommagement/endommager do not become broad false positives.
-    r"endommag(?:e|ee|es|ees)|"
-    r"sinistr\w*|uszkodz\w*|powypadk\w*|pour\s+pieces|parts\s+only|non\s+runner)\b"
-)
+RISK_PATTERN = DAMAGE_PARTS_REPAIR_PATTERN
 
 
 def normalized_semantic_text(value: Any) -> str:
@@ -272,7 +281,7 @@ def eligible_offer(offer: dict[str, Any]) -> bool:
     title = f"{offer.get('t', '')} {offer.get('m', '')}".casefold()
     if semantic_price_reason(title) is not None:
         return False
-    if RISK_PATTERN.search(normalized_semantic_text(title)) is not None:
+    if condition_exclusion_reason(title) is not None:
         return False
     price = integer(offer.get("p"))
     lower_quartile = integer(offer.get("q1"))
@@ -609,12 +618,11 @@ def validate_official_auction_watch(
         ):
             raise RuntimeError(f"official auction watch row {index} has invalid identity")
         registry = auction_source_by_key(source)
-        matched_registry = auction_source_for_url(url)
-        if registry is None or matched_registry is None or matched_registry.key != registry.key:
+        if registry is None or not auction_url_matches_source(url, registry.key):
             raise RuntimeError(f"official auction watch row {index} is not registry/domain backed")
         country = str(row.get("country") or "").strip().upper()
-        allowed_countries = (
-            {"DE", "AT"} if source == "justiz-auktion" else {registry.country.upper()}
+        allowed_countries = OFFICIAL_AUCTION_SOURCE_COUNTRY_OVERRIDES.get(
+            source, frozenset({registry.country.upper()})
         )
         if country not in SCHENGEN_COUNTRIES or country not in allowed_countries:
             raise RuntimeError(f"official auction watch row {index} has invalid source country")
@@ -630,9 +638,22 @@ def validate_official_auction_watch(
             or not math.isfinite(float(price)) or float(price) <= 0
         ):
             raise RuntimeError(f"official auction watch row {index} has invalid EUR price")
-        if price_kind in {"current_bid", "starting_bid", "minimum_bid", "guide_price"} and price is None:
+        native_amount = row.get("price_amount")
+        native_currency = str(row.get("price_currency") or "").strip().upper()
+        price_label = str(row.get("price_label") or "").strip()
+        if price is None and native_amount is not None and (
+            isinstance(native_amount, bool)
+            or not isinstance(native_amount, (int, float))
+            or not math.isfinite(float(native_amount))
+            or float(native_amount) <= 0
+            or re.fullmatch(r"[A-Z]{3}", native_currency) is None
+            or not price_label
+        ):
+            raise RuntimeError(f"official auction watch row {index} has invalid native price")
+        has_labelled_price = price is not None or native_amount is not None
+        if price_kind in {"current_bid", "starting_bid", "minimum_bid", "guide_price"} and not has_labelled_price:
             raise RuntimeError(f"official auction watch row {index} is missing its labelled price")
-        if price_kind in {"hidden", "unknown"} and price is not None:
+        if price_kind in {"hidden", "unknown"} and has_labelled_price:
             raise RuntimeError(f"official auction watch row {index} exposes an ambiguous price")
         status = str(row.get("eligibility_status") or "").strip()
         reason = str(row.get("eligibility_reason") or "").strip()
@@ -648,6 +669,9 @@ def validate_official_auction_watch(
         end = row.get("canonical_end_utc")
         if end is not None and not valid_timestamp(end):
             raise RuntimeError(f"official auction watch row {index} has invalid sale/end time")
+        event = row.get("sale_event_utc")
+        if event is not None and not valid_timestamp(event):
+            raise RuntimeError(f"official auction watch row {index} has invalid sale event time")
         reference = row.get("ouedkniss_reference")
         if reference is not None:
             if not isinstance(reference, dict) or (
@@ -690,6 +714,84 @@ def load_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError(f"expected JSON object: {path}")
     return value
+
+
+def validated_source_evidence_bytes(
+    inventory_path: Path, completion_path: Path
+) -> tuple[bytes, bytes]:
+    """Bind the public 118-source inventory to its fail-closed completion ledger."""
+    if not inventory_path.is_file() or not completion_path.is_file():
+        raise RuntimeError("authoritative auction source evidence is unavailable")
+    inventory = load_json(inventory_path)
+    completion = load_json(completion_path)
+    try:
+        groups = inventory_groups(inventory)
+    except ValueError as exc:
+        raise RuntimeError(f"invalid auction source inventory: {exc}") from exc
+    contract = completion.get("contract")
+    summary = completion.get("summary")
+    sources = completion.get("sources")
+    if (
+        completion.get("schema_version") != 1
+        or not isinstance(contract, dict)
+        or contract.get("document_entries") != 129
+        or contract.get("canonical_identities") != 118
+        or contract.get("blocked_is_not_complete") is not True
+        or contract.get("audited_batch_count") != 12
+        or contract.get("all_batches_required_for_publication") is not True
+        or not isinstance(summary, dict)
+        or summary.get("document_entries") != 129
+        or summary.get("canonical_identities") != 118
+        or summary.get("fragments_loaded") != 12
+        or summary.get("batches_loaded") != list(range(1, 13))
+        or not isinstance(sources, list)
+        or len(sources) != 118
+    ):
+        raise RuntimeError("invalid auction source completion contract")
+    overall_states = {
+        "verified_complete", "technical_complete_research_only", "blocked", "incomplete"
+    }
+    state_counts = {state: 0 for state in overall_states}
+    seen: set[str] = set()
+    for source in sources:
+        if not isinstance(source, dict):
+            raise RuntimeError("auction source completion row is not an object")
+        identity = str(source.get("canonical_identity") or "").strip()
+        group = groups.get(identity)
+        status = source.get("overall_status")
+        if (
+            group is None
+            or identity in seen
+            or source.get("batch") != group["batch"]
+            or source.get("document_entries") != group["document_entries"]
+            or set(source.get("registry_keys") or []) != set(group["registry_keys"])
+            or status not in overall_states
+        ):
+            raise RuntimeError(f"auction source completion identity mismatch: {identity!r}")
+        try:
+            derived = derive_overall_status(source)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"invalid completion evidence for {identity}: {exc}") from exc
+        if derived != status:
+            raise RuntimeError(
+                f"false completion state for {identity}: {status!r} != {derived!r}"
+            )
+        seen.add(identity)
+        state_counts[status] += 1
+    if seen != set(groups):
+        raise RuntimeError("auction completion ledger silently omits an inventory identity")
+    for state, count in state_counts.items():
+        if summary.get(state) != count:
+            raise RuntimeError(f"auction completion summary mismatch: {state}")
+    if summary.get("production_publishable") != state_counts["verified_complete"]:
+        raise RuntimeError("auction completion publishable count is inconsistent")
+    inventory_bytes = (
+        json.dumps(inventory, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    completion_bytes = (
+        json.dumps(completion, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    return inventory_bytes, completion_bytes
 
 
 def load_dashboard_pin(path: Path) -> str:
@@ -910,6 +1012,15 @@ def prepare(args: argparse.Namespace) -> None:
     payload, manifest = build_payload(args)
     if not args.index.is_file():
         raise RuntimeError(f"dashboard index is unavailable: {args.index}")
+    inventory_bytes, completion_bytes = validated_source_evidence_bytes(
+        args.auction_source_inventory, args.source_completion_ledger
+    )
+    manifest["auction_source_inventory_sha256"] = hashlib.sha256(
+        inventory_bytes
+    ).hexdigest()
+    manifest["source_completion_ledger_sha256"] = hashlib.sha256(
+        completion_bytes
+    ).hexdigest()
     args.site.mkdir(parents=True, exist_ok=True)
     watch_bytes: bytes | None = None
     if args.official_auction_watch.is_file():
@@ -943,6 +1054,8 @@ def prepare(args: argparse.Namespace) -> None:
     )
     atomic_write(args.site / "index.html", args.index.read_bytes(), 0o644)
     atomic_write(args.site / "data.enc", encrypt_payload(pin, payload), 0o600)
+    atomic_write(args.site / "auction_source_inventory.json", inventory_bytes, 0o644)
+    atomic_write(args.site / "source_completion_ledger.json", completion_bytes, 0o644)
     if watch_bytes is not None:
         atomic_write(args.site / "official_auction_watch.json", watch_bytes, 0o644)
     else:
@@ -1027,6 +1140,19 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
             raise RuntimeError("official auction watch count does not match publication manifest")
         if watch.get("registry_digest") != manifest.get("auction_lane_registry_digest"):
             raise RuntimeError("official auction watch registry does not match publication manifest")
+    for filename, manifest_key in (
+        ("auction_source_inventory.json", "auction_source_inventory_sha256"),
+        ("source_completion_ledger.json", "source_completion_ledger_sha256"),
+    ):
+        expected_sha256 = manifest.get(manifest_key)
+        public_path = args.site / filename
+        if (
+            not isinstance(expected_sha256, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", expected_sha256)
+            or not public_path.is_file()
+            or sha256_file(public_path) != expected_sha256
+        ):
+            raise RuntimeError(f"public source evidence does not match manifest: {filename}")
 
 
 def publish(args: argparse.Namespace) -> None:
@@ -1035,7 +1161,10 @@ def publish(args: argparse.Namespace) -> None:
         raise RuntimeError(f"publication directory is not a git checkout: {args.site}")
     (args.site / "board.json").unlink(missing_ok=True)
     run_git(args.site, "rm", "--cached", "--ignore-unmatch", "board.json", check=False)
-    publication_paths = [".gitignore", "index.html", "data.enc", "display_currency.json"]
+    publication_paths = [
+        ".gitignore", "index.html", "data.enc", "display_currency.json",
+        "auction_source_inventory.json", "source_completion_ledger.json",
+    ]
     watch_path = args.site / "official_auction_watch.json"
     watch_tracked = run_git(
         args.site, "ls-files", "--error-unmatch", "official_auction_watch.json", check=False
@@ -1050,7 +1179,8 @@ def publish(args: argparse.Namespace) -> None:
     }
     allowed = {
         ".gitignore", "index.html", "data.enc", "display_currency.json",
-        "official_auction_watch.json", "board.json",
+        "official_auction_watch.json", "auction_source_inventory.json",
+        "source_completion_ledger.json", "board.json",
     }
     unexpected = staged - allowed
     if unexpected:
@@ -1074,6 +1204,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fx-config", type=Path, default=DEFAULT_FX)
     parser.add_argument("--audit-manifest", type=Path, default=DEFAULT_AUDIT)
     parser.add_argument("--selection-audit", type=Path, default=DEFAULT_SELECTION_AUDIT)
+    parser.add_argument(
+        "--auction-source-inventory", type=Path,
+        default=DEFAULT_AUCTION_SOURCE_INVENTORY,
+    )
+    parser.add_argument(
+        "--source-completion-ledger", type=Path,
+        default=DEFAULT_SOURCE_COMPLETION_LEDGER,
+    )
     parser.add_argument(
         "--official-auction-watch", type=Path,
         default=DEFAULT_OFFICIAL_AUCTION_WATCH,

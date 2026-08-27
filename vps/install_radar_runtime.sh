@@ -9,6 +9,7 @@ SITE="/srv/sonardeals-radar/site"
 
 install -d -m 0755 /opt/sonardeals-radar "$CONFIG" "$STATE" /srv/sonardeals-radar
 install -d -m 0700 "$STATE/jobs" "$STATE/logs" "$STATE/runtime"
+install -d -m 0700 "$CONFIG/auction-source-feeds" "$STATE/authorized-feeds"
 
 if [[ ! -s "$CONFIG/pin" ]]; then
   if [[ ! -s "$ROOT/.mobile_site_secret" ]]; then
@@ -34,7 +35,41 @@ fi
 install -m 0755 "$SOURCE/radar_refresh.sh" /opt/sonardeals-radar/radar_refresh.sh
 install -m 0755 "$SOURCE/auction_refresh.sh" /opt/sonardeals-radar/auction_refresh.sh
 install -m 0644 "$SOURCE/auction_registry.py" /opt/sonardeals-radar/auction_registry.py
+install -m 0644 "$SOURCE/auction_source_completion.py" /opt/sonardeals-radar/auction_source_completion.py
+install -m 0644 "$SOURCE/listing_condition.py" /opt/sonardeals-radar/listing_condition.py
 install -m 0755 "$SOURCE/build_auction_board.py" /opt/sonardeals-radar/build_auction_board.py
+install -m 0755 "$SOURCE/run_source_adapter_watch.py" /opt/sonardeals-radar/run_source_adapter_watch.py
+install -d -m 0755 /opt/sonardeals-radar/source_launchers_118
+shopt -s nullglob
+for launcher in "$SOURCE"/source_launchers_118/*.py; do
+  install -m 0644 "$launcher" "/opt/sonardeals-radar/source_launchers_118/$(basename "$launcher")"
+done
+for metadata in "$SOURCE"/source_launchers_118/*.json; do
+  install -m 0644 "$metadata" "/opt/sonardeals-radar/source_launchers_118/$(basename "$metadata")"
+done
+shopt -u nullglob
+
+for source_data in \
+  "$SOURCE/../auction_source_inventory.json" "$SITE/auction_source_inventory.json"; do
+  if [[ -f "$source_data" ]]; then
+    install -m 0644 "$source_data" /opt/sonardeals-radar/auction_source_inventory.json
+    break
+  fi
+done
+for source_data in \
+  "$SOURCE/../source_completion_ledger.json" "$SITE/source_completion_ledger.json"; do
+  if [[ -f "$source_data" ]]; then
+    install -m 0644 "$source_data" /opt/sonardeals-radar/source_completion_ledger.json
+    break
+  fi
+done
+[[ -s /opt/sonardeals-radar/auction_source_inventory.json ]] || {
+  echo "auction source inventory is unavailable" >&2; exit 1;
+}
+[[ -s /opt/sonardeals-radar/source_completion_ledger.json ]] || {
+  echo "source completion ledger is unavailable" >&2; exit 1;
+}
+
 install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" /opt/sonardeals-radar/zoll_auktion_fetcher.py
 install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" "$ROOT/zoll_auktion_fetcher.py"
 install -m 0755 "$SOURCE/justiz_auktion_fetcher.py" /opt/sonardeals-radar/justiz_auktion_fetcher.py

@@ -585,6 +585,7 @@ function validateMonitoredAuctionRow(row,sourceRegistry=AUCTION_RUNTIME_SOURCE_R
   const currency=String(row.price_currency||"EUR").trim().toUpperCase();
   const amount=typeof row.price_amount==="number"?row.price_amount:null;
   const price=typeof row.price_eur==="number"?row.price_eur:(currency==="EUR"?amount:null);
+  const adapterAuthorized=row.adapter_authorized===true;
   const end=row.canonical_end_utc??row.sale_end_utc??row.sale_end_at??row.sale_end??null;
   const event=row.sale_event_utc??null;
   const lastSeen=row.last_seen_at||row.observed_at_utc;
@@ -593,7 +594,7 @@ function validateMonitoredAuctionRow(row,sourceRegistry=AUCTION_RUNTIME_SOURCE_R
   const ref=row.ouedkniss_reference;
   if(typeof row.id!=="string"||!row.id.trim()||typeof row.url!=="string"||safeUrl(row.url)==="#"||
      typeof row.title!=="string"||!row.title.trim()||!sourceDefinition||
-     !["accepted","migration"].includes(sourceDefinition.publicationStatus)||
+     (!["accepted","migration"].includes(sourceDefinition.publicationStatus)&&!adapterAuthorized)||
      !officialAuctionUrl(source,row.url,sourceRegistry)||!SCHENGEN_AUCTION_COUNTRIES.has(country)||
      String(row.registry_key||"").trim()!==source||Number(row.registry_priority)!==sourceDefinition.priority||
      !WATCH_PRICE_KINDS.has(rawPriceKind)||!WATCH_ELIGIBILITY.has(rawEligibility)||
@@ -613,7 +614,7 @@ function validateMonitoredAuctionRow(row,sourceRegistry=AUCTION_RUNTIME_SOURCE_R
      )))throw contractFailure();
   const mileage=row.mileage??row.mileage_km??null;
   return {...row,source,source_key:source,price_eur:price,price_amount:amount,price_currency:currency,price_kind:priceKind,
-    eligibility_status:eligibility,mileage,canonical_end_utc:end,sale_event_utc:event,last_seen_at:lastSeen};
+    eligibility_status:eligibility,mileage,canonical_end_utc:end,sale_event_utc:event,last_seen_at:lastSeen,adapter_authorized:adapterAuthorized};
 }
 function validateOfficialAuctionWatch(value,lane){
   if(value===undefined||value===null)return null;

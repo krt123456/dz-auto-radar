@@ -74,6 +74,7 @@ class OfficialAuctionWatchPublicationTests(unittest.TestCase):
     def test_priced_semantic_without_amount_is_rejected(self) -> None:
         watch = self.watch()
         watch["rows"][0]["price_eur"] = None
+        watch["rows"][0]["price_amount"] = None
         with self.assertRaisesRegex(RuntimeError, "missing its labelled price"):
             publisher.validate_official_auction_watch(watch, now=self.now)
 

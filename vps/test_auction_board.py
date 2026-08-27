@@ -56,11 +56,11 @@ def make_db(rows):
 
 
 def frow(source, lid, url, end=None, price=5000, raw=None, last_seen="2026-08-17T02:00:00Z", year=2024,
-         fuel="petrol"):
+         fuel="petrol", country="DE"):
     rj = {"auction_end_at": end, "sale_term_code": "auction-current-bid"} if end is not None else {}
     if raw:
         rj.update(raw)
-    return (source, lid, url, f"{source} {lid}", "volkswagen golf", "DE",
+    return (source, lid, url, f"{source} {lid}", "volkswagen golf", country,
             price, year, 120000, fuel, "public", last_seen, json.dumps(rj))
 
 
@@ -173,7 +173,7 @@ f_rows = [
     frow("zoll-auktion", "y2023d", "https://www.zoll-auktion.de/y2023d", end=end_future,
          raw={"first_registration_date": "15.11.2023"}),
     frow("onlineveilingmeester", "y2023iso", "https://onlineveilingmeester.nl/y2023iso",
-         end=end_future, raw={"first_registration_date": "2023-11-16"}),
+         end=end_future, raw={"first_registration_date": "2023-11-16"}, country="NL"),
     frow("zoll-auktion", "y2024", "https://www.zoll-auktion.de/y2024", end=end_future),
     frow("zoll-auktion", "y2025", "https://www.zoll-auktion.de/y2025", end=end_future),
     frow("zoll-auktion", "y2026", "https://www.zoll-auktion.de/y2026", end=end_future),
