@@ -95,6 +95,12 @@ header{padding:22px 0 12px}
   background:linear-gradient(135deg,rgba(34,211,165,.22),rgba(56,189,248,.16));
   box-shadow:0 0 0 1px rgba(34,211,165,.12)}
 .mode-tab[hidden]{display:none}
+.auction-scope-controls{display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 11px}
+.auction-scope-controls button{border:1px solid var(--line);border-radius:999px;padding:8px 12px;cursor:pointer;
+  background:var(--card2);color:var(--mut);font-weight:700;font-size:.82rem}
+.auction-scope-controls button.active{border-color:rgba(34,211,165,.65);color:var(--txt);
+  background:rgba(34,211,165,.13)}
+.auction-scope-controls[hidden]{display:none}
 .auction-distribution{margin:0 0 10px;padding:10px 12px;border:1px solid rgba(56,189,248,.25);
   border-radius:12px;background:rgba(56,189,248,.06);color:var(--mut);font-size:.78rem;line-height:1.55}
 .auction-distribution[hidden]{display:none}
@@ -231,6 +237,10 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     <div class="mode-tabs" role="tablist" aria-label="اختيار قسم العروض">
       <button class="mode-tab active" id="regularModeBtn" type="button" role="tab" aria-selected="true">🚘 إعلانات السيارات الأوروبية</button>
       <button class="mode-tab" id="auctionModeBtn" type="button" role="tab" aria-selected="false" hidden>🏛️ المزادات الرسمية <span id="auctionTabCount"></span></button>
+    </div>
+    <div class="auction-scope-controls" id="auctionScopeControls" role="group" aria-label="نطاق المزادات الرسمية" hidden>
+      <button id="eligibleAuctionsBtn" type="button" aria-pressed="false">🛡️ المزادات المؤهلة فقط</button>
+      <button id="allAuctionsBtn" type="button" aria-pressed="true" class="active">🏛️ كل المزادات الرسمية</button>
     </div>
     <div class="auction-distribution" id="auctionSourceCounts" role="status" aria-live="polite" hidden></div>
     <div class="frow">
@@ -554,10 +564,11 @@ function validateAuctionLane(payload){
        !Number.isInteger(ref.average_dzd)||ref.average_dzd<=0||
        !Number.isInteger(ref.sample_count)||ref.sample_count<2||
        typeof ref.observed_at_utc!=="string"||!Number.isFinite(timestampMs(ref.observed_at_utc))||
-       ref.source!=="Ouedkniss")){
+      ref.source!=="Ouedkniss")){
       throw contractFailure();
     }
   }
+  AUCTION_RUNTIME_SOURCE_REGISTRY=sourceRegistry;
   return lane.rows;
 }
 const WATCH_PRICE_KINDS=new Set(["current_bid","starting_bid","minimum_bid","guide_price","sealed_bid","hidden","unknown","minimum_offer","base_price"]);
@@ -651,7 +662,7 @@ const NAV_KEY="dzr-navigation-v2";
 const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fy2","fp","fcat","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen","fauction","fav"];
 const HISTORY_LIMIT=50000;
-let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_WATCH_STATE="missing";
+let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_WATCH_STATE="missing",AUCTION_SCOPE="all";
 let AUCTION_WATCH_ERROR="",AUCTION_BOUND_REGISTRY_DIGEST="";
 let AUCTION_COUNTDOWN_TIMER=null;
 let AUCTION_EU_REFERENCE_INDEX=new Map();
@@ -976,7 +987,7 @@ function restoreNavigationState(state){
   return true;
 }
 
-const activeAuctionRows=()=>AUCTION_MONITORED_LANE||AUCTION_LANE||[];
+const activeAuctionRows=()=>AUCTION_SCOPE==="eligible"?(AUCTION_LANE||[]):(AUCTION_MONITORED_LANE||AUCTION_LANE||[]);
 const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة"};
 const AUCTION_ROAD_VEHICLE_CATEGORIES=new Set(["car","van","truck","vehicle","commercial_vehicle","unknown"]);
 const auctionCategory=row=>{
@@ -992,12 +1003,8 @@ const auctionPriceText=row=>{
   return Number.isFinite(amount)&&amount>0&&currency?`${nf.format(amount)} ${esc(currency)}`:"السعر غير معلن";
 };
 const auctionFuelGroup=value=>{
-  const text=normalizeAuctionVehicleText(value);
-  if(text.includes("hybrid")||text.includes("hibrid"))return"hybrid";
-  if(/\b(?:petrol|gasoline|benzin|benzina|benzinas|essence)\b/.test(text))return"petrol";
-  if(/\b(?:diesel|gazole|dyzel|nafta)\b/.test(text))return"diesel";
-  if(/\b(?:electric|electrique|elektro|bev)\b/.test(text))return"electric";
-  return"unknown";
+  const normalized=normalizeAuctionFuel(value);
+  return ["petrol","hybrid","diesel","electric"].includes(normalized)?normalized:"unknown";
 };
 const lexicalCompare=(left,right)=>String(left||"")<String(right||"")?-1:String(left||"")>String(right||"")?1:0;
 
@@ -1014,15 +1021,15 @@ const AUCTION_MAKE_ALIASES=new Map([
 ]);
 const AUCTION_MODEL_NOISE=new Set([
   "auto","automobile","car","cars","vehicle","vehicule","voiture","samochod","osobowy",
-  "occasion","used","gebraucht","benzina","benzin","essence","petrol","hybrid","diesel",
+  "occasion","used","gebraucht","benzina","benzin","benzine","benzyna","essence","petrol","hybrid","diesel",
   "automatic","automatique","automat","manual","manuel","mhev","phev","hev","ev"
 ]);
 const normalizeAuctionVehicleText=value=>String(value||"").normalize("NFKD")
   .replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
 const normalizeAuctionFuel=value=>{
   const text=normalizeAuctionVehicleText(value);
-  if(/(?:^| )(?:hybrid|e hybrid|mhev|phev|hev)(?: |$)/.test(text))return "hybrid";
-  if(/(?:^| )(?:petrol|gasoline|benzin|benzine|essence|natural)(?: |$)/.test(text))return "petrol";
+  if(/(?:^| )(?:hybrid|hibrid|mhev|phev|hev)(?: |$)/.test(text))return "hybrid";
+  if(/(?:^| )(?:petrol|gasoline|benzin(?:a|e|as|y)?|essence)(?: |$)/.test(text))return "petrol";
   if(/(?:^| )(?:electric|elektrisch|electrique|elektro|bev)(?: |$)/.test(text))return "electric";
   if(/(?:^| )(?:diesel|nafta|gazole)(?: |$)/.test(text))return "diesel";
   return text;
@@ -1298,12 +1305,15 @@ function populateFilterOptions(auctionMode){
   const countries=[...new Set(rows.map(countryOf).filter(Boolean))].sort();
   setOptions("fc","كل الدول",countries,c=>`${FLAGS[c]||"🌍"} ${esc(CN[c]||c)}`);
   const observedSources=[...new Set(rows.map(sourceOf).filter(Boolean))];
-  const sources=observedSources.sort((a,b)=>String(a).localeCompare(String(b)));
+  const registeredSources=auctionMode?[...AUCTION_RUNTIME_SOURCE_REGISTRY.keys()]:[];
+  const sources=[...new Set([...registeredSources,...observedSources])].sort((a,b)=>String(a).localeCompare(String(b)));
   setOptions("fsrc","كل المصادر",sources,s=>esc(auctionMode?auctionSourceLabel(s):s));
   if(auctionMode){
-    const fuels=["petrol_or_hybrid","petrol","hybrid","diesel","electric","unknown"];
-    const labels={petrol_or_hybrid:"بنزين أو هجين",petrol:"بنزين",hybrid:"هجين",diesel:"ديزل",electric:"كهربائي",unknown:"غير معروف"};
-    setOptions("ff","كل الوقود",fuels,f=>labels[f]);
+    const fuels=["petrol_or_hybrid","petrol","hybrid"];
+    const labels={petrol_or_hybrid:"بنزين أو هجين",petrol:"بنزين فقط",hybrid:"هجين فقط"};
+    const select=$("ff"),previous=select.value;
+    select.innerHTML=fuels.map(f=>`<option value="${f}">${labels[f]}</option>`).join("");
+    select.value=fuels.includes(previous)?previous:"petrol_or_hybrid";
   }else{
     const fuels=[...new Set(rows.map(fuelOf).filter(Boolean))].sort();
     setOptions("ff","كل الوقود",fuels,f=>esc(FUEL_AR(f)));
@@ -1476,6 +1486,7 @@ function boot(payload,monitoredRows=null){
   const validated=validatePayload(payload);
   const offers=validated.offers;
   AUCTION_LANE=validated.lane;
+  AUCTION_SCOPE="all";
   if(AUCTION_LANE&&monitoredRows===null){
     try{
       monitoredRows=embeddedOfficialAuctionWatch(payload);
@@ -1545,12 +1556,25 @@ function boot(payload,monitoredRows=null){
   ["flive","fnew","funseen","fav","fDays"].forEach(id=>{if($(id))$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();});});
   const auctionWrap=$("auctionToggleWrap");
   const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
+  const auctionScopeControls=$("auctionScopeControls");
+  const eligibleAuctionsBtn=$("eligibleAuctionsBtn"),allAuctionsBtn=$("allAuctionsBtn");
   const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fy2","fp","fcat"].forEach(id=>$(id).value="");
   const paintModeTabs=auctionMode=>{
     regularModeBtn.classList.toggle("active",!auctionMode);
     auctionModeBtn.classList.toggle("active",auctionMode);
     regularModeBtn.setAttribute("aria-selected",String(!auctionMode));
     auctionModeBtn.setAttribute("aria-selected",String(auctionMode));
+  };
+  const paintAuctionScope=()=>{
+    const all=AUCTION_SCOPE!=="eligible";
+    if(auctionScopeControls)auctionScopeControls.hidden=!($("fauction")&&$("fauction").checked&&AUCTION_LANE);
+    if(eligibleAuctionsBtn){eligibleAuctionsBtn.classList.toggle("active",!all);eligibleAuctionsBtn.setAttribute("aria-pressed",String(!all));}
+    if(allAuctionsBtn){allAuctionsBtn.classList.toggle("active",all);allAuctionsBtn.setAttribute("aria-pressed",String(all));}
+  };
+  const setAuctionScope=scope=>{
+    AUCTION_SCOPE=scope==="eligible"?"eligible":"all";
+    paintAuctionScope();
+    if($("fauction")&&$("fauction").checked&&AUCTION_LANE){populateFilterOptions(true);page=1;apply();saveNavigationState();}
   };
   if(AUCTION_LANE){
     auctionWrap.hidden=false;
@@ -1582,13 +1606,18 @@ function boot(payload,monitoredRows=null){
         if($("fDays"))$("fDays").value="";
         if($("fcat"))$("fcat").value="";
       }
+      paintAuctionScope();
       page=1;apply();saveNavigationState();
     });
     regularModeBtn.addEventListener("click",()=>{$("fauction").checked=false;$("fauction").dispatchEvent(new Event("change"));});
     auctionModeBtn.addEventListener("click",()=>{$("fauction").checked=true;$("fauction").dispatchEvent(new Event("change"));});
+    eligibleAuctionsBtn.addEventListener("click",()=>setAuctionScope("eligible"));
+    allAuctionsBtn.addEventListener("click",()=>setAuctionScope("all"));
+    paintAuctionScope();
   }else{
     auctionWrap.hidden=true;
     auctionModeBtn.hidden=true;
+    if(auctionScopeControls)auctionScopeControls.hidden=true;
     paintModeTabs(false);
   }
   restoreNavigationState(navigationState);
@@ -1598,7 +1627,7 @@ function boot(payload,monitoredRows=null){
   }else{
     $("fs").value=normalizeSortMode($("fs").value);
   }
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp","fcat"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp","fcat"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";AUCTION_SCOPE="all";paintAuctionScope();if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
@@ -1640,7 +1669,7 @@ function apply(){
   let[yMin,yMax]=yFrom&&yTo?[Number(yFrom),Number(yTo)]:yFrom?[Number(yFrom),9999]:yTo?[0,Number(yTo)]:[0,9999];
   VIEW=DATA.filter(o=>
     matchesSearch(o,searchTokens)&&
-    (!c||o.c===c)&&(!src||o.s===src)&&(!f||o.f===f)&&
+    (!c||o.c===c)&&(!src||o.s===src)&&(!f||(f==="petrol_or_hybrid"?["petrol","hybrid"].includes(o.f):o.f===f))&&
     (!yFrom&&!yTo||(o.y>=yMin&&o.y<=yMax))&&
     o.p>=pmin&&(pmax===999999?o.p<=pmax:o.p<pmax)&&(!liveOnly||o.v===1)&&
     (!newOnly||NEW_IDS.has(String(o.id||"")))&&
@@ -1680,7 +1709,8 @@ function applyAuction(){
     if(categoryMode==="vehicles"&&!AUCTION_ROAD_VEHICLE_CATEGORIES.has(category))return false;
     if(categoryMode&&categoryMode!=="vehicles"&&category!==categoryMode)return false;
     const fuelGroup=auctionFuelGroup(row.fuel);
-    if(f&&!(f==="petrol_or_hybrid"?["petrol","hybrid"].includes(fuelGroup):fuelGroup===f))return false;
+    const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
+    if(!["petrol","hybrid"].includes(fuelGroup)||(requestedFuel!=="petrol_or_hybrid"&&fuelGroup!==requestedFuel))return false;
     if(yFrom||yTo){
       const rowYear=row.year||0;
       if(rowYear<yMin||rowYear>yMax)return false;

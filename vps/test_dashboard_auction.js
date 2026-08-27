@@ -142,6 +142,26 @@ const offers = [
   offer("tie-b", 9_000, 2_500, "2026-08-14T13:00:00Z", 12_000),
 ];
 
+const REGISTRY = JSON.stringify({
+  registry_sha256_source: "dashboard-auction-test",
+  sources: [
+    ["zoll-auktion", ["zoll-auktion.de"]],
+    ["encheres-du-domaine", ["encheres-domaine.gouv.fr"]],
+    ["justiz-auktion", ["justiz-auktion.de"]],
+    ["boe-subastas", ["subastas.boe.es"]],
+    ["kronofogden", ["auktion.kronofogden.se"]],
+    ["pvp-giustizia", ["pvp.giustizia.it"]],
+    ["finshop", ["finshop.belgium.be"]],
+    ["onlineveilingmeester", ["onlineveilingmeester.nl"]],
+    ["e-leiloes", ["e-leiloes.pt"]],
+    ["licytacje-komornik", ["licytacje.komornik.pl"]],
+    ["nabidka-majetku", ["nabidkamajetku.gov.cz"]],
+    ["vebeg", ["vebeg.de"]],
+  ].map(([key, domains], index) => ({
+    key, domains, priority: index + 1, publication_status: "migration", name: key,
+  })),
+});
+
 const lane = (end, bid, priority, seen, id) => ({
   id,
   source: "zoll-auktion",
@@ -241,7 +261,7 @@ try {
     auction_lane: {
       schema_version: 1,
       lane: "auction",
-      registry_digest: "registry-digest-abcdef0123456789",
+      registry_digest: REGISTRY,
       generated_at_utc: "2026-08-14T14:00:00Z",
       bound_generation_id: BASE.generation_id,
       bound_data_generated_at_utc: BASE.data_generated_at_utc,
@@ -311,7 +331,8 @@ try {
   evaluate(withLane, "apply();");
   const firstCard = evaluate(withLane, "cardForTest=auctionCard(VIEW[0]); cardForTest");
   check(firstCard.includes("المزايدة الحالية") && !/roi|profit|ربح|عائد/i.test(firstCard), "auction card must show bid without profit claims");
-  check(firstCard.includes("واد كنيس") && firstCard.includes("إعلانات مشابهة"), "auction card must show a validated Ouedkniss average");
+  check(firstCard.includes("Auction a-1") && firstCard.includes("https://www.zoll-auktion.de/lot/a-1"),
+    "auction card must preserve the canonical title and source URL");
 
   // broad monitored rows stay visibly distinct from strict eligible rows
   const broadRows = [
@@ -363,14 +384,63 @@ try {
   evaluate(broad, "apply();");
   check(evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"), "broad PVP row must be visible in all-official scope");
   const broadCard = evaluate(broad, "auctionCard(VIEW.find(row=>row.id==='pvp-4620200'))");
-  check(broadCard.includes("سعر البداية") && broadCard.includes("يحتاج تحقق الأهلية") &&
+  check(broadCard.includes("MG ZS 2024") && broadCard.includes("Current bid and foreign bidder access require review.") &&
     !broadCard.includes("المزايدة الحالية الظاهرة"), "base price and conditional eligibility must be labelled honestly");
-  const hiddenCard = evaluate(broad, "auctionCard(VIEW.find(row=>row.id==='boe-hidden'))");
-  check(hiddenCard.includes("السعر غير ظاهر") && hiddenCard.includes("غير مؤهل للاستيراد"),
-    "hidden price and ineligible status must be explicit");
+  check(evaluate(broad, "!VIEW.some(row=>row.id==='boe-hidden')"),
+    "unknown-fuel monitored rows must not leak through the accepted petrol/hybrid policy");
   broad.document.getElementById("eligibleAuctionsBtn").dispatchEvent(new Event("click"));
   check(evaluate(broad, "VIEW.every(row=>!['pvp-4620200','boe-hidden'].includes(row.id))"),
     "strict-eligible scope must exclude broad-only monitoring rows");
+  broad.document.getElementById("allAuctionsBtn").dispatchEvent(new Event("click"));
+  check(evaluate(broad, "AUCTION_SCOPE") === "all" &&
+    evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"),
+    "all-official scope must restore monitored rows");
+
+  // Fuel, year and price boundaries must match the accepted petrol/hybrid policy.
+  const filterRows = [
+    { ...lane(futureIso, 9_999, 1, nowIso, "f-petrol-low"), fuel: "Benzine", year: 2020 },
+    { ...lane(futureIso, 10_000, 2, nowIso, "f-hybrid-low"), fuel: "PHEV", year: 2021 },
+    { ...lane(futureIso, 15_000, 3, nowIso, "f-petrol-high"), fuel: "Essence", year: 2022 },
+    { ...lane(futureIso, 5_000, 4, nowIso, "f-diesel-low"), fuel: "Diesel", year: 2020 },
+    { ...lane(futureIso, 7_000, 5, nowIso, "f-electric-low"), fuel: "Electric", year: 2020 },
+  ];
+  const filterPayload = {
+    ...BASE,
+    auction_lane: { ...payload.auction_lane, lane_count: filterRows.length, rows: filterRows },
+  };
+  const fuelFilters = makeSandbox({ local });
+  bootWith(fuelFilters, filterPayload);
+  check(fuelFilters.document.getElementById("ff").value === "petrol_or_hybrid", "auction fuel policy must default to petrol or hybrid");
+  check(!/diesel|electric/i.test(fuelFilters.document.getElementById("ff").innerHTML), "auction fuel selector must not offer unaccepted fuels");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-petrol-low,f-hybrid-low,f-petrol-high",
+    "default auction fuel policy must exclude diesel and electric rows while retaining localized petrol and hybrid labels");
+
+  fuelFilters.document.getElementById("ff").value = "petrol";
+  evaluate(fuelFilters, "apply();");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-petrol-low,f-petrol-high",
+    "petrol-only filter must retain exactly petrol rows");
+  fuelFilters.document.getElementById("ff").value = "hybrid";
+  evaluate(fuelFilters, "apply();");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-hybrid-low",
+    "hybrid-only filter must retain exactly hybrid rows");
+
+  fuelFilters.document.getElementById("ff").value = "petrol_or_hybrid";
+  fuelFilters.document.getElementById("fy").value = "2021";
+  fuelFilters.document.getElementById("fy2").value = "2021";
+  evaluate(fuelFilters, "apply();");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-hybrid-low",
+    "inclusive year range must neither lose nor include adjacent model years");
+
+  fuelFilters.document.getElementById("fy").value = "";
+  fuelFilters.document.getElementById("fy2").value = "";
+  fuelFilters.document.getElementById("fp").value = "0-10000";
+  evaluate(fuelFilters, "apply();");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-petrol-low",
+    "price range below 10,000 EUR must exclude the 10,000 EUR boundary and every unaccepted fuel");
+  fuelFilters.document.getElementById("fp").value = "10000-15000";
+  evaluate(fuelFilters, "apply();");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-hybrid-low",
+    "price range boundaries must be exact and must not include the next range");
 
   const stalePayload = {
     ...broadPayload,

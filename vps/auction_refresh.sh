@@ -4,7 +4,10 @@ set -Eeuo pipefail
 ROOT="${RADAR_CAR_ROOT:-/home/krt/car_deal_finder}"
 STATE="${RADAR_STATE_DIR:-/var/lib/sonardeals-radar}"
 SITE="${RADAR_SITE:-/srv/sonardeals-radar/site}"
-LOCK="${RADAR_REFRESH_LOCK_FILE:-/run/lock/sonardeals-radar-refresh.lock}"
+# Auction collection has a separate bounded lock.  It must not be starved by
+# the much longer full-radar validation job, while the publisher still verifies
+# every shared artifact before it can be exposed.
+LOCK="${RADAR_AUCTION_REFRESH_LOCK_FILE:-/run/lock/sonardeals-auction-refresh.lock}"
 IMPORTER="${RADAR_UNIVERSE_IMPORTER:-$ROOT/import_live_offers_to_universe.py}"
 AUCTION_DATABASE="${RADAR_AUCTION_DATABASE:-$STATE/auction_offers.sqlite}"
 AUDIT="$STATE/latest_selection_audit.json"
