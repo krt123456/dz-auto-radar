@@ -158,6 +158,7 @@ const REGISTRY = JSON.stringify({
     ["nabidka-majetku", ["nabidkamajetku.gov.cz"]],
     ["vebeg", ["vebeg.de"]],
     ["auto1", ["auto1.com"], "blocked"],
+    ["copart-es", ["copart.es"]],
   ].map(([key, domains, publicationStatus], index) => ({
     key, domains, priority: index + 1, publication_status: publicationStatus || "migration", name: key,
   })),
@@ -229,6 +230,8 @@ try {
   check(/[\u0600-\u06ff]/.test(wrapHtml), "auction toggle must have an Arabic label");
   check(html.includes('id="eligibleAuctionsBtn"') && html.includes('id="allAuctionsBtn"'),
     "auction section must expose strict-eligible and all-official controls");
+  check(html.includes('id="fBid"') && html.includes('id="fTerms"'),
+    "auction section must expose optional bid-visibility and no-reserve filters");
   check(html.includes("كل المزادات الرسمية"), "all-official control must have an Arabic label");
 
   const local = {
@@ -346,6 +349,46 @@ try {
   const scheduledCountdown = evaluate(withLane, `countdownText(Date.parse(${JSON.stringify(futureIso)}))`);
   check(scheduledNoReserveCard.includes("No Reserve") && scheduledNoReserveCard.includes(scheduledCountdown),
     "scheduled Copart session must show its no-reserve state and live days/hours/minutes countdown");
+
+  // The useful auction refinements are opt-in: they must not hide rows unless
+  // the visitor actively chooses one. A Copart sale event is also a valid
+  // time reference for the date filter and the soonest-first ordering.
+  const scheduledFarIso = new Date(Date.now() + 10 * 24 * 3600_000).toISOString();
+  const copartScheduled = {
+    ...lane(null, 5300, 14, nowIso, "a-copart-session"),
+    source: "copart-es", source_key: "copart-es", registry_key: "copart-es",
+    registry_priority: 14, url: "https://www.copart.es/lot/12345678", country: "ES",
+    canonical_end_utc: null, sale_event_utc: scheduledFarIso, no_reserve: true,
+    price_kind: "current_bid", price_amount: 5300, price_eur: 5300, price_currency: "EUR",
+  };
+  const startingBid = {
+    ...lane(futureIso, 4500, 1, nowIso, "a-starting-bid"),
+    price_kind: "starting_bid", price_amount: 4500, price_eur: 4500, price_currency: "EUR",
+  };
+  evaluate(withLane, `AUCTION_SCOPE="eligible"; AUCTION_LANE=[...AUCTION_LANE,${JSON.stringify(copartScheduled)},${JSON.stringify(startingBid)}];`);
+  withLane.document.getElementById("fDays").value = "";
+  withLane.document.getElementById("fBid").value = "";
+  withLane.document.getElementById("fTerms").value = "";
+  evaluate(withLane, "apply();");
+  check(evaluate(withLane, "VIEW.map(o=>o.id)").includes("a-copart-session") &&
+    evaluate(withLane, "VIEW.map(o=>o.id)").includes("a-starting-bid"),
+    "optional refinements must default to all rows");
+  withLane.document.getElementById("fDays").value = "1";
+  evaluate(withLane, "apply();");
+  check(!evaluate(withLane, "VIEW.map(o=>o.id)").includes("a-copart-session"),
+    "a far scheduled Copart session must obey the selected time window");
+  withLane.document.getElementById("fDays").value = "";
+  withLane.document.getElementById("fTerms").value = "no_reserve";
+  evaluate(withLane, "apply();");
+  check(evaluate(withLane, "VIEW.map(o=>o.id)").join(",") === "a-copart-session",
+    "no-reserve filter must only act after it is explicitly selected");
+  withLane.document.getElementById("fTerms").value = "";
+  withLane.document.getElementById("fBid").value = "current_bid";
+  evaluate(withLane, "apply();");
+  check(!evaluate(withLane, "VIEW.map(o=>o.id)").includes("a-starting-bid") &&
+    evaluate(withLane, "VIEW.map(o=>o.id)").includes("a-copart-session"),
+    "current-bid filter must remain opt-in and retain declared current bids");
+  withLane.document.getElementById("fBid").value = "";
 
   // broad monitored rows stay visibly distinct from strict eligible rows
   const broadRows = [

@@ -88,6 +88,12 @@ SCHENGEN_COUNTRIES = frozenset(
     }
 )
 OFFICIAL_AUCTION_SOURCE_COUNTRY_OVERRIDES = {
+    # Exleasingcar publishes one cross-border catalogue; the official card
+    # carries the asset's country, which can differ from the platform's LT
+    # registry home.
+    "exleasingcar": SCHENGEN_COUNTRIES,
+    # Vavato's public Cars category is likewise a cross-border catalogue.
+    "vavato": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }

@@ -71,6 +71,24 @@ class OfficialAuctionWatchPublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "registry/domain"):
             publisher.validate_official_auction_watch(watch, now=self.now)
 
+    def test_cross_border_exleasingcar_asset_country_is_accepted(self) -> None:
+        row = copy.deepcopy(self.row)
+        row.update(
+            {
+                "id": "exleasingcar:fixture-1",
+                "source": "exleasingcar",
+                "source_key": "exleasingcar",
+                "registry_key": "exleasingcar",
+                "registry_priority": 22,
+                "url": "https://www.exleasingcar.com/en/auto-details/fixture-1",
+                "country": "BE",
+            }
+        )
+        watch = builder.build_monitored_watch(
+            [row], generated_at=self.now.isoformat(), rejected_counts={}
+        )
+        publisher.validate_official_auction_watch(watch, now=self.now)
+
     def test_priced_semantic_without_amount_is_rejected(self) -> None:
         watch = self.watch()
         watch["rows"][0]["price_eur"] = None

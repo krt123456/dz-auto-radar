@@ -194,8 +194,8 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
 @keyframes heartPop{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
 .card.is-favorite{border:2px solid #e74c3c}
 .card .top{position:relative}
-#auctionDaysWrap,#auctionCategoryWrap{display:inline-block}
-#auctionDaysWrap[hidden],#auctionCategoryWrap[hidden]{display:none}
+#auctionDaysWrap,#auctionCategoryWrap,#auctionBidWrap,#auctionTermsWrap{display:inline-block}
+#auctionDaysWrap[hidden],#auctionCategoryWrap[hidden],#auctionBidWrap[hidden],#auctionTermsWrap[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -260,7 +260,7 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
         <option value="30000-999999">فوق 30,000 €</option>
       </select>
       <div id="auctionDaysWrap" hidden>
-        <select class="f" id="fDays" aria-label="الوقت المتبقي للمزاد">
+        <select class="f" id="fDays" aria-label="موعد أو وقت انتهاء المزاد">
           <option value="">كل المواعيد</option>
           <option value="0.5">أقل من 12 ساعة</option>
           <option value="1">أقل من 24 ساعة</option>
@@ -288,6 +288,18 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
           <option value="other">فئات أخرى</option>
           <option value="unknown">مركبات غير مفصلة الفئة</option>
           <option value="">كل الفئات</option>
+        </select>
+      </div>
+      <div id="auctionBidWrap" hidden>
+        <select class="f" id="fBid" aria-label="حالة سعر المزاد">
+          <option value="">كل حالات السعر</option>
+          <option value="current_bid">المزايدة الحالية معلنة</option>
+        </select>
+      </div>
+      <div id="auctionTermsWrap" hidden>
+        <select class="f" id="fTerms" aria-label="شروط بيع المزاد">
+          <option value="">كل شروط البيع</option>
+          <option value="no_reserve">بدون حد أدنى (No Reserve)</option>
         </select>
       </div>
       <select class="f" id="fs" aria-label="ترتيب النتائج" aria-describedby="sortHelp">
@@ -660,7 +672,7 @@ let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
 const DATA_MAX_AGE_MS=8*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1",FAVORITES_KEY="dzr-favorites-v1";
 const NAV_KEY="dzr-navigation-v2";
-const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fy2","fp","fcat","fs"];
+const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen","fauction","fav"];
 const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_WATCH_STATE="missing",AUCTION_SCOPE="all";
@@ -940,7 +952,7 @@ const SORT_HELP={
   km:"الأقل كيلومترات: يرتب عداد السيارة المعلن من الأقل إلى الأعلى."
 };
 const AUCTION_SORT_HELP={
-  auction_soon:"تنتهي قريبًا: يرتب المزادات حسب نهاية المزاد الفعلية؛ المزادات المغلقة تُخفى فورًا.",
+  auction_soon:"تنتهي قريبًا: يرتب نهاية المزاد الفعلية، ثم موعد جلسة البيع المعلن؛ المزادات المغلقة تُخفى فورًا.",
   auction_bid:"أقل سعر معلن: يرتب المبلغ المتاح باليورو، مع تمييز المزايدة الحالية عن سعر البداية أو الحد الأدنى.",
   auction_vetted:"أحدث مصدر موثق: يرتب حسب أولوية المصدر الرسمي ثم آخر رصد له."
 };
@@ -1553,13 +1565,13 @@ function boot(payload,monitoredRows=null){
     `<div class="stat">بناء اللوحة<b>${fmtTime(boardTimestamp)}</b></div>`;
   updateHistoryStats();
   populateFilterOptions(false);
-  ["q","fc","fsrc","ff","fy","fy2","fp","fcat","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
+  ["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
   ["flive","fnew","funseen","fav","fDays"].forEach(id=>{if($(id))$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();});});
   const auctionWrap=$("auctionToggleWrap");
   const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
   const auctionScopeControls=$("auctionScopeControls");
   const eligibleAuctionsBtn=$("eligibleAuctionsBtn"),allAuctionsBtn=$("allAuctionsBtn");
-  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fy2","fp","fcat"].forEach(id=>$(id).value="");
+  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms"].forEach(id=>$(id).value="");
   const paintModeTabs=auctionMode=>{
     regularModeBtn.classList.toggle("active",!auctionMode);
     auctionModeBtn.classList.toggle("active",auctionMode);
@@ -1585,8 +1597,9 @@ function boot(payload,monitoredRows=null){
     $("fauction").addEventListener("change",()=>{
       clearSectionFilters();
       paintModeTabs($("fauction").checked);
-      if($("auctionDaysWrap"))$("auctionDaysWrap").hidden=!$("fauction").checked;
-      if($("auctionCategoryWrap"))$("auctionCategoryWrap").hidden=!$("fauction").checked;
+      ["auctionDaysWrap","auctionCategoryWrap","auctionBidWrap","auctionTermsWrap"].forEach(id=>{
+        if($(id))$(id).hidden=!$("fauction").checked;
+      });
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
@@ -1606,6 +1619,8 @@ function boot(payload,monitoredRows=null){
         populateFilterOptions(false);
         if($("fDays"))$("fDays").value="";
         if($("fcat"))$("fcat").value="";
+        if($("fBid"))$("fBid").value="";
+        if($("fTerms"))$("fTerms").value="";
       }
       paintAuctionScope();
       page=1;apply();saveNavigationState();
@@ -1628,7 +1643,7 @@ function boot(payload,monitoredRows=null){
   }else{
     $("fs").value=normalizeSortMode($("fs").value);
   }
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp","fcat"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";AUCTION_SCOPE="all";paintAuctionScope();if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";AUCTION_SCOPE="all";paintAuctionScope();if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
@@ -1694,15 +1709,17 @@ function applyAuction(){
          f=$("ff").value,yFrom=$("fy").value,yTo=$("fy2").value,p=$("fp").value,
          daysMax=$("fDays")?Number($("fDays").value)||0:0,
          categoryMode=$("fcat")?$("fcat").value:"vehicles",
+         bidMode=$("fBid")?$("fBid").value:"",
+         termsMode=$("fTerms")?$("fTerms").value:"",
         favOnly=$("fav")&&$("fav").checked;
   const s=normalizeAuctionSortMode($("fs").value);
   if($("fs").value!==s)$("fs").value=s;
   const nowMs=Date.now();
   let[pmin,pmax]=p?p.split("-").map(Number):[0,Infinity];
   let[yMin,yMax]=yFrom&&yTo?[Number(yFrom),Number(yTo)]:yFrom?[Number(yFrom),9999]:yTo?[0,Number(yTo)]:[0,9999];
-  const endRank=row=>timestampMs(row.canonical_end_utc)??Number.MAX_SAFE_INTEGER;
+  const endRank=row=>timestampMs(row.canonical_end_utc)??timestampMs(row.sale_event_utc)??Number.MAX_SAFE_INTEGER;
   VIEW=activeAuctionRows().filter(row=>{
-    const end=timestampMs(row.canonical_end_utc),price=auctionPrice(row);
+    const end=timestampMs(row.canonical_end_utc),event=timestampMs(row.sale_event_utc),time=end??event,price=auctionPrice(row);
     if(end!==null&&end<=nowMs)return false;
     if(c&&row.country!==c)return false;
     if(src&&String(row.source_key||row.source)!==src)return false;
@@ -1712,13 +1729,15 @@ function applyAuction(){
     const fuelGroup=auctionFuelGroup(row.fuel);
     const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
     if(!["petrol","hybrid"].includes(fuelGroup)||(requestedFuel!=="petrol_or_hybrid"&&fuelGroup!==requestedFuel))return false;
+    if(bidMode==="current_bid"&&(row.price_kind||"current_bid")!=="current_bid")return false;
+    if(termsMode==="no_reserve"&&row.no_reserve!==true)return false;
     if(yFrom||yTo){
       const rowYear=row.year||0;
       if(rowYear<yMin||rowYear>yMax)return false;
     }
     if(p&&!(typeof price==="number"&&price>=pmin&&(pmax===999999?price<=pmax:price<pmax)))return false;
-    if(daysMax>0&&end!==null){
-      const daysLeft=(end-nowMs)/(1000*60*60*24);
+    if(daysMax>0&&time!==null){
+      const daysLeft=(time-nowMs)/(1000*60*60*24);
       if(daysLeft>daysMax)return false;
     }
     if(favOnly&&!FAVORITES_IDS.has(String(row.id||"")))return false;
