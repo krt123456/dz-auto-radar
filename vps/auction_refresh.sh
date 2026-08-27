@@ -211,8 +211,9 @@ python3 /opt/sonardeals-radar/enrich_auction_ouedkniss.py \
   --max-queries "${RADAR_OUEDKNISS_BROAD_MAX_QUERIES:-80}" \
   || echo "OFFICIAL_WATCH_OUEDKNISS_REFERENCE_SKIPPED"
 
-python3 /opt/sonardeals-radar/publish_radar_dashboard.py \
-  --root "$ROOT" --site "$SITE" --prepare-only --top-n "${VERIFIED_TARGET:-10000}"
+FULL_DASHBOARD_PUBLISHED=0
+if python3 /opt/sonardeals-radar/publish_radar_dashboard.py \
+  --root "$ROOT" --site "$SITE" --prepare-only --top-n "${VERIFIED_TARGET:-10000}"; then
 python3 - "$PUBLIC_WATCH" "$STATE/latest_selection_manifest.json" \
   "$SITE/official_auction_watch.json" <<'PY'
 import hashlib
@@ -254,11 +255,20 @@ python3 /opt/sonardeals-radar/audit_live_convergence.py \
   --selection-audit "$AUDIT" --output "$LIVE_AUDIT" \
   --deadline-sec "${RADAR_AUCTION_LIVE_AUDIT_DEADLINE_SEC:-900}" \
   --request-timeout-sec 30 --initial-backoff-sec 5 --max-backoff-sec 60 --max-network-errors 8
+FULL_DASHBOARD_PUBLISHED=1
+else
+  # The regular encrypted board is intentionally left untouched if it is stale.
+  # A separate fresh official-auction watch remains safe to publish because the
+  # browser validates its registry, price semantics and eight-hour freshness.
+  echo "AUCTION_FULL_DASHBOARD_PUBLICATION_DEFERRED at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  python3 /opt/sonardeals-radar/publish_official_auction_watch_only.py \
+    --watch "$PUBLIC_WATCH" --site "$SITE"
+fi
 
 # Alerts are deliberately opt-in and run only after publication has passed its
 # live convergence audit.  Seed the state once with --seed-state before
 # enabling this flag so deployment does not notify the whole existing top 50.
-if [[ "${RADAR_AUCTION_TOP50_ALERTS_ENABLED:-0}" == "1" ]]; then
+if [[ "${RADAR_AUCTION_TOP50_ALERTS_ENABLED:-0}" == "1" && "$FULL_DASHBOARD_PUBLISHED" == "1" ]]; then
   if ! python3 /opt/sonardeals-radar/auction_top50_alerts.py \
     --watch "$SITE/official_auction_watch.json" \
     --fx "$SITE/display_currency.json" \
