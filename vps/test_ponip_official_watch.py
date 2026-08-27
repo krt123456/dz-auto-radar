@@ -17,9 +17,12 @@ HEADER = (
 
 
 class Response:
-    def __init__(self, payload: bytes) -> None:
+    def __init__(self, payload: bytes, *, chunked: bool = False) -> None:
         self.payload = payload
-        self.headers = {"Content-Length": str(len(payload))}
+        self.headers = (
+            {"Transfer-Encoding": "chunked"}
+            if chunked else {"Content-Length": str(len(payload))}
+        )
 
     def raise_for_status(self) -> None:
         return None
@@ -32,13 +35,14 @@ class Response:
 
 
 class Session:
-    def __init__(self, payload: bytes) -> None:
+    def __init__(self, payload: bytes, *, chunked: bool = False) -> None:
         self.payload = payload
+        self.chunked = chunked
 
     def get(self, url: str, **_: object) -> Response:
         if url != watch.SOURCE_URL:
             raise AssertionError(url)
-        return Response(self.payload)
+        return Response(self.payload, chunked=self.chunked)
 
 
 class PonipWatchTest(unittest.TestCase):
@@ -82,6 +86,22 @@ class PonipWatchTest(unittest.TestCase):
                 observed_at="2026-08-27T20:00:00+00:00",
                 now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
             )
+
+    def test_chunked_complete_export_is_reconciled(self) -> None:
+        export = HEADER + (
+            '"Osobni automobil Toyota Prius hibrid";"pokretnina";"1001";'
+            '"2026-08-27 10:00:00";"2026-08-30 12:00:00";"5300.00"\n'
+        )
+        payload = watch.build_watch(
+            session=Session(export.encode("utf-8"), chunked=True),
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+            timeout=5,
+        )
+        report = payload["source_reports"]["fina-ponip"]
+        self.assertEqual(payload["row_count"], 1)
+        self.assertIsNone(report["declared_bytes"])
+        self.assertEqual(report["received_bytes"], len(export.encode("utf-8")))
+        self.assertEqual(report["transport_boundary"], "chunked_complete")
 
 
 if __name__ == "__main__":

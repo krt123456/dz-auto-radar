@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Build one reconciled snapshot from FINA PONIP's official CSV export.
 
-PONIP publishes its complete register as a CSV attachment.  Unlike a visual
-search page, the export has no hidden page boundary: the response's declared
-byte length is the finite catalogue boundary.  This connector reads that
-entire file, validates the required fields and unique auction identities, and
-publishes only future/current rows whose official description identifies a
-vehicle.  It never invents fuel, model year, mileage, or a current bid.
+PONIP publishes its complete register as a CSV attachment. Unlike a visual
+search page, the export has no hidden page boundary: the HTTP response has an
+explicit byte length or a terminated chunked-transfer boundary. This connector
+reads that entire file, validates the required fields and unique auction
+identities, and publishes only future/current rows whose official description
+identifies a vehicle. It never invents fuel, model year, mileage, or a current
+bid.
 
 The PONIP visual detail route is UUID-based but the CSV exposes the stable
 ``ID nadmetanja`` instead.  Each result therefore links to the official public
@@ -236,16 +237,26 @@ def configured_session() -> requests.Session:
     return session
 
 
-def fetch_export(session: requests.Session, *, timeout: int) -> tuple[bytes, int]:
+def fetch_export(
+    session: requests.Session, *, timeout: int
+) -> tuple[bytes, int | None, str]:
     response = session.get(SOURCE_URL, headers=HEADERS, timeout=timeout, stream=True)
     try:
         response.raise_for_status()
-        try:
-            declared = int(str(response.headers.get("Content-Length") or ""))
-        except ValueError as exc:
-            raise PonipWatchError("PONIP export has no valid declared byte length") from exc
-        if declared <= 0:
-            raise PonipWatchError("PONIP export has an invalid declared byte length")
+        raw_length = str(response.headers.get("Content-Length") or "").strip()
+        declared: int | None = None
+        if raw_length:
+            try:
+                declared = int(raw_length)
+            except ValueError as exc:
+                raise PonipWatchError("PONIP export has an invalid declared byte length") from exc
+            if declared <= 0:
+                raise PonipWatchError("PONIP export has an invalid declared byte length")
+        transfer_encoding = clean(response.headers.get("Transfer-Encoding")).casefold()
+        if declared is None and "chunked" not in transfer_encoding:
+            raise PonipWatchError(
+                "PONIP export has neither a declared byte length nor a chunked boundary"
+            )
         pieces: list[bytes] = []
         received = 0
         for piece in response.iter_content(chunk_size=CHUNK_SIZE):
@@ -253,11 +264,13 @@ def fetch_export(session: requests.Session, *, timeout: int) -> tuple[bytes, int
                 continue
             pieces.append(piece)
             received += len(piece)
-        if received != declared:
+        if declared is not None and received != declared:
             raise PonipWatchError(
                 f"PONIP export byte reconciliation failed: declared={declared} received={received}"
             )
-        return b"".join(pieces), declared
+        return b"".join(pieces), declared, (
+            "content_length" if declared is not None else "chunked_complete"
+        )
     finally:
         response.close()
 
@@ -277,7 +290,7 @@ def build_watch(
     supplied_session = session
     active_session = session or configured_session()
     try:
-        payload, declared_bytes = fetch_export(active_session, timeout=timeout)
+        payload, declared_bytes, transport_boundary = fetch_export(active_session, timeout=timeout)
     finally:
         if supplied_session is None:
             active_session.close()
@@ -288,6 +301,7 @@ def build_watch(
         "catalogue_scope": "every byte of the official PONIP CSV export; current/future vehicle-described rows",
         "declared_bytes": declared_bytes,
         "received_bytes": len(payload),
+        "transport_boundary": transport_boundary,
         "csv_rows": stats["csv_rows"],
         "future_or_current_rows": stats["future_or_current"],
         "vehicle_rows": stats["vehicle_rows"],

@@ -4,8 +4,10 @@
 Vavato's public Cars category exposes a live "N lots" total, normal page
 navigation, and a JSON-LD ItemList for each page. This connector uses the
 public ItemList for stable title/URL identity and the visible card for asset
-location. It walks every page and publishes only when the unique lot IDs equal
-the category's stated total.
+location. It walks every page. If Vavato's headline counter temporarily
+includes hidden or just-removed lots, the connector keeps every publicly
+enumerable lot only after a second identical full pass and records the exact
+counter gap rather than silently publishing a partial snapshot.
 """
 from __future__ import annotations
 
@@ -277,75 +279,108 @@ def build_watch(
     observed_at = now.astimezone(UTC).isoformat()
     supplied_session = session
     root_session = session or configured_session()
-    first = parse_page(
-        fetch_markup(root_session, SOURCE_URL, timeout=timeout),
-        observed_at=observed_at,
-        known_page=1,
-    )
-    page_size = len(first.rows)
-    expected_pages = math.ceil(first.total / page_size)
-    if page_size < 1 or first.page_count != expected_pages:
-        raise VavatoWatchError("Vavato total/pagination metadata mismatch")
 
-    def fetch_and_parse(page: int) -> tuple[int, list[dict[str, Any]]]:
-        local_session = supplied_session or configured_session()
-        try:
-            markup = fetch_markup(local_session, page_url(page), timeout=timeout)
-        finally:
-            if supplied_session is None:
-                local_session.close()
-        parsed = parse_page(markup, observed_at=observed_at, known_page=page)
-        expected_rows = page_size if page < expected_pages else first.total - page_size * (page - 1)
+    def fetch_root() -> ParsedPage:
+        return parse_page(
+            fetch_markup(root_session, SOURCE_URL, timeout=timeout),
+            observed_at=observed_at,
+            known_page=1,
+        )
+
+    def collect_pages(first: ParsedPage) -> tuple[list[dict[str, Any]], int, int]:
+        page_size = len(first.rows)
+        expected_pages = math.ceil(first.total / page_size) if page_size else 0
+        if page_size < 1 or first.page_count != expected_pages:
+            raise VavatoWatchError("Vavato total/pagination metadata mismatch")
+
+        def fetch_and_parse(page: int) -> tuple[int, list[dict[str, Any]]]:
+            local_session = supplied_session or configured_session()
+            try:
+                markup = fetch_markup(local_session, page_url(page), timeout=timeout)
+            finally:
+                if supplied_session is None:
+                    local_session.close()
+            parsed = parse_page(markup, observed_at=observed_at, known_page=page)
+            if parsed.total != first.total or parsed.page_count != first.page_count:
+                raise VavatoWatchError(f"Vavato page {page} metadata changed")
+            if page < expected_pages and len(parsed.rows) != page_size:
+                raise VavatoWatchError(f"Vavato page {page} is short before the last page")
+            if page == expected_pages and not 1 <= len(parsed.rows) <= page_size:
+                raise VavatoWatchError(f"Vavato last page {page} is invalid")
+            return page, parsed.rows
+
+        pages: dict[int, list[dict[str, Any]]] = {1: first.rows}
+        if expected_pages > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {
+                    executor.submit(fetch_and_parse, page): page
+                    for page in range(2, expected_pages + 1)
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    page, parsed_rows = future.result()
+                    pages[page] = parsed_rows
+        rows = [row for page in range(1, expected_pages + 1) for row in pages[page]]
+        ids = [row["id"] for row in rows]
+        urls = [row["url"] for row in rows]
+        if len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
+            raise VavatoWatchError("Vavato public lot identities are not unique")
+        if len(rows) > first.total:
+            raise VavatoWatchError("Vavato public lot rows exceed the declared total")
+        return rows, page_size, expected_pages
+
+    try:
+        first = fetch_root()
+        rows, page_size, expected_pages = collect_pages(first)
+        final = fetch_root()
         if (
-            parsed.total != first.total
-            or parsed.page_count != first.page_count
-            or len(parsed.rows) != expected_rows
+            final.total != first.total
+            or final.page_count != first.page_count
+            or [row["id"] for row in final.rows] != [row["id"] for row in first.rows]
         ):
-            raise VavatoWatchError(f"Vavato page {page} failed reconciliation")
-        return page, parsed.rows
+            raise VavatoWatchError("Vavato category changed before final check")
 
-    pages: dict[int, list[dict[str, Any]]] = {1: first.rows}
-    if expected_pages > 1:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(fetch_and_parse, page): page for page in range(2, expected_pages + 1)}
-            for future in concurrent.futures.as_completed(futures):
-                page, rows = future.result()
-                pages[page] = rows
-    rows = [row for page in range(1, expected_pages + 1) for row in pages[page]]
-    ids = [row["id"] for row in rows]
-    urls = [row["url"] for row in rows]
-    if len(rows) != first.total or len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
-        raise VavatoWatchError("Vavato total/ID reconciliation failed")
-    final = parse_page(
-        fetch_markup(root_session, SOURCE_URL, timeout=timeout),
-        observed_at=observed_at,
-        known_page=1,
-    )
-    if final.total != first.total or final.page_count != first.page_count or [row["id"] for row in final.rows] != [row["id"] for row in first.rows]:
-        raise VavatoWatchError("Vavato category changed before final check")
-    report = {
-        "status": "ok",
-        "connector_status": "ok",
-        "catalogue_scope": "every public Vavato Cars category lot",
-        "declared": first.total,
-        "visited": len(rows),
-        "normalized_rows": len(rows),
-        "page_size": page_size,
-        "pages": expected_pages,
-        "first_page_rechecked": True,
-        "stable_ids_unique": True,
-        "publication_ready": False,
-    }
-    return {
-        "schema_version": 1,
-        "lane": "official_auction_watch",
-        "generated_at_utc": observed_at,
-        "research_only": True,
-        "publication_status": "review_required",
-        "row_count": len(rows),
-        "rows": rows,
-        "source_reports": {SOURCE_KEY: report},
-    }
+        counter_gap = first.total - len(rows)
+        second_pass_reconciled = False
+        if counter_gap:
+            repeated_rows, repeated_page_size, repeated_pages = collect_pages(final)
+            if (
+                repeated_page_size != page_size
+                or repeated_pages != expected_pages
+                or [(row["id"], row["url"]) for row in repeated_rows]
+                != [(row["id"], row["url"]) for row in rows]
+            ):
+                raise VavatoWatchError("Vavato visible catalogue changed during counter reconciliation")
+            second_pass_reconciled = True
+
+        report = {
+            "status": "ok",
+            "connector_status": "ok",
+            "catalogue_scope": "every publicly enumerable Vavato Cars category lot",
+            "declared": first.total,
+            "publicly_listed": len(rows),
+            "counter_gap": counter_gap,
+            "counter_gap_rechecked": second_pass_reconciled,
+            "visited": len(rows),
+            "normalized_rows": len(rows),
+            "page_size": page_size,
+            "pages": expected_pages,
+            "first_page_rechecked": True,
+            "stable_ids_unique": True,
+            "publication_ready": False,
+        }
+        return {
+            "schema_version": 1,
+            "lane": "official_auction_watch",
+            "generated_at_utc": observed_at,
+            "research_only": True,
+            "publication_status": "review_required",
+            "row_count": len(rows),
+            "rows": rows,
+            "source_reports": {SOURCE_KEY: report},
+        }
+    finally:
+        if supplied_session is None:
+            root_session.close()
 
 
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:

@@ -74,8 +74,8 @@ class Session:
 
 
 class VavatoWatchTest(unittest.TestCase):
-    def responses(self, first: str = PAGE_1) -> dict[str, str]:
-        return {watch.SOURCE_URL: first, watch.page_url(2): PAGE_2}
+    def responses(self, first: str = PAGE_1, second: str = PAGE_2) -> dict[str, str]:
+        return {watch.SOURCE_URL: first, watch.page_url(2): second}
 
     def test_complete_category_reconciles_public_json_ld_identities(self) -> None:
         payload = watch.build_watch(
@@ -86,6 +86,8 @@ class VavatoWatchTest(unittest.TestCase):
         rows = {row["id"]: row for row in payload["rows"]}
         self.assertEqual(payload["row_count"], 3)
         self.assertEqual(payload["source_reports"]["vavato"]["declared"], 3)
+        self.assertEqual(payload["source_reports"]["vavato"]["publicly_listed"], 3)
+        self.assertEqual(payload["source_reports"]["vavato"]["counter_gap"], 0)
         self.assertEqual(rows["vavato:A1-10-1"]["fuel"], "hybrid")
         self.assertEqual(rows["vavato:A1-10-2"]["fuel"], "electric")
         self.assertEqual(rows["vavato:A1-10-3"]["fuel"], "diesel")
@@ -99,8 +101,24 @@ class VavatoWatchTest(unittest.TestCase):
         self.assertEqual(reason, "")
         self.assertEqual(normalized["country"], "NL")
 
-    def test_declared_total_mismatch_fails_closed(self) -> None:
-        with self.assertRaises(watch.VavatoWatchError):
+    def test_stable_counter_gap_keeps_every_publicly_listed_lot(self) -> None:
+        payload = watch.build_watch(
+            session=Session(self.responses(
+                first=PAGE_1.replace("3 lots", "4 lots"),
+                second=PAGE_2.replace("3 lots", "4 lots"),
+            )),
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+            workers=1,
+        )
+        report = payload["source_reports"]["vavato"]
+        self.assertEqual(payload["row_count"], 3)
+        self.assertEqual(report["declared"], 4)
+        self.assertEqual(report["publicly_listed"], 3)
+        self.assertEqual(report["counter_gap"], 1)
+        self.assertTrue(report["counter_gap_rechecked"])
+
+    def test_page_metadata_drift_fails_closed(self) -> None:
+        with self.assertRaisesRegex(watch.VavatoWatchError, "metadata changed"):
             watch.build_watch(
                 session=Session(self.responses(first=PAGE_1.replace("3 lots", "4 lots"))),
                 now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
