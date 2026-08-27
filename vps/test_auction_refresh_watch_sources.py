@@ -18,9 +18,15 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         )[0]
         self.assertIn('AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "autobid"', content)
+        self.assertIn('VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "vpauto"', content)
+        self.assertIn('HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "huutokaupat"', content)
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
+            "VPAUTO_WATCH",
+            "HUUTOKAUPAT_WATCH",
             "ASTE_WATCH",
             "KLARAVIK_WATCH",
             "VEACOM_WATCH",

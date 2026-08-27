@@ -32,6 +32,8 @@ TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_watch.json"
 AUKSJONEN_WATCH="$STATE/runtime/auksjonen_watch.json"
 AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"
 EXLEASINGCAR_WATCH="$STATE/runtime/exleasingcar_official_auction_watch.json"
+VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"
+HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"
 SOURCE_ADAPTER_WATCH="$STATE/runtime/source_adapter_watch.json"
 PUBLIC_WATCH="$ROOT/mobile_site_local/official_auction_watch.json"
 
@@ -164,6 +166,19 @@ run_official_watch "exleasingcar" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
   --workers "${RADAR_EXLEASINGCAR_WATCH_WORKERS:-4}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "vpauto" \
+  python3 /opt/sonardeals-radar/vpauto_official_watch.py \
+  --out "$VPAUTO_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
+  --workers "${RADAR_VPAUTO_WATCH_WORKERS:-8}" \
+  --skip-details &
+OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "huutokaupat" \
+  python3 /opt/sonardeals-radar/huutokaupat_official_watch.py \
+  --out "$HUUTOKAUPAT_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" \
+  --workers "${RADAR_HUUTOKAUPAT_WATCH_WORKERS:-4}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "troostwijk"   python3 /opt/sonardeals-radar/troostwijk_fetcher.py   --out "$TROOSTWIJK_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
@@ -202,7 +217,7 @@ for watch_file in \
   "$BOE_KRONO_WATCH" "$FR_CZ_DE_WATCH" "$ZOLL_WATCH" "$BE_PL_PT_WATCH" \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
-  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
+  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$HUUTOKAUPAT_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
   "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then
