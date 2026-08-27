@@ -41,6 +41,13 @@ class Session:
 
 
 class ExleasingcarWatchTest(unittest.TestCase):
+    def test_current_show_results_counter_is_accepted(self) -> None:
+        markup = page(2, card(1, "DE", "ABARTH 500", price=7098)).replace(
+            "Filter (2)", "Show results (2)"
+        )
+        parsed = watch.parse_page(markup, observed_at="2026-08-27T20:00:00+00:00")
+        self.assertEqual(parsed.total, 2)
+
     def test_complete_catalogue_is_reconciled_and_marked_for_broad_watch(self) -> None:
         first = page(3, card(1, "DE", "ABARTH 500", price=7098) + card(2, "FR", "PEUGEOT 308", price=8200))
         second = page(3, card(3, "NL", "TOYOTA YARIS", price=6300))

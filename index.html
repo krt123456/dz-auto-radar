@@ -1759,6 +1759,7 @@ function auctionCard(row){
       <span class="flag">${FLAGS[row.country]||"🌍"}</span>
       <span class="chip">${esc(auctionSourceLabel(row.source_key||row.source))}</span>
       <span class="chip">${esc(AUCTION_CATEGORY_LABELS[category])}</span>
+      ${row.no_reserve===true?'<span class="chip">No Reserve</span>':""}
       <span class="badge ${eligibilityClass}">${esc(eligibilityLabel)}</span>
       <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
     </div>
@@ -1777,6 +1778,7 @@ function auctionCard(row){
       ⏰ نهاية المزاد: <b>${endText}</b>
       ${endMs!==null?` · <b>${countdownText(endMs)}</b>`:""}
       ${endMs===null&&eventMs!==null?` · موعد جلسة البيع: <b>${fmtTime(eventMs)}</b>`:""}
+      ${endMs===null&&eventMs!==null?` · <b>${countdownText(eventMs)}</b>`:""}
     </div>
     <div class="evidence">حالة الأهلية للمعلومة فقط ولا تخفي المزاد: <b>${esc(eligibilityLabel)}</b> · ${esc(row.eligibility_reason)}</div>
     <div class="foot">${link}</div>

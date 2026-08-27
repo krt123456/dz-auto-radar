@@ -42,7 +42,14 @@ HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
     "Accept-Language": "en-US,en;q=0.9",
 }
-TOTAL_RE = re.compile(r"(?:Filter|Filtr|Filtro|Filtre)\s*\(\s*([0-9\s,.]+)\s*\)", re.I)
+# Exleasingcar changed the anonymous page counter from ``Filter (N)`` to the
+# visible submit control ``Show results (N)``.  Both are first-party finite
+# catalogue totals, so accept either form rather than silently publishing a
+# partial first page when the UI wording changes.
+TOTAL_RE = re.compile(
+    r"(?:Filter|Filtr|Filtro|Filtre|Show\s+results)\s*\(\s*([0-9\s,.]+)\s*\)",
+    re.I,
+)
 YEAR_RE = re.compile(r"\b(?:0[1-9]|1[0-2])\.(19[7-9]\d|20[0-2]\d)\b|\b(19[7-9]\d|20[0-2]\d)\b")
 MILEAGE_RE = re.compile(r"\b([0-9][0-9\s.,\u00a0]*)\s*km\b", re.I)
 PRICE_RE = re.compile(

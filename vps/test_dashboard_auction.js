@@ -335,6 +335,18 @@ try {
   check(firstCard.includes("Auction a-1") && firstCard.includes("https://www.zoll-auktion.de/lot/a-1"),
     "auction card must preserve the canonical title and source URL");
 
+  const scheduledNoReserveCard = evaluate(withLane, `auctionCard({
+    id:"copart-demo", source:"copart-es", source_key:"copart-es", registry_key:"copart-es", registry_priority:1,
+    url:"https://www.copart.es/lot/12345678", title:"Copart demo", model:"Demo", country:"ES",
+    year:2024, mileage:12000, fuel:"petrol", seller:"Copart", price_eur:5300,
+    price_currency:"EUR", price_amount:5300, price_kind:"current_bid", price_label:"current bid",
+    bid_visibility:"public", eligibility_status:"review_required", eligibility_reason:"review", access_sale_note:"note",
+    last_seen_at:${JSON.stringify(nowIso)}, canonical_end_utc:null, sale_event_utc:${JSON.stringify(futureIso)}, no_reserve:true
+  })`);
+  const scheduledCountdown = evaluate(withLane, `countdownText(Date.parse(${JSON.stringify(futureIso)}))`);
+  check(scheduledNoReserveCard.includes("No Reserve") && scheduledNoReserveCard.includes(scheduledCountdown),
+    "scheduled Copart session must show its no-reserve state and live days/hours/minutes countdown");
+
   // broad monitored rows stay visibly distinct from strict eligible rows
   const broadRows = [
     {

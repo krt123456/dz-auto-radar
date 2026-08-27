@@ -83,6 +83,9 @@ SOURCE_COUNTRY_OVERRIDES = {
     # Exleasingcar presents one cross-border inventory under a single public
     # catalogue; the asset country is read from each card's official flag.
     "exleasingcar": SCHENGEN_COUNTRIES,
+    # Vavato's public Cars category combines Belgian, Dutch, French, and
+    # German assets; country comes from the public lot card when present.
+    "vavato": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }
@@ -521,6 +524,9 @@ def _normalize_monitored_row(
         "bid_count": optional_int("bid_count"),
         "minimum_next_bid": _positive_number(value.get("minimum_next_bid")),
         "reserve_met": value.get("reserve_met") if isinstance(value.get("reserve_met"), bool) else None,
+        "no_reserve": value.get("no_reserve") if isinstance(value.get("no_reserve"), bool) else None,
+        "sale_terms": " ".join(str(value.get("sale_terms") or "").split()),
+        "auction_status": " ".join(str(value.get("auction_status") or "").split()),
         "registration_date": " ".join(str(value.get("registration_date") or "").split()),
         "canonical_end_utc": end.isoformat() if end else None,
         "sale_end_utc": end.isoformat() if end else None,

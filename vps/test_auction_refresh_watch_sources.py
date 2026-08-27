@@ -22,11 +22,17 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "vpauto"', content)
         self.assertIn('HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "huutokaupat"', content)
+        self.assertIn('VAVATO_WATCH="$STATE/runtime/vavato_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "vavato"', content)
+        self.assertIn('PONIP_WATCH="$STATE/runtime/ponip_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "fina-ponip"', content)
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
             "VPAUTO_WATCH",
             "HUUTOKAUPAT_WATCH",
+            "VAVATO_WATCH",
+            "PONIP_WATCH",
             "ASTE_WATCH",
             "KLARAVIK_WATCH",
             "VEACOM_WATCH",
