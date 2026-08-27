@@ -199,22 +199,29 @@ def parse_export(
         "vehicle_rows": 0,
         "csv_duplicate_auction_rows": 0,
         "duplicate_active_vehicle_rows": 0,
+        "historical_rows_without_auction_id": 0,
     }
     for raw_row in reader:
         stats["csv_rows"] += 1
         auction_id = clean(raw_row.get("ID nadmetanja"))
-        if not auction_id:
-            raise PonipWatchError("PONIP export has a row without a stable auction ID")
-        if auction_id in csv_ids:
-            # The official CSV repeats historic auctions when one sale spans
-            # more than one asset class (for example real estate and movable
-            # property). This is not a duplicate public auction page.
-            stats["csv_duplicate_auction_rows"] += 1
-        csv_ids.add(auction_id)
+        if auction_id:
+            if auction_id in csv_ids:
+                # The official CSV repeats some auctions when one sale spans
+                # more than one asset class (for example real estate and
+                # movable property). This is not a duplicate public page.
+                stats["csv_duplicate_auction_rows"] += 1
+            csv_ids.add(auction_id)
         end = parse_local_datetime(raw_row.get("Datum i vrijeme završetka nadmetanja"))
         if end is None or end <= now:
+            if not auction_id:
+                # The official export also retains historic non-electronic
+                # sale notices. They have no electronic auction ID or end
+                # timestamp and cannot be opened as a current PONIP auction.
+                stats["historical_rows_without_auction_id"] += 1
             continue
         stats["future_or_current"] += 1
+        if not auction_id:
+            raise PonipWatchError("PONIP current row has no stable auction ID")
         if not is_vehicle_row(raw_row):
             continue
         normalized = row_to_watch(raw_row, observed_at=observed_at, now=now)
@@ -329,6 +336,7 @@ def build_watch(
         "vehicle_rows": stats["vehicle_rows"],
         "csv_duplicate_auction_rows": stats["csv_duplicate_auction_rows"],
         "duplicate_active_vehicle_rows": stats["duplicate_active_vehicle_rows"],
+        "historical_rows_without_auction_id": stats["historical_rows_without_auction_id"],
         "stable_ids_unique": True,
         "publication_ready": False,
     }

@@ -103,6 +103,30 @@ class PonipWatchTest(unittest.TestCase):
         self.assertEqual(stats["csv_duplicate_auction_rows"], 1)
         self.assertEqual(stats["duplicate_active_vehicle_rows"], 0)
 
+    def test_historical_non_electronic_notice_without_id_is_ignored(self) -> None:
+        export = HEADER + (
+            '"Historic manual notice";"pokretnina";"";"";"";""\n'
+        )
+        rows, stats = watch.parse_export(
+            export.encode("utf-8"),
+            observed_at="2026-08-27T20:00:00+00:00",
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(stats["historical_rows_without_auction_id"], 1)
+
+    def test_current_row_without_id_fails_closed(self) -> None:
+        export = HEADER + (
+            '"Osobni automobil bez ID-a";"pokretnina";"";'
+            '"2026-08-27 10:00:00";"2026-08-30 12:00:00";"5300.00"\n'
+        )
+        with self.assertRaisesRegex(watch.PonipWatchError, "current row has no stable auction ID"):
+            watch.parse_export(
+                export.encode("utf-8"),
+                observed_at="2026-08-27T20:00:00+00:00",
+                now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+            )
+
     def test_chunked_complete_export_is_reconciled(self) -> None:
         export = HEADER + (
             '"Osobni automobil Toyota Prius hibrid";"pokretnina";"1001";'
