@@ -74,6 +74,8 @@ install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" /opt/sonardeals-radar/zoll_auk
 install -m 0755 "$SOURCE/zoll_auktion_fetcher.py" "$ROOT/zoll_auktion_fetcher.py"
 install -m 0755 "$SOURCE/justiz_auktion_fetcher.py" /opt/sonardeals-radar/justiz_auktion_fetcher.py
 install -m 0755 "$SOURCE/multi_official_auction_fetcher.py" /opt/sonardeals-radar/multi_official_auction_fetcher.py
+install -m 0755 "$SOURCE/autobid_official_watch.py" /opt/sonardeals-radar/autobid_official_watch.py
+install -m 0644 "$SOURCE/auction_raw_evidence.py" /opt/sonardeals-radar/auction_raw_evidence.py
 install -m 0755 "$SOURCE/pvp_official_auction_watch.py" /opt/sonardeals-radar/pvp_official_auction_watch.py
 install -m 0755 "$SOURCE/boe_kronofogden_watch_fetcher.py" /opt/sonardeals-radar/boe_kronofogden_watch_fetcher.py
 install -m 0755 "$SOURCE/fr_cz_de_official_watch.py" /opt/sonardeals-radar/fr_cz_de_official_watch.py

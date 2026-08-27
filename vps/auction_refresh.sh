@@ -30,6 +30,7 @@ SCHENGEN_WIDE_WATCH="$STATE/runtime/schengen_wide_official_auction_watch.json"
 RETRADE_WATCH="$STATE/runtime/retrade_official_auction_watch.json"
 TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_watch.json"
 AUKSJONEN_WATCH="$STATE/runtime/auksjonen_watch.json"
+AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"
 SOURCE_ADAPTER_WATCH="$STATE/runtime/source_adapter_watch.json"
 PUBLIC_WATCH="$ROOT/mobile_site_local/official_auction_watch.json"
 
@@ -150,6 +151,12 @@ OFFICIAL_WATCH_PIDS+=("$!")
 
 run_official_watch "auksjonen"   python3 /opt/sonardeals-radar/auksjonen_fetcher.py   --out "$AUKSJONEN_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "autobid" \
+  python3 /opt/sonardeals-radar/autobid_official_watch.py \
+  --out "$AUTOBID_WATCH" --raw-root "$STATE/raw-evidence" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
+  --max-ids "${RADAR_AUTOBID_MAX_IDS:-20000}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "troostwijk"   python3 /opt/sonardeals-radar/troostwijk_fetcher.py   --out "$TROOSTWIJK_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
@@ -188,6 +195,8 @@ for watch_file in \
   "$BOE_KRONO_WATCH" "$FR_CZ_DE_WATCH" "$ZOLL_WATCH" "$BE_PL_PT_WATCH" \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
+  "$AUTOBID_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
+  "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then
     MONITORED_INPUT_ARGS+=(--monitored-input "$watch_file")
