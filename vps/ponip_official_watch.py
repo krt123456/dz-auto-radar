@@ -190,17 +190,27 @@ def parse_export(
     if missing:
         raise PonipWatchError(f"PONIP export is missing required columns: {', '.join(missing)}")
 
-    all_ids: set[str] = set()
+    csv_ids: set[str] = set()
+    active_by_auction_id: dict[str, dict[str, Any]] = {}
     rows: list[dict[str, Any]] = []
-    stats = {"csv_rows": 0, "future_or_current": 0, "vehicle_rows": 0}
+    stats = {
+        "csv_rows": 0,
+        "future_or_current": 0,
+        "vehicle_rows": 0,
+        "csv_duplicate_auction_rows": 0,
+        "duplicate_active_vehicle_rows": 0,
+    }
     for raw_row in reader:
         stats["csv_rows"] += 1
         auction_id = clean(raw_row.get("ID nadmetanja"))
         if not auction_id:
             raise PonipWatchError("PONIP export has a row without a stable auction ID")
-        if auction_id in all_ids:
-            raise PonipWatchError(f"PONIP export duplicates auction ID {auction_id}")
-        all_ids.add(auction_id)
+        if auction_id in csv_ids:
+            # The official CSV repeats historic auctions when one sale spans
+            # more than one asset class (for example real estate and movable
+            # property). This is not a duplicate public auction page.
+            stats["csv_duplicate_auction_rows"] += 1
+        csv_ids.add(auction_id)
         end = parse_local_datetime(raw_row.get("Datum i vrijeme završetka nadmetanja"))
         if end is None or end <= now:
             continue
@@ -210,6 +220,18 @@ def parse_export(
         normalized = row_to_watch(raw_row, observed_at=observed_at, now=now)
         if normalized is None:
             raise PonipWatchError(f"PONIP active vehicle {auction_id} was not normalized")
+        existing = active_by_auction_id.get(auction_id)
+        if existing is not None:
+            identity = (
+                "title", "url", "price_amount", "canonical_end_utc", "sale_event_utc"
+            )
+            if all(existing.get(key) == normalized.get(key) for key in identity):
+                stats["duplicate_active_vehicle_rows"] += 1
+                continue
+            raise PonipWatchError(
+                f"PONIP active vehicle auction {auction_id} has conflicting duplicate rows"
+            )
+        active_by_auction_id[auction_id] = normalized
         rows.append(normalized)
         stats["vehicle_rows"] += 1
 
@@ -305,6 +327,8 @@ def build_watch(
         "csv_rows": stats["csv_rows"],
         "future_or_current_rows": stats["future_or_current"],
         "vehicle_rows": stats["vehicle_rows"],
+        "csv_duplicate_auction_rows": stats["csv_duplicate_auction_rows"],
+        "duplicate_active_vehicle_rows": stats["duplicate_active_vehicle_rows"],
         "stable_ids_unique": True,
         "publication_ready": False,
     }

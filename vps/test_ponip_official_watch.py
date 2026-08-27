@@ -87,6 +87,22 @@ class PonipWatchTest(unittest.TestCase):
                 now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
             )
 
+    def test_historical_cross_category_duplicate_does_not_block_current_catalogue(self) -> None:
+        export = HEADER + (
+            '"Historic property with equipment";"nekretnina";"9001";'
+            '"2024-01-01 10:00:00";"2024-01-02 10:00:00";"1000"\n'
+            '"Historic property with equipment";"pokretnina";"9001";'
+            '"2024-01-01 10:00:00";"2024-01-02 10:00:00";"1000"\n'
+        )
+        rows, stats = watch.parse_export(
+            export.encode("utf-8"),
+            observed_at="2026-08-27T20:00:00+00:00",
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(stats["csv_duplicate_auction_rows"], 1)
+        self.assertEqual(stats["duplicate_active_vehicle_rows"], 0)
+
     def test_chunked_complete_export_is_reconciled(self) -> None:
         export = HEADER + (
             '"Osobni automobil Toyota Prius hibrid";"pokretnina";"1001";'
