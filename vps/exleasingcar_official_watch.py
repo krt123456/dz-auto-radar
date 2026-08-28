@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from bs4 import BeautifulSoup, Tag
+from lxml import etree, html as lxml_html
+from lxml.html import HtmlElement
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -64,6 +65,17 @@ PRICE_RE = re.compile(
     re.I,
 )
 PAGE_RE = re.compile(r"/(?:show-\d+/)?(\d+)/?$")
+CARD_XPATH = (
+    "//div[contains(concat(' ', normalize-space(@class), ' '), ' auto-block ') "
+    "and @car-id]"
+)
+FLAG_XPATH = (
+    ".//*[contains(concat(' ', normalize-space(@class), ' '), ' flag-image ')]"
+)
+PAGINATION_XPATH = (
+    "//a[contains(concat(' ', normalize-space(@class), ' '), ' pagination-page ') "
+    "and @href]"
+)
 
 
 class ExleasingcarWatchError(RuntimeError):
@@ -114,10 +126,10 @@ def parse_total(markup: str) -> int:
     return int(total)
 
 
-def parse_page_url_prefix(soup: BeautifulSoup) -> tuple[int, str]:
+def parse_page_url_prefix(tree: HtmlElement) -> tuple[int, str]:
     candidates: list[tuple[int, str]] = []
-    for anchor in soup.select("a.pagination-page[href]"):
-        text = clean(anchor.get_text(" ", strip=True))
+    for anchor in tree.xpath(PAGINATION_XPATH):
+        text = clean(anchor.text_content())
         href = clean(anchor.get("href"))
         if not text.isdigit() or not href:
             continue
@@ -134,9 +146,9 @@ def parse_page_url_prefix(soup: BeautifulSoup) -> tuple[int, str]:
     return page_count, prefix
 
 
-def country_from_card(card: Tag) -> str:
-    for node in card.select(".flag-image"):
-        for css_class in node.get("class") or []:
+def country_from_card(card: HtmlElement) -> str:
+    for node in card.xpath(FLAG_XPATH):
+        for css_class in clean(node.get("class")).split():
             match = re.fullmatch(r"flag-([a-z]{2})", str(css_class).lower())
             if match:
                 return match.group(1).upper()
@@ -162,15 +174,15 @@ def normalize_fuel(text: str) -> str:
     return "unknown"
 
 
-def parse_card(card: Tag, *, observed_at: str) -> dict[str, Any]:
+def parse_card(card: HtmlElement, *, observed_at: str) -> dict[str, Any]:
     raw_id = clean(card.get("car-id"))
     if not raw_id.isdigit():
         raise ExleasingcarWatchError("Exleasingcar card has no stable vehicle ID")
-    heading = card.select_one("h5")
-    title = clean(heading.get_text(" ", strip=True) if heading else "")
+    headings = card.xpath(".//h5")
+    title = clean(headings[0].text_content() if headings else "")
     if not title:
         raise ExleasingcarWatchError(f"Exleasingcar card {raw_id} has no title")
-    card_text = clean(card.get_text(" ", strip=True))
+    card_text = clean(" ".join(card.itertext()))
     year_match = YEAR_RE.search(card_text)
     year_value = (year_match.group(1) or year_match.group(2)) if year_match else ""
     mileage_match = MILEAGE_RE.search(card_text)
@@ -215,10 +227,13 @@ def parse_card(card: Tag, *, observed_at: str) -> dict[str, Any]:
 
 
 def parse_page(markup: str, *, observed_at: str) -> ParsedPage:
-    soup = BeautifulSoup(markup, "html.parser")
     total = parse_total(markup)
-    page_count, prefix = parse_page_url_prefix(soup)
-    cards = soup.select("div.auto-block[car-id]")
+    try:
+        tree = lxml_html.fromstring(markup)
+    except (etree.ParserError, ValueError) as error:
+        raise ExleasingcarWatchError("Exleasingcar page markup is invalid") from error
+    page_count, prefix = parse_page_url_prefix(tree)
+    cards = tree.xpath(CARD_XPATH)
     rows = [parse_card(card, observed_at=observed_at) for card in cards]
     ids = [row["id"] for row in rows]
     if not rows or len(ids) != len(set(ids)):
