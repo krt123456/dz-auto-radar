@@ -58,6 +58,15 @@ MILEAGE_RE = re.compile(r"\b([0-9][0-9\s,.\u00a0]*)\s*km\b", re.I)
 PRICE_RE = re.compile(r"(?<![0-9])([0-9][0-9\s,.\u00a0]*)\s*(?:\u20ac|eur)", re.I)
 BID_RE = re.compile(r"\b([0-9][0-9\s,.\u00a0]*)\s+tarjousta\b", re.I)
 LOCATION_RE = re.compile(r",\s*(?:19[7-9]\d|20[0-2]\d)\s*,\s*(.+)$")
+# The source's Henkilöautot category can exceptionally contain a converted
+# motorhome. Retain its card in the coverage reconciliation, but never emit it
+# as a passenger car. "caravan" is deliberately not a trigger because it is
+# also a passenger-car model name.
+RECREATIONAL_VEHICLE_RE = re.compile(
+    r"\b(?:matkailuauto|asuntoauto|matkailuvaunu|motorhome|camper|solifer|adria)\b"
+    r"|\bfiat\s+hobby\b|\bhobby\s+(?:bui|viseo|prestige|de\s+luxe)\b",
+    re.I,
+)
 
 
 class HuutokaupatWatchError(RuntimeError):
@@ -130,6 +139,11 @@ def normalize_fuel(value: Any) -> str:
     if re.search(r"\b(?:kaasu|lpg|cng)\b", folded):
         return "gas"
     return "unknown"
+
+
+def is_explicit_recreational_vehicle(title: str) -> bool:
+    """Identify an explicit motorhome/caravan conversion on a category card."""
+    return bool(RECREATIONAL_VEHICLE_RE.search(ascii_fold(title)))
 
 
 def configured_session() -> requests.Session:
@@ -212,6 +226,7 @@ def parse_card(card: Tag, *, observed_at: str) -> dict[str, Any]:
     bid_match = BID_RE.search(card_text)
     location_match = LOCATION_RE.search(title)
     price = positive_number(price_match.group(1)) if price_match else None
+    recreational_vehicle = is_explicit_recreational_vehicle(title)
     return {
         "id": f"{SOURCE_KEY}:{lot_id}",
         "source": SOURCE_KEY,
@@ -222,8 +237,12 @@ def parse_card(card: Tag, *, observed_at: str) -> dict[str, Any]:
         "model": title,
         "country": "FI",
         "asset_country": "FI",
-        "category": "car",
+        # Keep every card in the internal snapshot so declared-total and ID
+        # reconciliation remain exact; build_watch filters this explicit
+        # source exclusion from emitted passenger-car rows.
+        "category": "non_car" if recreational_vehicle else "car",
         "category_raw": "Henkilöautot",
+        "source_exclusion_reason": "recreational_vehicle" if recreational_vehicle else "",
         "year": int(year_match.group(1)) if year_match else None,
         "mileage_km": positive_number(mileage_match.group(1)) if mileage_match else None,
         "fuel": normalize_fuel(card_text),
@@ -459,13 +478,15 @@ def _build_moving_catalogue_snapshot(
             add_rows(latest)
             if len(rows_by_id) >= latest.total:
                 rows = [rows_by_id[row_id] for row_id in sorted(rows_by_id)]
+                passenger_rows = [row for row in rows if row["category"] == "car"]
                 report = {
                     "status": "ok",
                     "connector_status": "ok",
                     "catalogue_scope": "every public card in the advancing passenger-car category",
                     "declared": latest.total,
                     "visited": len(rows),
-                    "normalized_rows": len(rows),
+                    "normalized_rows": len(passenger_rows),
+                    "source_excluded": len(rows) - len(passenger_rows),
                     "page_size": len(latest.rows),
                     "pages": latest.page_count,
                     "maximum_pages_seen": max_pages_seen,
@@ -481,8 +502,8 @@ def _build_moving_catalogue_snapshot(
                     "generated_at_utc": observed_at,
                     "research_only": True,
                     "publication_status": "review_required",
-                    "row_count": len(rows),
-                    "rows": rows,
+                    "row_count": len(passenger_rows),
+                    "rows": passenger_rows,
                     "source_reports": {SOURCE_KEY: report},
                 }
             seed = latest
@@ -539,13 +560,15 @@ def build_watch(
             moving_report["strict_snapshot_last_error"] = str(last_snapshot_change)
             return payload
 
+        passenger_rows = [row for row in rows if row["category"] == "car"]
         report = {
             "status": "ok",
             "connector_status": "ok",
             "catalogue_scope": "every public card in the passenger-car category",
             "declared": first.total,
             "visited": len(rows),
-            "normalized_rows": len(rows),
+            "normalized_rows": len(passenger_rows),
+            "source_excluded": len(rows) - len(passenger_rows),
             "page_size": len(first.rows),
             "pages": first.page_count,
             "first_page_rechecked": True,
@@ -559,8 +582,8 @@ def build_watch(
             "generated_at_utc": observed_at,
             "research_only": True,
             "publication_status": "review_required",
-            "row_count": len(rows),
-            "rows": rows,
+            "row_count": len(passenger_rows),
+            "rows": passenger_rows,
             "source_reports": {SOURCE_KEY: report},
         }
     finally:

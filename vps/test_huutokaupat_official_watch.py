@@ -102,6 +102,35 @@ class HuutokaupatWatchTest(unittest.TestCase):
         self.assertEqual(rows["huutokaupat:13"]["auction_status"], "ended")
         self.assertTrue(all(row["adapter_authorized"] for row in rows.values()))
 
+    def test_explicit_recreational_vehicle_is_covered_but_not_emitted(self) -> None:
+        self.assertTrue(watch.is_explicit_recreational_vehicle("Fiat Ducato SOLIFER 6700"))
+        self.assertTrue(watch.is_explicit_recreational_vehicle("Fiat Hobby BUI707 Viseo D 650 ES"))
+        self.assertFalse(watch.is_explicit_recreational_vehicle("Dodge Caravan 3.6 V6"))
+        first = page(
+            3,
+            1,
+            2,
+            card(11, "Mazda 5, 2024, Raisio", "Bensiini, 12000 km", 450, 5)
+            + card(12, "Toyota Yaris, 2025, Turku", "Hybridi, 8000 km", 8200, 3),
+        )
+        recreational = page(
+            3,
+            2,
+            2,
+            card(13, "Adria Matrix M 670SBC, 2016 Matkailuauto, Tuusula", "Diesel", 3600, 2),
+        )
+        payload = watch.build_watch(
+            session=Session({watch.SOURCE_URL: first, watch.page_url(2): recreational}),
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+            workers=1,
+        )
+        report = payload["source_reports"]["huutokaupat"]
+        self.assertEqual(report["declared"], 3)
+        self.assertEqual(report["visited"], 3)
+        self.assertEqual(report["source_excluded"], 1)
+        self.assertEqual(payload["row_count"], 2)
+        self.assertTrue(all(row["category"] == "car" for row in payload["rows"]))
+
     def test_retries_when_a_live_page_moves_between_snapshot_attempts(self) -> None:
         changed_page = PAGE_2.replace("3 ilmoitusta, sivu 2", "4 ilmoitusta, sivu 2")
         session = SequencedSession({
