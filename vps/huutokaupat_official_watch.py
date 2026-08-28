@@ -68,6 +68,10 @@ class HuutokaupatSnapshotChanged(HuutokaupatWatchError):
     """The live paginated category changed while it was being enumerated."""
 
 
+class HuutokaupatPageUnavailable(HuutokaupatSnapshotChanged):
+    """A requested page fell outside the catalogue while it was changing."""
+
+
 @dataclass(frozen=True)
 class ParsedPage:
     total: int
@@ -141,8 +145,13 @@ def configured_session() -> requests.Session:
 
 def fetch_markup(session: requests.Session, url: str, *, timeout: int) -> str:
     response = session.get(url, headers=HEADERS, timeout=timeout)
-    response.raise_for_status()
-    return response.text
+    try:
+        response.raise_for_status()
+        return response.text
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
 
 
 def page_url(page: int) -> str:
@@ -160,11 +169,12 @@ def parse_metadata(markup: str) -> tuple[int, int, int]:
     total = positive_number(total_match.group(1))
     current_page = int(total_match.group(2))
     page_count = int(page_match.group(1))
-    if (
-        total is None or int(total) != total or current_page < 1
-        or page_count < current_page or page_count > MAX_PAGES
-    ):
+    if total is None or int(total) != total or current_page < 1 or page_count < 1 or page_count > MAX_PAGES:
         raise HuutokaupatWatchError("Huutokaupat category metadata is invalid")
+    if page_count < current_page:
+        raise HuutokaupatPageUnavailable(
+            "Huutokaupat requested page fell outside the changing catalogue"
+        )
     return int(total), current_page, page_count
 
 
@@ -321,7 +331,11 @@ def _validate_moving_page(
     authoritative for traversal; the latest first page supplies the final
     declared count after stable IDs have been accumulated.
     """
-    if parsed.current_page != page or parsed.page_count < 1 or parsed.page_count > MAX_PAGES:
+    if parsed.current_page != page:
+        if page > parsed.page_count:
+            return False
+        raise HuutokaupatWatchError("Huutokaupat moving catalogue returned the wrong page")
+    if parsed.page_count < 1 or parsed.page_count > MAX_PAGES:
         raise HuutokaupatWatchError("Huutokaupat moving catalogue has invalid pagination")
     if page > parsed.page_count:
         return False
@@ -411,7 +425,14 @@ def _build_moving_catalogue_snapshot(
                 with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                     futures = {executor.submit(fetch_and_parse_page, page): page for page in batch}
                     for future in concurrent.futures.as_completed(futures):
-                        page, parsed = future.result()
+                        try:
+                            page, parsed = future.result()
+                        except HuutokaupatPageUnavailable:
+                            # A trailing page can disappear while the public
+                            # counter and pagination are advancing.  The final
+                            # first-page recheck below determines the current
+                            # target total before any output is accepted.
+                            continue
                         if _validate_moving_page(parsed, page=page, page_size=page_size):
                             add_rows(parsed)
                             visited_pages.add(page)

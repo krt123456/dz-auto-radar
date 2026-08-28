@@ -167,6 +167,47 @@ class HuutokaupatWatchTest(unittest.TestCase):
         )
         self.assertTrue(watch._validate_moving_page(parsed, page=1, page_size=2))
 
+    def test_moving_coverage_skips_a_page_that_falls_off_the_catalogue(self) -> None:
+        final = page(
+            2,
+            1,
+            1,
+            card(11, "Mazda 5, 2024, Raisio", "Bensiini, 12000 km", 450, 5)
+            + card(12, "Toyota Yaris, 2025, Turku", "Hybridi, 8000 km", 8200, 3),
+        )
+        disappeared_page = page(
+            2,
+            2,
+            1,
+            card(13, "Ford Focus, 2023, Kuopio", "Diesel, 45000 km", 3600, 2),
+        )
+        sequence_session = SequencedSession({
+            watch.SOURCE_URL: [PAGE_1, final],
+            watch.page_url(2): [disappeared_page],
+        })
+        original_factory = watch.configured_session
+        try:
+            watch.configured_session = lambda: sequence_session  # type: ignore[assignment]
+            payload = watch._build_moving_catalogue_snapshot(
+                session=sequence_session,
+                now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+                workers=1,
+            )
+        finally:
+            watch.configured_session = original_factory
+        self.assertEqual(payload["row_count"], 2)
+        self.assertEqual(payload["source_reports"]["huutokaupat"]["declared"], 2)
+
+    def test_page_beyond_current_pagination_is_a_snapshot_change(self) -> None:
+        disappeared_page = page(
+            2,
+            2,
+            1,
+            card(13, "Ford Focus, 2023, Kuopio", "Diesel, 45000 km", 3600, 2),
+        )
+        with self.assertRaises(watch.HuutokaupatPageUnavailable):
+            watch.parse_page(disappeared_page, observed_at="2026-08-27T20:00:00+00:00")
+
     def test_mismatched_page_count_fails_closed(self) -> None:
         invalid = PAGE_1.replace('aria-label="Sivu 1/2"', 'aria-label="Sivu 1/3"')
         with self.assertRaises(watch.HuutokaupatWatchError):
