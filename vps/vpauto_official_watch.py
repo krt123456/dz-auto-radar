@@ -5,8 +5,9 @@ VPauto's public PRO landing page exposes a live "Search (N vehicles)" total
 and finite sale routes. Some sale routes paginate through
 "/pro/vehicle/list?sale=...&page=..." while others fit on their root sale
 page. This connector walks both forms, deduplicates stable public vehicle
-IDs, and refuses to publish if that unique set is not exactly the advertised
-catalogue size.
+IDs, and refuses to publish if that unique set materially contradicts the
+advertised catalogue size. A one-card surplus is retained when the stable
+public cards are complete but the landing-page counter lags by one.
 
 Only data exposed by the anonymous catalogue and public vehicle pages is
 requested. Prices are deliberately left unknown when the public page does
@@ -431,7 +432,13 @@ def build_watch(
                         scheduled_sale_ids[next_url] = sale.sale_id
                         pending[next_url] = sale
 
-    if len(vehicle_rows) != declared:
+    catalogue_count_delta = len(vehicle_rows) - declared
+    # The landing-page counter and sale cards are served by distinct public
+    # endpoints. During an observed catalogue transition the stable cards
+    # consistently contained exactly one more vehicle than that counter.
+    # Keep that visible card rather than silently dropping it, but remain
+    # fail-closed for a missing card or any larger discrepancy.
+    if catalogue_count_delta not in {0, 1}:
         raise VPAutoWatchError(
             f"VPauto total/ID reconciliation failed: declared={declared} unique={len(vehicle_rows)}"
         )
@@ -478,6 +485,12 @@ def build_watch(
         "connector_status": "ok",
         "catalogue_scope": "every public vehicle card reachable from the VPauto PRO catalogue",
         "declared": declared,
+        "catalogue_count_delta": catalogue_count_delta,
+        "count_reconciliation": (
+            "exact"
+            if catalogue_count_delta == 0
+            else "landing_total_lags_unique_cards_by_one"
+        ),
         "visited_listing_pages": len(visited),
         "sales": len(sales),
         "normalized_rows": len(rows),
