@@ -74,6 +74,8 @@ class StableSession:
             self_params = params or {}
             if self_params.get("aid") != "111" or self_params.get("tcsp") != "0":
                 raise AssertionError(f"unexpected catalogue request {self_params}")
+            if self_params.get("tnoipp") != "1000":
+                raise AssertionError(f"catalogue must use one-page reconciliation {self_params}")
             return FakeResponse(CATALOGUE_HTML, CATALOGUE_URL)
         raise AssertionError(f"unexpected URL {url}")
 

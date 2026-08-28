@@ -40,7 +40,10 @@ SOURCE_NAME = "Autorola Europe"
 AUCTIONS_URL = "https://www.autorola.eu/dealer/auctions"
 CATALOGUE_URL = "https://www.autorola.eu/dealer/sc"
 DETAIL_BASE_URL = "https://www.autorola.eu/dealer/"
-PAGE_SIZE = 100
+# The public endpoint accepts up to 1,000 cards per catalogue response.  A
+# single authoritative page avoids a moving near-close auction shifting rows
+# between page boundaries while it is reconciled.
+PAGE_SIZE = 1_000
 # This is an operational safety bound, not a publication cap.  It is large
 # enough for every presently public Autorola route and can be raised from CLI.
 DEFAULT_MAX_CATALOGUE_ROWS = 1_000_000
