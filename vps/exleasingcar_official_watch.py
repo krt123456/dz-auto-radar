@@ -40,9 +40,13 @@ SOURCE_NAME = "Exleasingcar"
 SOURCE_URL = "https://www.exleasingcar.com/en/auto-auction/show-60/1"
 PAGE_SIZE = 60
 DEFAULT_TIMEOUT = 30
-DEFAULT_WORKERS = 12
+DEFAULT_WORKERS = 16
 MAX_PAGES = 2_000
-CATALOGUE_CHANGE_RETRY_ATTEMPTS = 3
+# A live catalogue can advance during a complete pass.  At 60 cards/page and
+# 16 normal public-page workers, a full pass is short enough to retry several
+# coherent snapshots within the service watchdog instead of silently losing the
+# whole large car source after three unlucky catalogue changes.
+CATALOGUE_CHANGE_RETRY_ATTEMPTS = 8
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",

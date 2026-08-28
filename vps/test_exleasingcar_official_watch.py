@@ -48,6 +48,8 @@ class Session:
 class ExleasingcarWatchTest(unittest.TestCase):
     def test_default_catalogue_route_uses_largest_public_page_size(self) -> None:
         self.assertEqual(watch.PAGE_SIZE, 60)
+        self.assertEqual(watch.DEFAULT_WORKERS, 16)
+        self.assertEqual(watch.CATALOGUE_CHANGE_RETRY_ATTEMPTS, 8)
         self.assertTrue(watch.SOURCE_URL.endswith("/show-60/1"))
 
     def test_current_show_results_counter_is_accepted(self) -> None:

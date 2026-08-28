@@ -175,7 +175,7 @@ run_official_watch "exleasingcar" \
   python3 /opt/sonardeals-radar/exleasingcar_official_watch.py \
   --out "$EXLEASINGCAR_WATCH" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
-  --workers "${RADAR_EXLEASINGCAR_WATCH_WORKERS:-12}" &
+  --workers "${RADAR_EXLEASINGCAR_WATCH_WORKERS:-16}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "vpauto" \
   python3 /opt/sonardeals-radar/vpauto_official_watch.py \
