@@ -32,8 +32,12 @@ from urllib3.util.retry import Retry
 UTC = dt.timezone.utc
 SOURCE_KEY = "exleasingcar"
 SOURCE_NAME = "Exleasingcar"
-SOURCE_URL = "https://www.exleasingcar.com/en/auto-auction/all"
-PAGE_SIZE = 20
+# The public catalogue explicitly offers ``show-20``, ``show-40`` and
+# ``show-60`` routes.  Start from the largest visible page size so a complete
+# reconciled snapshot does not spend most of the service window walking the
+# same catalogue in 20-card pages.
+SOURCE_URL = "https://www.exleasingcar.com/en/auto-auction/show-60/1"
+PAGE_SIZE = 60
 DEFAULT_TIMEOUT = 30
 DEFAULT_WORKERS = 12
 MAX_PAGES = 2_000

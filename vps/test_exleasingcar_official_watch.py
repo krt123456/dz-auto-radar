@@ -46,6 +46,10 @@ class Session:
 
 
 class ExleasingcarWatchTest(unittest.TestCase):
+    def test_default_catalogue_route_uses_largest_public_page_size(self) -> None:
+        self.assertEqual(watch.PAGE_SIZE, 60)
+        self.assertTrue(watch.SOURCE_URL.endswith("/show-60/1"))
+
     def test_current_show_results_counter_is_accepted(self) -> None:
         markup = page(2, card(1, "DE", "ABARTH 500", price=7098)).replace(
             "Filter (2)", "Show results (2)"
