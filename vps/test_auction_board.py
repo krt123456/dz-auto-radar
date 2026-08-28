@@ -381,6 +381,30 @@ check("cross-border Exleasingcar card enters broad watch",
       exleasingcar_normalized is not None and exleasingcar_reason == "" and
       exleasingcar_normalized["country"] == "DE" and
       exleasingcar_normalized["eligibility_status"] == "review_required")
+exleasingcar_business_edition = dict(
+    exleasingcar_normalized,
+    id="exleasingcar:business-edition",
+    title="Audi A5 35 TDI BUS. ED. ADVANCED",
+    model="Audi A5 35 TDI BUS. ED. ADVANCED",
+)
+check("passenger-car gate keeps BUS. business-edition cars",
+      bab.is_passenger_car_watch_row(exleasingcar_business_edition), negative=True)
+exleasingcar_business_solution = dict(
+    exleasingcar_normalized,
+    id="exleasingcar:business-solution",
+    title="Mercedes GLC BUS SOL AUTO",
+    model="Mercedes GLC BUS SOL AUTO",
+)
+check("passenger-car gate keeps BUS SOL business-solution cars",
+      bab.is_passenger_car_watch_row(exleasingcar_business_solution), negative=True)
+exleasingcar_minibus = dict(
+    exleasingcar_normalized,
+    id="exleasingcar:minibus",
+    title="Ford Transit Minibus 17 seats",
+    model="Ford Transit Minibus 17 seats",
+)
+check("passenger-car gate rejects a real minibus",
+      not bab.is_passenger_car_watch_row(exleasingcar_minibus), negative=True)
 exleasingcar_unmarked, exleasingcar_unmarked_reason = bab._normalize_monitored_row(
     dict(exleasingcar_raw, id="exleasingcar:unmarked", adapter_authorized=False),
     generated_at=watch_now,

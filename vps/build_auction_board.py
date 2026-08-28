@@ -128,7 +128,12 @@ PASSENGER_CAR_MAKE_PATTERN = re.compile(
 NON_PASSENGER_CAR_TEXT_PATTERN = re.compile(
     r"\b(?:motorcycle|motorbike|motorrad|motocycle|motocicleta|motociclette|"
     r"scooter|quad|atv|utv|jet[ -]?ski|boat|yacht|trailer|caravan|camper|"
-    r"tractor|excavator|forklift|truck|lorry|lkw|van|bus|computer|laptop|"
+    # ``BUS. ED.``, ``BUS SOL`` and ``Bus Wagon`` are passenger-car trim
+    # abbreviations (Business Edition/Solution/Wagon), not buses.  Keep real
+    # buses excluded while avoiding false negatives in the public car lane.
+    r"tractor|excavator|forklift|truck|lorry|lkw|van|minibus|"
+    r"bus(?!\s*(?:\.|ed\.?\b|edition\b|sol(?:ution)?\b|wagon\b))|"
+    r"computer|laptop|"
     r"console|gaming|property|house|immobilien|wohnung)\b",
     re.IGNORECASE,
 )
