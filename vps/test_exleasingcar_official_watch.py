@@ -37,7 +37,12 @@ class Session:
         self.responses = responses
 
     def get(self, url: str, **_: object) -> Response:
-        return Response(self.responses[url])
+        response = self.responses[url]
+        if isinstance(response, list):
+            if not response:
+                raise AssertionError(f"no remaining response for {url}")
+            response = response.pop(0)
+        return Response(response)
 
 
 class ExleasingcarWatchTest(unittest.TestCase):
@@ -74,6 +79,30 @@ class ExleasingcarWatchTest(unittest.TestCase):
         self.assertEqual(payload["rows"][0]["fuel"], "petrol")
         self.assertEqual(payload["rows"][0]["year"], 2021)
         self.assertEqual(payload["rows"][0]["country"], "DE")
+
+    def test_catalogue_change_restarts_from_page_one_before_publish(self) -> None:
+        first = page(3, card(1, "DE", "ABARTH 500", price=7098) + card(2, "FR", "PEUGEOT 308", price=8200))
+        changed_second = page(4, card(3, "NL", "TOYOTA YARIS", price=6300) + card(4, "NL", "VW POLO", price=6400))
+        second = page(3, card(3, "NL", "TOYOTA YARIS", price=6300))
+        responses = {
+            watch.SOURCE_URL: [first, first, first],
+            "https://www.exleasingcar.com/en/auto-auction/show-20/2": [changed_second, second],
+        }
+        original_page_size = watch.PAGE_SIZE
+        original_factory = watch.configured_session
+        try:
+            watch.PAGE_SIZE = 2
+            watch.configured_session = lambda: Session(responses)  # type: ignore[assignment]
+            payload = watch.build_watch(
+                session=Session(responses),
+                now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+                workers=1,
+            )
+        finally:
+            watch.PAGE_SIZE = original_page_size
+            watch.configured_session = original_factory
+        self.assertEqual(payload["row_count"], 3)
+        self.assertEqual(payload["source_reports"]["exleasingcar"]["snapshot_attempts"], 2)
 
     def test_missing_country_is_rejected(self) -> None:
         markup = page(1, '<div class="auto-block" car-id="1"><h5>Car</h5></div>')

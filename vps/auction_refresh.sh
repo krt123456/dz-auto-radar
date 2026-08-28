@@ -173,7 +173,7 @@ run_official_watch "exleasingcar" \
   python3 /opt/sonardeals-radar/exleasingcar_official_watch.py \
   --out "$EXLEASINGCAR_WATCH" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
-  --workers "${RADAR_EXLEASINGCAR_WATCH_WORKERS:-4}" &
+  --workers "${RADAR_EXLEASINGCAR_WATCH_WORKERS:-12}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "vpauto" \
   python3 /opt/sonardeals-radar/vpauto_official_watch.py \
@@ -239,7 +239,9 @@ OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 
-run_official_watch "klaravik-se"   python3 /opt/sonardeals-radar/klaravik_fetcher.py   --out "$KLARAVIK_WATCH" &
+run_official_watch "klaravik-se,klaravik-dk" \
+  python3 /opt/sonardeals-radar/klaravik_official_watch.py \
+  --out "$KLARAVIK_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 
 run_official_watch "veacom-cz"   python3 /opt/sonardeals-radar/veacom_fetcher.py   --out "$VEACOM_WATCH" &

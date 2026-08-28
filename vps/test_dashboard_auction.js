@@ -421,6 +421,21 @@ try {
       access_sale_note: "DNI/NIE and bank requirements apply.", evidence: "official-boe",
     },
     {
+      id: "gaming-console", source: "pvp-giustizia", source_key: "pvp-giustizia",
+      registry_key: "pvp-giustizia", registry_priority: 6,
+      url: "https://pvp.giustizia.it/pvp/it/dettaglio_annuncio.page?id=gaming-console",
+      title: "Gaming console bundle", model: "", country: "IT", year: null,
+      mileage: null, fuel: "", seller: "court sale manager", location: "Rome",
+      category: "gaming", category_raw: "gaming equipment",
+      price_amount: 420, price_currency: "EUR", price_eur: 420,
+      price_kind: "starting_bid", price_label: "Starting bid",
+      bid_visibility: "public", registration_date: "",
+      canonical_end_utc: futureIso, last_seen_at: nowIso,
+      eligibility_status: "review_required",
+      eligibility_reason: "Item and bidder requirements require review.",
+      access_sale_note: "Registration with the sale manager applies.", evidence: "official-pvp",
+    },
+    {
       id: "auto1-adapter", source: "auto1", source_key: "auto1",
       registry_key: "auto1", registry_priority: 13,
       url: "https://www.auto1.com/offer/adapter-lot", title: "Configured AUTO1 feed",
@@ -455,6 +470,17 @@ try {
   check(evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"), "broad PVP row must be visible in all-official scope");
   check(evaluate(broad, "VIEW.some(row=>row.id==='auto1-adapter')"),
     "configured adapter row must be visible even when its registry source is otherwise blocked");
+  check(evaluate(broad, "!VIEW.some(row=>row.id==='gaming-console')"),
+    "the cars-first default must not mix generic auction lots into the vehicle view");
+  broad.document.getElementById("fcat").value = "gaming";
+  evaluate(broad, "apply();");
+  check(evaluate(broad, "VIEW.map(row=>row.id).join(',')") === "gaming-console",
+    "a gaming lot must remain visible despite having no car fuel field");
+  const gamingCard = evaluate(broad, "auctionCard(VIEW[0])");
+  check(gamingCard.includes("Gaming console bundle") && gamingCard.includes("gaming equipment") && !gamingCard.includes("⛽"),
+    "generic auction cards must display their own metadata rather than car fuel fields");
+  broad.document.getElementById("fcat").value = "vehicles";
+  evaluate(broad, "apply();");
 
   // A broad public watch may be newer than data.enc.  It must remain usable
   // after its own registry and rows validate, even when the encrypted payload
@@ -489,8 +515,8 @@ try {
   const broadCard = evaluate(broad, "auctionCard(VIEW.find(row=>row.id==='pvp-4620200'))");
   check(broadCard.includes("MG ZS 2024") && broadCard.includes("Current bid and foreign bidder access require review.") &&
     !broadCard.includes("المزايدة الحالية الظاهرة"), "base price and conditional eligibility must be labelled honestly");
-  check(evaluate(broad, "!VIEW.some(row=>row.id==='boe-hidden')"),
-    "unknown-fuel monitored rows must not leak through the accepted petrol/hybrid policy");
+  check(evaluate(broad, "VIEW.some(row=>row.id==='boe-hidden')"),
+    "a vehicle with undeclared fuel must remain visible as an unverified auction rather than being silently lost");
   broad.document.getElementById("eligibleAuctionsBtn").dispatchEvent(new Event("click"));
   check(evaluate(broad, "VIEW.every(row=>!['pvp-4620200','boe-hidden'].includes(row.id))"),
     "strict-eligible scope must exclude broad-only monitoring rows");
@@ -506,6 +532,7 @@ try {
     { ...lane(futureIso, 15_000, 3, nowIso, "f-petrol-high"), fuel: "Essence", year: 2022 },
     { ...lane(futureIso, 5_000, 4, nowIso, "f-diesel-low"), fuel: "Diesel", year: 2020 },
     { ...lane(futureIso, 7_000, 5, nowIso, "f-electric-low"), fuel: "Electric", year: 2020 },
+    { ...lane(futureIso, 8_000, 6, nowIso, "f-unknown"), fuel: "", year: 2020 },
   ];
   const filterPayload = {
     ...BASE,
@@ -515,13 +542,13 @@ try {
   bootWith(fuelFilters, filterPayload);
   check(fuelFilters.document.getElementById("ff").value === "petrol_or_hybrid", "auction fuel policy must default to petrol or hybrid");
   check(!/diesel|electric/i.test(fuelFilters.document.getElementById("ff").innerHTML), "auction fuel selector must not offer unaccepted fuels");
-  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-petrol-low,f-hybrid-low,f-petrol-high",
-    "default auction fuel policy must exclude diesel and electric rows while retaining localized petrol and hybrid labels");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-unknown,f-petrol-low,f-hybrid-low,f-petrol-high",
+    "default auction fuel policy must exclude declared diesel and electric rows while retaining petrol, hybrid, and explicitly unverified fuel rows");
 
   fuelFilters.document.getElementById("ff").value = "petrol";
   evaluate(fuelFilters, "apply();");
   check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-petrol-low,f-petrol-high",
-    "petrol-only filter must retain exactly petrol rows");
+    "petrol-only filter must retain exactly declared petrol rows");
   fuelFilters.document.getElementById("ff").value = "hybrid";
   evaluate(fuelFilters, "apply();");
   check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-hybrid-low",
@@ -538,8 +565,8 @@ try {
   fuelFilters.document.getElementById("fy2").value = "";
   fuelFilters.document.getElementById("fp").value = "0-10000";
   evaluate(fuelFilters, "apply();");
-  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-petrol-low",
-    "price range below 10,000 EUR must exclude the 10,000 EUR boundary and every unaccepted fuel");
+  check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-unknown,f-petrol-low",
+    "price range below 10,000 EUR must retain unverified fuel while excluding the 10,000 EUR boundary and declared unaccepted fuels");
   fuelFilters.document.getElementById("fp").value = "10000-15000";
   evaluate(fuelFilters, "apply();");
   check(evaluate(fuelFilters, "VIEW.map(row=>row.id).join(',')") === "f-hybrid-low",

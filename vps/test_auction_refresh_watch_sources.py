@@ -18,6 +18,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         )[0]
         self.assertIn('AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "autobid"', content)
+        self.assertIn('RADAR_EXLEASINGCAR_WATCH_WORKERS:-12', content)
         self.assertIn('VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "vpauto"', content)
         self.assertIn('HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"', content)
@@ -40,6 +41,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "kiertonet"', content)
         self.assertIn('AUKTIONSHUSET_DAB_WATCH="$STATE/runtime/auktionshuset_dab_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "auktionshuset-dab"', content)
+        self.assertIn('run_official_watch "klaravik-se,klaravik-dk"', content)
+        self.assertIn('python3 /opt/sonardeals-radar/klaravik_official_watch.py', content)
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",

@@ -89,6 +89,7 @@ install -m 0755 "$SOURCE/bilweb_official_watch.py" /opt/sonardeals-radar/bilweb_
 install -m 0755 "$SOURCE/kvdcars_official_watch.py" /opt/sonardeals-radar/kvdcars_official_watch.py
 install -m 0755 "$SOURCE/kiertonet_official_watch.py" /opt/sonardeals-radar/kiertonet_official_watch.py
 install -m 0755 "$SOURCE/auktionshuset_dab_official_watch.py" /opt/sonardeals-radar/auktionshuset_dab_official_watch.py
+install -m 0755 "$SOURCE/klaravik_official_watch.py" /opt/sonardeals-radar/klaravik_official_watch.py
 install -m 0755 "$SOURCE/pvp_official_auction_watch.py" /opt/sonardeals-radar/pvp_official_auction_watch.py
 install -m 0755 "$SOURCE/boe_kronofogden_watch_fetcher.py" /opt/sonardeals-radar/boe_kronofogden_watch_fetcher.py
 install -m 0755 "$SOURCE/fr_cz_de_official_watch.py" /opt/sonardeals-radar/fr_cz_de_official_watch.py

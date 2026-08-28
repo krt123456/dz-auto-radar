@@ -35,8 +35,9 @@ SOURCE_NAME = "Exleasingcar"
 SOURCE_URL = "https://www.exleasingcar.com/en/auto-auction/all"
 PAGE_SIZE = 20
 DEFAULT_TIMEOUT = 30
-DEFAULT_WORKERS = 4
+DEFAULT_WORKERS = 12
 MAX_PAGES = 2_000
+CATALOGUE_CHANGE_RETRY_ATTEMPTS = 3
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
@@ -242,15 +243,13 @@ def fetch_markup(session: requests.Session, url: str, *, timeout: int) -> str:
     return response.text
 
 
-def build_watch(
+def _build_watch_snapshot(
     *,
     session: requests.Session | None = None,
     now: dt.datetime | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     workers: int = DEFAULT_WORKERS,
 ) -> dict[str, Any]:
-    if timeout < 5 or workers < 1 or workers > 16:
-        raise ValueError("invalid Exleasingcar timeout/workers")
     now = now or dt.datetime.now(UTC)
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
@@ -324,6 +323,37 @@ def build_watch(
         "rows": rows,
         "source_reports": {SOURCE_KEY: report},
     }
+
+
+def build_watch(
+    *,
+    session: requests.Session | None = None,
+    now: dt.datetime | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    workers: int = DEFAULT_WORKERS,
+) -> dict[str, Any]:
+    if timeout < 5 or workers < 1 or workers > 16:
+        raise ValueError("invalid Exleasingcar timeout/workers")
+    last_error: ExleasingcarWatchError | None = None
+    for attempt in range(1, CATALOGUE_CHANGE_RETRY_ATTEMPTS + 1):
+        try:
+            payload = _build_watch_snapshot(
+                session=session,
+                now=now,
+                timeout=timeout,
+                workers=workers,
+            )
+            payload["source_reports"][SOURCE_KEY]["snapshot_attempts"] = attempt
+            return payload
+        except ExleasingcarWatchError as error:
+            # A live catalogue may legitimately advance while hundreds of
+            # public pages are read.  Restart from page one rather than
+            # accepting a mixed snapshot; the higher default concurrency
+            # keeps each retry short enough to obtain a stable complete pass.
+            if "catalogue changed" not in str(error) or attempt >= CATALOGUE_CHANGE_RETRY_ATTEMPTS:
+                raise
+            last_error = error
+    raise last_error or ExleasingcarWatchError("Exleasingcar catalogue snapshot failed")
 
 
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
