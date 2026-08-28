@@ -632,8 +632,12 @@ function validateOfficialAuctionWatch(value,lane){
   if(value===undefined||value===null)return null;
   if(typeof value!=="object"||Array.isArray(value)||value.schema_version!==1||
      value.lane!=="official_auction_watch"||typeof value.registry_digest!=="string"||
-     !lane||value.registry_digest!==lane.registry_digest||!Array.isArray(value.rows)||
+     !Array.isArray(value.rows)||
      value.row_count!==value.rows.length||typeof value.source_reports!=="object"||value.source_reports===null)throw contractFailure();
+  // The broad public watch is deliberately publishable independently of the
+  // encrypted regular-offer board.  Validate its self-contained registry and
+  // every row instead of hiding all auctions merely because data.enc belongs
+  // to an older dashboard generation.
   const sourceRegistry=parseAuctionRegistryDigest(value.registry_digest);
   const generated=timestampMs(value.generated_at_utc),age=Date.now()-generated;
   if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
@@ -1498,7 +1502,9 @@ if(typeof DecompressionStream==="undefined"){
 function boot(payload,monitoredRows=null){
   const validated=validatePayload(payload);
   const offers=validated.offers;
-  AUCTION_LANE=validated.lane;
+  // Keep the auction section available when the independently published
+  // official watch is newer than (or absent from) the encrypted board.
+  AUCTION_LANE=validated.lane||(Array.isArray(monitoredRows)?[]:null);
   AUCTION_SCOPE="all";
   if(AUCTION_LANE&&monitoredRows===null){
     try{

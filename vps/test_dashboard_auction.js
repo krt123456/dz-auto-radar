@@ -455,6 +455,29 @@ try {
   check(evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"), "broad PVP row must be visible in all-official scope");
   check(evaluate(broad, "VIEW.some(row=>row.id==='auto1-adapter')"),
     "configured adapter row must be visible even when its registry source is otherwise blocked");
+
+  // A broad public watch may be newer than data.enc.  It must remain usable
+  // after its own registry and rows validate, even when the encrypted payload
+  // has no embedded auction lane from that newer dashboard generation.
+  const independentWatch = {
+    schema_version: 1,
+    lane: "official_auction_watch",
+    registry_digest: REGISTRY,
+    generated_at_utc: nowIso,
+    row_count: 1,
+    source_reports: {},
+    rows: [broadRows[0]],
+  };
+  const independent = makeSandbox({ local });
+  independent.__payload = { ...BASE, auction_lane: null };
+  independent.__watch = independentWatch;
+  evaluate(independent,
+    "const __independentRows=validateOfficialAuctionWatch(__watch,{registry_digest:'older-dashboard'}); boot(__payload,__independentRows);");
+  check(evaluate(independent, "AUCTION_LANE !== null && AUCTION_LANE.length===0"),
+    "a valid independent watch must enable the auction section without an embedded lane");
+  check(evaluate(independent, "VIEW.map(row=>row.id).join(',')") === "pvp-4620200",
+    "a newer independently published watch must not disappear from the dashboard");
+
   broad.__unmarkedAdapter = { ...broadRows.find(row => row.id === "auto1-adapter"), adapter_authorized: false };
   let unmarkedRejected = false;
   try {

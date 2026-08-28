@@ -47,12 +47,12 @@ LEGACY_OPERATIONAL_SOURCE_KEYS = frozenset({
     "justiz-auktion", "onlineveilingmeester", "zoll-auktion", "finshop",
     "licytacje-komornik", "copart-de", "copart-es", "copart-fi",
     "oksjonikeskus", "anabi", "eaukcionai", "sodnedrazbe", "e-arveres-mnv",
-    "ropk", "nva-latvia", "caraukce", "aurena", "auctionmaster", "bilweb", "kvdcars",
+    "ropk", "nva-latvia", "caraukce", "aurena", "auctionmaster", "bilweb", "kvdcars", "kiertonet", "auktionshuset-dab",
 })
 BLOCKED_SOURCE_KEYS = frozenset({
     "retrade", "autoa-bid", "avariilised", "avcars",
     "autorola-eu", "autorola-at", "autorola-lu",
-    "autorola-pt", "autorola-sk", "kiertonet", "utrupe", "evg-auction",
+    "autorola-pt", "autorola-sk", "utrupe", "evg-auction",
     "e-leiloes", "caronsale", "ecarstrade", "ayvens-carmarket",
 })
 
@@ -336,6 +336,9 @@ _AUCTION_SOURCES: List[AuctionSource] = [
     AuctionSource("campen", "Campen Auktioner", "dk",
                   ("campenauktioner.dk",), 36,
                   "Schengen_Trusted_Online_Car_Auctions_2026: Danish auction house"),
+    AuctionSource("auktionshuset-dab", "Auktionshuset dab", "dk",
+                  ("auktionshuset.dk",), 36,
+                  "Schengen_Trusted_Online_Car_Auctions_2026: Danish public vehicle auction house"),
     AuctionSource("klaravik-dk", "Klaravik Denmark", "dk",
                   ("klaravik.dk",), 36,
                   "Schengen_Trusted_Online_Car_Auctions_2026: Scandinavian auction platform Danish arm"),

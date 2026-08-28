@@ -36,6 +36,10 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "bilweb"', content)
         self.assertIn('KVDCARS_WATCH="$STATE/runtime/kvdcars_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "kvdcars"', content)
+        self.assertIn('KIERTONET_WATCH="$STATE/runtime/kiertonet_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "kiertonet"', content)
+        self.assertIn('AUKTIONSHUSET_DAB_WATCH="$STATE/runtime/auktionshuset_dab_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "auktionshuset-dab"', content)
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
@@ -48,6 +52,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
             "AUCTIONMASTER_WATCH",
             "BILWEB_WATCH",
             "KVDCARS_WATCH",
+            "KIERTONET_WATCH",
+            "AUKTIONSHUSET_DAB_WATCH",
             "ASTE_WATCH",
             "KLARAVIK_WATCH",
             "VEACOM_WATCH",
