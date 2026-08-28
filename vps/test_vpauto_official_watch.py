@@ -109,19 +109,19 @@ class VPAutoWatchTest(unittest.TestCase):
                 fetch_details=False,
             )
 
-    def test_one_card_surplus_is_retained_when_the_landing_total_lags(self) -> None:
+    def test_public_card_surplus_is_retained_when_the_landing_total_lags(self) -> None:
         payload = watch.build_watch(
-            session=Session(self.responses(total=2)),
+            session=Session(self.responses(total=1)),
             now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
             workers=1,
             fetch_details=False,
         )
         report = payload["source_reports"]["vpauto"]
         self.assertEqual(payload["row_count"], 3)
-        self.assertEqual(report["catalogue_count_delta"], 1)
+        self.assertEqual(report["catalogue_count_delta"], 2)
         self.assertEqual(
             report["count_reconciliation"],
-            "landing_total_lags_unique_cards_by_one",
+            "landing_total_lags_unique_cards",
         )
 
 
