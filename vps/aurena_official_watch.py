@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Reconcile AURENA's complete public ``Fahrzeuge`` auction category.
+"""Reconcile AURENA's complete public ``PKW`` passenger-car category.
 
 The public AURENA web application uses one documented-by-the-page package
-endpoint to render its vehicle filter.  The response supplies an exact
+endpoint to render its passenger-car filter.  The response supplies an exact
 ``elementCount``, stable lot IDs, native EUR bid data and canonical end times.
-This connector requests every offset in that public vehicle category twice.
+This connector requests every offset in that public passenger-car category twice.
 It fails closed when the declared count, pagination, category identity or lot
 fingerprint changes, so it cannot silently publish an incomplete Austrian
 auction catalogue.
@@ -36,7 +36,9 @@ PACKAGE_URL = (
     "https://webplatform-facade.cluster.prod.aurena.services/"
     "api/v1/package/2485524364"
 )
-VEHICLE_CATEGORY_ID = 5
+VEHICLE_ROOT_CATEGORY_ID = 5
+PASSENGER_CAR_CATEGORY_ID = 36
+PASSENGER_CAR_CATEGORY_PATH = (VEHICLE_ROOT_CATEGORY_ID, PASSENGER_CAR_CATEGORY_ID)
 PAGE_SIZE = 96
 DEFAULT_TIMEOUT = 35
 
@@ -45,7 +47,7 @@ HEADERS = {
     "Accept": "application/json",
     "Accept-Language": "de-DE,de;q=0.9,en;q=0.7",
     "Origin": ROOT_URL,
-    "Referer": f"{ROOT_URL}/auktionen?c={VEHICLE_CATEGORY_ID}",
+    "Referer": f"{ROOT_URL}/auktionen?c={PASSENGER_CAR_CATEGORY_ID}",
 }
 YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 MILEAGE_RE = re.compile(
@@ -55,7 +57,7 @@ TAG_RE = re.compile(r"<[^>]+>")
 
 
 class AurenaWatchError(RuntimeError):
-    """AURENA's public vehicle category could not be reconciled safely."""
+    """AURENA's public passenger-car category could not be reconciled safely."""
 
 
 @dataclass(frozen=True)
@@ -106,7 +108,7 @@ def category_request(offset: int) -> dict[str, Any]:
             "auctions": [],
             "provinces": [],
             "brands": [],
-            "categories": [[VEHICLE_CATEGORY_ID]],
+            "categories": [list(PASSENGER_CAR_CATEGORY_PATH)],
             "bidCount": None,
         },
     }
@@ -129,33 +131,31 @@ def configured_session() -> requests.Session:
     return session
 
 
-def vehicle_category_ids(value: Any) -> frozenset[int] | None:
+def passenger_car_category_ids(value: Any) -> frozenset[int] | None:
     if not isinstance(value, dict):
         return None
     categories = value.get("categories")
     if not isinstance(categories, list) or not categories:
         return None
-    ids: set[int] = set()
-    has_vehicle_root = False
-    for category in categories:
-        if not isinstance(category, dict):
+    if len(categories) != 1:
+        return None
+    category = categories[0]
+    if not isinstance(category, dict):
+        return None
+    path = category.get("path")
+    if not isinstance(path, list) or len(path) != len(PASSENGER_CAR_CATEGORY_PATH):
+        return None
+    ids: list[int] = []
+    for node in path:
+        if not isinstance(node, dict) or not isinstance(node.get("id"), int):
             return None
-        path = category.get("path")
-        if not isinstance(path, list) or not path:
-            return None
-        for node in path:
-            if not isinstance(node, dict) or not isinstance(node.get("id"), int):
-                return None
-            ids.add(node["id"])
-            has_vehicle_root = has_vehicle_root or node["id"] == VEHICLE_CATEGORY_ID
-        subcategories = category.get("subcategories")
-        if not isinstance(subcategories, list):
-            return None
-        for node in subcategories:
-            if not isinstance(node, dict) or not isinstance(node.get("id"), int):
-                return None
-            ids.add(node["id"])
-    return frozenset(ids) if has_vehicle_root and VEHICLE_CATEGORY_ID in ids else None
+        ids.append(node["id"])
+    if tuple(ids) != PASSENGER_CAR_CATEGORY_PATH:
+        return None
+    subcategories = category.get("subcategories")
+    if not isinstance(subcategories, list) or subcategories:
+        return None
+    return frozenset({PASSENGER_CAR_CATEGORY_ID})
 
 
 def canonical_end(value: Any) -> dt.datetime:
@@ -209,9 +209,9 @@ def item_to_row(
         raise AurenaWatchError("AURENA vehicle has an invalid stable identity")
     if not isinstance(lot_id, int) or not isinstance(auction_id, int) or lot_id <= 0 or auction_id <= 0:
         raise AurenaWatchError("AURENA vehicle has no stable lot or auction identity")
-    allowed_categories = category_ids or frozenset({VEHICLE_CATEGORY_ID})
+    allowed_categories = category_ids or frozenset({PASSENGER_CAR_CATEGORY_ID})
     if item.get("cat") not in allowed_categories:
-        raise AurenaWatchError(f"AURENA category response contains non-vehicle lot {lot_id}")
+        raise AurenaWatchError(f"AURENA PKW response contains non-passenger-car lot {lot_id}")
     title = localized_lot_text(item, "ti")
     description = localized_lot_text(item, "de")
     if not title:
@@ -258,8 +258,8 @@ def item_to_row(
         "model": title,
         "country": "AT",
         "asset_country": "AT",
-        "category": "vehicle",
-        "category_raw": "Fahrzeuge",
+        "category": "car",
+        "category_raw": "PKW",
         "year": year,
         "mileage": mileage,
         "mileage_km": mileage,
@@ -310,9 +310,9 @@ def fetch_page(
         raise AurenaWatchError("AURENA vehicle package has an invalid element count")
     if payload.get("offset") != offset or payload.get("limit") != PAGE_SIZE:
         raise AurenaWatchError("AURENA vehicle package pagination does not match the requested offset")
-    category_ids = vehicle_category_ids(payload.get("filter"))
+    category_ids = passenger_car_category_ids(payload.get("filter"))
     if category_ids is None:
-        raise AurenaWatchError("AURENA package does not confirm the Fahrzeuge category")
+        raise AurenaWatchError("AURENA package does not confirm the dedicated PKW category")
     items = payload.get("items")
     if not isinstance(items, list):
         raise AurenaWatchError("AURENA vehicle package has no list of lots")
@@ -380,7 +380,7 @@ def build_watch(
         report = {
             "status": "ok",
             "connector_status": "ok",
-            "catalogue_scope": "every public current AURENA Fahrzeuge category lot",
+            "catalogue_scope": "every public current AURENA PKW passenger-car category lot",
             "declared": first.element_count,
             "publicly_listed": len(first.rows),
             "visited": len(first.rows),

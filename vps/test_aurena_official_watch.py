@@ -16,7 +16,7 @@ def item(lot_id: int, *, auction_id: int = 400, bid: int = 5300) -> dict[str, ob
     return {
         "lid": lot_id,
         "aid": auction_id,
-        "cat": 5,
+        "cat": 36,
         "et": END_MS,
         "hib": {"id": lot_id + 900, "val": bid},
         "sp": 2000,
@@ -35,7 +35,10 @@ def response(offset: int, element_count: int, items: list[dict[str, object]]) ->
             "auctions": [],
             "provinces": [],
             "brands": [],
-            "categories": [{"path": [{"id": 5, "lots": element_count}], "subcategories": []}],
+            "categories": [{
+                "path": [{"id": 5, "lots": element_count}, {"id": 36, "lots": element_count}],
+                "subcategories": [],
+            }],
         },
         "limit": 96,
         "offset": offset,
@@ -76,7 +79,7 @@ class Session:
     def assert_request(value: dict[str, object]) -> None:
         assert value["limit"] == 96
         assert value["filter"] == {
-            "auctions": [], "provinces": [], "brands": [], "categories": [[5]], "bidCount": None,
+            "auctions": [], "provinces": [], "brands": [], "categories": [[5, 36]], "bidCount": None,
         }
 
 
@@ -93,20 +96,25 @@ class AurenaWatchTest(unittest.TestCase):
         self.assertEqual(row["price_eur"], 5300)
         self.assertEqual(row["canonical_end_utc"], "2026-08-30T12:30:00+00:00")
 
-    def test_vehicle_category_descendants_are_preserved(self) -> None:
-        category_ids = watch.vehicle_category_ids({
+    def test_dedicated_passenger_car_category_is_required(self) -> None:
+        category_ids = watch.passenger_car_category_ids({
             "categories": [{
-                "path": [{"id": 5, "lots": 2}],
-                "subcategories": [{"id": 36, "lots": 2}],
+                "path": [{"id": 5, "lots": 2}, {"id": 36, "lots": 2}],
+                "subcategories": [],
             }],
         })
-        self.assertEqual(category_ids, frozenset({5, 36}))
+        self.assertEqual(category_ids, frozenset({36}))
         vehicle = item(10)
-        vehicle["cat"] = 36
         row = watch.item_to_row(
             vehicle, observed_at=NOW.isoformat(), now=NOW, category_ids=category_ids
         )
-        self.assertEqual(row["category_raw"], "Fahrzeuge")
+        self.assertEqual(row["category"], "car")
+        self.assertEqual(row["category_raw"], "PKW")
+        vehicle["cat"] = 35
+        with self.assertRaisesRegex(watch.AurenaWatchError, "non-passenger-car"):
+            watch.item_to_row(
+                vehicle, observed_at=NOW.isoformat(), now=NOW, category_ids=category_ids
+            )
 
     def test_two_complete_passes_emit_every_declared_vehicle_lot(self) -> None:
         lots = [item(index) for index in range(1, 98)]
