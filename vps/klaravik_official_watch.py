@@ -140,15 +140,43 @@ def category_context(item: dict[str, Any]) -> str:
     ))
 
 
+def category_labels(item: dict[str, Any]) -> str:
+    """Return only the catalogue hierarchy, not incidental product wording."""
+    return ascii_fold(" ".join(
+        clean(item.get(key))
+        for key in ("categoryNameLevel1", "categoryNameLevel2", "categoryNameLevel3")
+    ))
+
+
 def category_for_item(item: dict[str, Any]) -> str:
     text = category_context(item)
-    # A residential building advertised together with a plot is still a
-    # property, whereas an empty plot is classified as land below.
-    if re.search(r"\b(?:villa|bostad(?:er)?|fritidshus|sommarhus|summer house|lejlighed|lagenhet|hus(?!vagn)\b)\b", text):
+    title = ascii_fold(clean(item.get("name")))
+    labels = category_labels(item)
+    real_estate_category = bool(re.search(
+        r"\b(?:fastighet(?:er|en)?|fastigheder|ejendom(?:me)?|real estate|immobili(?:are|en)?|property)\b",
+        labels,
+    ))
+    residential = bool(re.search(
+        r"\b(?:villa|bostad(?:er)?|fritidshus|sommarhus|summer house|lejlighed|lagenhet|hus(?!vagn)\b)\b",
+        title,
+    ))
+    direct_property = bool(re.search(
+        r"\b(?:fastighet(?:er|en)?|fastigheder|ejendom(?:me)?|commercial property|erhvervsejendom|warehouse property)\b",
+        title,
+    ))
+    land_terms = re.compile(
+        r"\b(?:tomt(?:er|en)?|grund(?:e|en|er)?|jordbruksmark|skogsmark|building plot|land parcel|byggeklar)\b"
+    )
+    direct_land = bool(land_terms.search(title))
+    category_land = bool(land_terms.search(labels))
+    # A home with a plot belongs in properties; an explicit plot term or a
+    # real-estate category prevents movable cabins and product names such as
+    # "Mark II" from leaking into the real-estate filters.
+    if residential and (real_estate_category or direct_land or direct_property):
         return "property"
-    if re.search(r"\b(?:tomt(?:er|en)?|grund(?:e|en|er)?|mark(?:omrade|areal|parcel)?|jordbruksmark|skogsmark|building plot|land parcel|byggeklar)\b", text):
+    if direct_land or (real_estate_category and category_land):
         return "land"
-    if re.search(r"\b(?:fastighet(?:er|en)?|ejendom(?:me)?|bostad(?:er)?|villa|fritidshus|sommarhus|summer house|lejlighed|lagenhet|commercial property|erhvervsejendom|warehouse property|hus(?!vagn)\b)\b", text):
+    if real_estate_category or direct_property:
         return "property"
     if re.search(r"\b(?:vandscooter[a-z]*|jet[- ]?ski[a-z]*|sea[- ]?doo|waverunner|personal watercraft)\b", text):
         return "jetski"
@@ -185,10 +213,10 @@ def property_type_for_item(item: dict[str, Any], category: str) -> str:
     if category != "property":
         return ""
     text = category_context(item)
-    if re.search(r"\b(?:erhverv|commercial|warehouse|industri|office|kontor|butik)\b", text):
-        return "commercial"
     if re.search(r"\b(?:villa|bostad|fritidshus|sommarhus|lejlighed|lagenhet|hus(?!vagn)\b)\b", text):
         return "residential"
+    if re.search(r"\b(?:erhverv|commercial|warehouse|industri|office|kontor|butik)\b", text):
+        return "commercial"
     return "property"
 
 
