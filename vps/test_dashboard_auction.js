@@ -509,6 +509,9 @@ try {
     "the car-only scope must exclude gaming, property, and land lots");
   check(!html.includes('<option value="motorcycle">') && !html.includes('<option value="property">') &&
     !html.includes('<option value="jetski">'), "the auction category selector must no longer expose non-car modes");
+  broad.__landRover = { ...broadRows[0], id: "land-rover", title: "Land Rover Discovery", model: "Land Rover Discovery", category: "unknown" };
+  check(evaluate(broad, "isPassengerCarAuction(__landRover)"),
+    "the car-only classifier must not mistake Land Rover for a land listing");
 
   // A broad public watch may be newer than data.enc.  It must remain usable
   // after its own registry and rows validate, even when the encrypted payload

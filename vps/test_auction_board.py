@@ -344,6 +344,16 @@ check("broad watch preserves a declared property subtype",
 check("passenger-car scope rejects property while retaining a car row",
       bab.is_passenger_car_watch_row(normalized) and
       not bab.is_passenger_car_watch_row(property_normalized), negative=True)
+land_rover_raw = dict(
+    pvp_raw, id="pvp-giustizia:land-rover", title="Land Rover Discovery",
+    model="Land Rover Discovery", category="unknown",
+)
+land_rover_normalized, land_rover_reason = bab._normalize_monitored_row(
+    land_rover_raw, generated_at=watch_now
+)
+check("passenger-car classifier does not mistake Land Rover for land",
+      land_rover_normalized is not None and land_rover_reason == "" and
+      bab.is_passenger_car_watch_row(land_rover_normalized), negative=True)
 check("broad watch preserves connector evidence fields",
       normalized["mileage"] == 12000 and normalized["registration_date"] == "2024-03-12" and
       normalized["bid_visibility"] == "hidden_on_pvp" and normalized["price_label"] == "Prezzo base")
