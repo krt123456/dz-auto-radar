@@ -108,6 +108,10 @@ OFFICIAL_AUCTION_SOURCE_COUNTRY_OVERRIDES = {
     # Autorola's public dealer catalogue is also cross-border; each card
     # supplies the official location flag used by its source-specific watcher.
     "autorola-eu": SCHENGEN_COUNTRIES,
+    # Agorastore's public passenger-car category contains official French and
+    # Belgian asset cards; retain the card country just as the collector and
+    # central watch builder do.
+    "agorastore": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }

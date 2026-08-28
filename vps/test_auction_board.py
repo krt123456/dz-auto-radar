@@ -415,6 +415,22 @@ exleasingcar_business_solution = dict(
 )
 check("passenger-car gate keeps BUS SOL business-solution cars",
       bab.is_passenger_car_watch_row(exleasingcar_business_solution), negative=True)
+unknown_mini_cooper = {
+    "source": "auksjonen",
+    "source_key": "auksjonen",
+    "category": "unknown",
+    "title": "MINI Cooper S 2024",
+    "model": "MINI Cooper S 2024",
+}
+check("passenger-car gate retains a specific MINI model in an unknown category",
+      bab.is_passenger_car_watch_row(unknown_mini_cooper), negative=True)
+camp_mini = dict(
+    unknown_mini_cooper,
+    title="Living Flame Enjoy Camp Mini 5 stk Enjoy Camp Mini",
+    model="Living Flame Enjoy Camp Mini 5 stk Enjoy Camp Mini",
+)
+check("passenger-car gate rejects a non-car whose generic title contains Mini",
+      not bab.is_passenger_car_watch_row(camp_mini), negative=True)
 exleasingcar_minibus = dict(
     exleasingcar_normalized,
     id="exleasingcar:minibus",

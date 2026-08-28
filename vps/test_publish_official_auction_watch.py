@@ -128,6 +128,25 @@ class OfficialAuctionWatchPublicationTests(unittest.TestCase):
         )
         publisher.validate_official_auction_watch(watch, now=self.now)
 
+    def test_cross_border_agorastore_asset_country_is_accepted(self) -> None:
+        row = copy.deepcopy(self.row)
+        row.update(
+            {
+                "id": "agorastore:fixture-1",
+                "source": "agorastore",
+                "source_key": "agorastore",
+                "registry_key": "agorastore",
+                "registry_priority": 22,
+                "url": "https://www.agorastore.fr/fr/ventes-occasions/voiture/fixture-1",
+                "country": "BE",
+                "adapter_authorized": True,
+            }
+        )
+        watch = builder.build_monitored_watch(
+            [row], generated_at=self.now.isoformat(), rejected_counts={}
+        )
+        publisher.validate_official_auction_watch(watch, now=self.now)
+
     def test_priced_semantic_without_amount_is_rejected(self) -> None:
         watch = self.watch()
         watch["rows"][0]["price_eur"] = None

@@ -134,7 +134,9 @@ PASSENGER_CAR_MAKE_PATTERN = re.compile(
     r"\b(?:mercedes(?:[- ]benz)?|land rover|range rover|alfa romeo|volkswagen|"
     r"renault|peugeot|citro[eë]n|opel|vauxhall|toyota|bmw|audi|ford|nissan|"
     r"hyundai|kia|honda|mazda|fiat|skoda|seat|volvo|mitsubishi|suzuki|dacia|"
-    r"chevrolet|jeep|porsche|mini|lexus|subaru|jaguar|chrysler|dodge|tesla|"
+    r"chevrolet|jeep|porsche|"
+    r"mini\s+(?:cooper|one|clubman|countryman|cabrio|electric|john\s+cooper)|"
+    r"lexus|subaru|jaguar|chrysler|dodge|tesla|"
     r"ssangyong|isuzu|daihatsu|infiniti|genesis|cupra|smart|chery|geely|"
     r"haval|byd|mg|ds|vw)\b",
     re.IGNORECASE,
