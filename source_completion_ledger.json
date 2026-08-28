@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-08-24T18:17:07.391098+00:00",
+  "generated_at_utc": "2026-08-28T10:59:09.115338Z",
   "contract": {
     "document_entries": 129,
     "canonical_identities": 118,
@@ -36,12 +36,12 @@
       12
     ],
     "verified_complete": 1,
-    "technical_complete_research_only": 13,
-    "blocked": 100,
+    "technical_complete_research_only": 14,
+    "blocked": 99,
     "incomplete": 4,
     "resolved_without_silent_omission": 114,
-    "enumeration_complete": 22,
-    "classification_complete": 22,
+    "enumeration_complete": 23,
+    "classification_complete": 23,
     "production_publishable": 1
   },
   "batch_summary": {
@@ -70,9 +70,9 @@
       "verified_complete": 0
     },
     "5": {
-      "blocked": 10,
+      "blocked": 9,
       "incomplete": 0,
-      "technical_complete_research_only": 0,
+      "technical_complete_research_only": 1,
       "verified_complete": 0
     },
     "6": {

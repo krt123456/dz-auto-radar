@@ -452,10 +452,10 @@
       "batch": 5,
       "launcher": "huutokaupat_com_701e8a50f4.py",
       "launcher_sha256": "49237c329f0cf0668d703a4feb3323b1cc1df85a938ba95888b7dd65f251ff84",
-      "connector_status": "not_implemented",
-      "connector_kind": "none",
-      "connector_path": "",
-      "overall_status": "blocked"
+      "connector_status": "implemented",
+      "connector_kind": "source_specific",
+      "connector_path": "huutokaupat_official_watch.py",
+      "overall_status": "technical_complete_research_only"
     },
     {
       "canonical_identity": "kiertonet.fi",
