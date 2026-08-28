@@ -391,6 +391,10 @@ def page_row(
     if end <= now:
         return eid, None, "already_ended"
 
+    category = classify_vehicle(title)
+    if category != "car":
+        return eid, None, "not_passenger_car"
+
     price_cell = title_row.select_one("td.price")
     raw_price_label = clean(price_cell.get_text(" ", strip=True) if price_cell else "")
     if not raw_price_label:
@@ -411,7 +415,7 @@ def page_row(
         "model": title,
         "country": country,
         "asset_country": country,
-        "category": classify_vehicle(title),
+        "category": category,
         "year": parse_year(registration) or parse_year(title),
         "registration_date": registration,
         "mileage": parse_mileage(mileage_text),

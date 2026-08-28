@@ -107,13 +107,13 @@ class AutorolaOfficialWatchTest(unittest.TestCase):
         )
         self.assertEqual((page.start, page.end, page.total), (1, 2, 2))
         self.assertEqual(page.card_ids, ("1001", "1002"))
-        self.assertEqual(len(page.rows), 2)
+        self.assertEqual(len(page.rows), 1)
         self.assertEqual(page.rows[0]["fuel"], "petrol/electric hybrid")
         self.assertEqual(page.rows[0]["mileage"], 12345)
         self.assertEqual(page.rows[0]["price_kind"], "unknown")
         self.assertIsNone(page.rows[0]["price_amount"])
-        self.assertEqual(page.rows[1]["category"], "van")
-        self.assertEqual(page.rows[1]["price_label"], "Max. bid EUR 18,400")
+        self.assertEqual(page.rows[0]["category"], "car")
+        self.assertEqual(page.rejected_counts, {"not_passenger_car": 1})
 
     def test_full_watch_reconciles_the_exact_public_counter(self) -> None:
         payload = build_watch(
@@ -124,7 +124,7 @@ class AutorolaOfficialWatchTest(unittest.TestCase):
         )
         report = payload["source_reports"]["autorola-eu"]
         self.assertEqual(payload["catalogue_total"], 2)
-        self.assertEqual(payload["row_count"], 2)
+        self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["auction_routes"], 1)
         self.assertEqual(payload["restricted_eauction_routes"], 1)
         self.assertEqual(report["pages"], 1)
