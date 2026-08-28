@@ -42,11 +42,12 @@ PAGE_SIZE = 60
 DEFAULT_TIMEOUT = 30
 DEFAULT_WORKERS = 16
 MAX_PAGES = 2_000
-# A live catalogue can advance during a complete pass.  At 60 cards/page and
-# 16 normal public-page workers, a full pass is short enough to retry several
-# coherent snapshots within the service watchdog instead of silently losing the
-# whole large car source after three unlucky catalogue changes.
-CATALOGUE_CHANGE_RETRY_ATTEMPTS = 8
+# A live catalogue can advance during a complete pass.  First try a few strict
+# atomic snapshots; when the upstream counter changes continuously, switch to
+# the explicit moving-catalogue coverage mode below rather than dropping the
+# entire large car source from publication.
+STRICT_SNAPSHOT_ATTEMPTS = 3
+MOVING_CATALOGUE_PASSES = 3
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
@@ -348,6 +349,149 @@ def _build_watch_snapshot(
     }
 
 
+def _validate_moving_page(parsed: ParsedPage, *, page: int) -> bool:
+    """Validate one self-consistent page from an advancing public catalogue.
+
+    A page that falls beyond the current terminal page is simply superseded by
+    a concurrent catalogue shrink.  It is not used for coverage; the final
+    page-one probe below determines the current advertised total.
+    """
+    expected_pages = math.ceil(parsed.total / PAGE_SIZE) if parsed.total else 0
+    if parsed.page_count != expected_pages:
+        raise ExleasingcarWatchError(
+            f"Exleasingcar pagination mismatch: total={parsed.total} pages={parsed.page_count}"
+        )
+    if page > parsed.page_count:
+        return False
+    expected_rows = PAGE_SIZE if page < parsed.page_count else parsed.total - PAGE_SIZE * (page - 1)
+    if expected_rows < 1 or len(parsed.rows) != expected_rows:
+        raise ExleasingcarWatchError(
+            f"Exleasingcar moving page {page} cardinality is invalid: {len(parsed.rows)}"
+        )
+    return True
+
+
+def _build_moving_catalogue_snapshot(
+    *,
+    session: requests.Session | None = None,
+    now: dt.datetime | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    workers: int = DEFAULT_WORKERS,
+) -> dict[str, Any]:
+    """Cover a live catalogue that cannot remain atomically unchanged.
+
+    The source exposes no snapshot token.  When its public total changes on
+    every strict retry, every current pagination page is still read in full and
+    accumulated by stable listing ID.  A final page-one probe supplies the
+    current official total; publication is allowed only when the unique covered
+    IDs meet or exceed that total.  This deliberately reports a moving coverage
+    snapshot rather than claiming an atomic one.
+    """
+    current = now or dt.datetime.now(UTC)
+    if current.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    observed_at = current.astimezone(UTC).isoformat()
+    supplied_session = session
+    active_session = session or configured_session()
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    id_by_url: dict[str, str] = {}
+    latest: ParsedPage | None = None
+    max_pages_seen = 0
+
+    def add_rows(parsed: ParsedPage) -> None:
+        for row in parsed.rows:
+            row_id = str(row["id"])
+            row_url = str(row["url"])
+            other_id = id_by_url.get(row_url)
+            if other_id is not None and other_id != row_id:
+                raise ExleasingcarWatchError("Exleasingcar moving catalogue reuses a URL for different IDs")
+            previous = rows_by_id.get(row_id)
+            if previous is not None and previous["url"] != row_url:
+                raise ExleasingcarWatchError("Exleasingcar moving catalogue changes a stable ID URL")
+            rows_by_id[row_id] = row
+            id_by_url[row_url] = row_id
+
+    def fetch_and_parse_page(page: int, prefix: str) -> tuple[int, ParsedPage]:
+        local_session = configured_session()
+        try:
+            markup = fetch_markup(local_session, f"{prefix}/{page}", timeout=timeout)
+            return page, parse_page(markup, observed_at=observed_at)
+        finally:
+            close = getattr(local_session, "close", None)
+            if callable(close):
+                close()
+
+    try:
+        seed = parse_page(fetch_markup(active_session, SOURCE_URL, timeout=timeout), observed_at=observed_at)
+        for coverage_pass in range(1, MOVING_CATALOGUE_PASSES + 1):
+            baseline = seed if coverage_pass == 1 else parse_page(
+                fetch_markup(active_session, SOURCE_URL, timeout=timeout), observed_at=observed_at
+            )
+            if not _validate_moving_page(baseline, page=1):
+                raise ExleasingcarWatchError("Exleasingcar first moving page became unavailable")
+            add_rows(baseline)
+            pending = set(range(2, baseline.page_count + 1))
+            visited_pages = {1}
+            while pending:
+                batch = sorted(pending)
+                pending = set()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                    futures = {
+                        executor.submit(fetch_and_parse_page, page, baseline.page_url_prefix): page
+                        for page in batch
+                    }
+                    for future in concurrent.futures.as_completed(futures):
+                        page, parsed = future.result()
+                        if _validate_moving_page(parsed, page=page):
+                            add_rows(parsed)
+                            visited_pages.add(page)
+                        if parsed.page_count > MAX_PAGES:
+                            raise ExleasingcarWatchError("Exleasingcar moving catalogue exceeds the page safety limit")
+                        for extra_page in range(max(visited_pages, default=0) + 1, parsed.page_count + 1):
+                            pending.add(extra_page)
+            max_pages_seen = max(max_pages_seen, len(visited_pages))
+            latest = parse_page(fetch_markup(active_session, SOURCE_URL, timeout=timeout), observed_at=observed_at)
+            if not _validate_moving_page(latest, page=1):
+                raise ExleasingcarWatchError("Exleasingcar final moving page became unavailable")
+            add_rows(latest)
+            if len(rows_by_id) >= latest.total:
+                rows = [rows_by_id[row_id] for row_id in sorted(rows_by_id)]
+                report = {
+                    "status": "ok",
+                    "connector_status": "ok",
+                    "catalogue_scope": "every vehicle card in the advancing public all-auctions catalogue",
+                    "declared": latest.total,
+                    "visited": len(rows),
+                    "normalized_rows": len(rows),
+                    "page_size": PAGE_SIZE,
+                    "pages": latest.page_count,
+                    "maximum_pages_seen": max_pages_seen,
+                    "coverage_passes": coverage_pass,
+                    "snapshot_mode": "moving_catalogue_coverage",
+                    "final_first_page_rechecked": True,
+                    "stable_ids_unique": True,
+                    "publication_ready": False,
+                }
+                return {
+                    "schema_version": 1,
+                    "lane": "official_auction_watch",
+                    "generated_at_utc": observed_at,
+                    "research_only": True,
+                    "publication_status": "review_required",
+                    "row_count": len(rows),
+                    "rows": rows,
+                    "source_reports": {SOURCE_KEY: report},
+                }
+            seed = latest
+    finally:
+        if supplied_session is None:
+            active_session.close()
+    declared = latest.total if latest is not None else 0
+    raise ExleasingcarWatchError(
+        f"Exleasingcar moving coverage contains {len(rows_by_id)} unique IDs for declared total {declared}"
+    )
+
+
 def build_watch(
     *,
     session: requests.Session | None = None,
@@ -358,7 +502,7 @@ def build_watch(
     if timeout < 5 or workers < 1 or workers > 16:
         raise ValueError("invalid Exleasingcar timeout/workers")
     last_error: ExleasingcarWatchError | None = None
-    for attempt in range(1, CATALOGUE_CHANGE_RETRY_ATTEMPTS + 1):
+    for attempt in range(1, STRICT_SNAPSHOT_ATTEMPTS + 1):
         try:
             payload = _build_watch_snapshot(
                 session=session,
@@ -373,10 +517,19 @@ def build_watch(
             # public pages are read.  Restart from page one rather than
             # accepting a mixed snapshot; the higher default concurrency
             # keeps each retry short enough to obtain a stable complete pass.
-            if "catalogue changed" not in str(error) or attempt >= CATALOGUE_CHANGE_RETRY_ATTEMPTS:
+            if "catalogue changed" not in str(error):
                 raise
             last_error = error
-    raise last_error or ExleasingcarWatchError("Exleasingcar catalogue snapshot failed")
+    payload = _build_moving_catalogue_snapshot(
+        session=session,
+        now=now,
+        timeout=timeout,
+        workers=workers,
+    )
+    report = payload["source_reports"][SOURCE_KEY]
+    report["strict_snapshot_failures"] = STRICT_SNAPSHOT_ATTEMPTS
+    report["strict_snapshot_last_error"] = str(last_error or "catalogue changed")
+    return payload
 
 
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
