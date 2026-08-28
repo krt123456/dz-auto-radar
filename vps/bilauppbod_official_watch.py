@@ -35,6 +35,7 @@ SOURCE_NAME = "Bilauppboð"
 SOURCE_URL = "https://www.bilauppbod.is/"
 DEFAULT_TIMEOUT = 35
 DEFAULT_WORKERS = 6
+DEFAULT_SNAPSHOT_ATTEMPTS = 4
 MAX_PAGES = 100
 HEADERS = {"User-Agent": "SonarDeals-Auction-Monitor/1.0", "Accept-Language": "is-IS,is;q=0.9,en;q=0.7"}
 ITEM_HREF_RE = re.compile(r"^/auction/view/(\d+)$")
@@ -290,22 +291,30 @@ def normalize_card(card: Card, detail: Detail, *, observed_at: str) -> dict[str,
     }
 
 
-def build_watch(*, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT, workers: int = DEFAULT_WORKERS) -> dict[str, Any]:
-    if timeout < 5 or not 1 <= workers <= 12:
-        raise ValueError("invalid Bilauppboð timeout/workers")
+def build_watch(*, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT, workers: int = DEFAULT_WORKERS, snapshot_attempts: int = DEFAULT_SNAPSHOT_ATTEMPTS) -> dict[str, Any]:
+    if timeout < 5 or not 1 <= workers <= 12 or not 1 <= snapshot_attempts <= 8:
+        raise ValueError("invalid Bilauppboð timeout/workers/snapshot attempts")
     current = now or dt.datetime.now(UTC)
     if current.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     observed_at = current.astimezone(UTC).isoformat()
     supplied, active = session, session or configured_session()
     try:
-        first_pages, first_cards = fetch_catalogue(session=active, timeout=timeout)
-        second_pages, second_cards = fetch_catalogue(session=active, timeout=timeout)
-        first_by_id, second_by_id = ({card.listing_id: card for card in first_cards}, {card.listing_id: card for card in second_cards})
-        if first_pages != second_pages or first_by_id.keys() != second_by_id.keys():
-            raise BilauppbodWatchError("Bilauppboð catalogue changed between reconciliation passes")
-        if any(first_by_id[key].fingerprint != second_by_id[key].fingerprint for key in first_by_id):
-            raise BilauppbodWatchError("Bilauppboð listing lifecycle changed between reconciliation passes")
+        second_pages, second_cards = 0, []
+        for snapshot_attempt in range(1, snapshot_attempts + 1):
+            first_pages, first_cards = fetch_catalogue(session=active, timeout=timeout)
+            second_pages, second_cards = fetch_catalogue(session=active, timeout=timeout)
+            first_by_id = {card.listing_id: card for card in first_cards}
+            second_by_id = {card.listing_id: card for card in second_cards}
+            if first_pages != second_pages or first_by_id.keys() != second_by_id.keys():
+                continue
+            if any(first_by_id[key].fingerprint != second_by_id[key].fingerprint for key in first_by_id):
+                continue
+            break
+        else:
+            raise BilauppbodWatchError(
+                f"Bilauppboð catalogue did not reach a coherent snapshot after {snapshot_attempts} attempts"
+            )
         details = fetch_details(second_cards, session=active, timeout=timeout, workers=workers)
     finally:
         if supplied is None:
@@ -323,7 +332,7 @@ def build_watch(*, session: requests.Session | None = None, now: dt.datetime | N
         "status": "ok", "connector_status": "ok",
         "catalogue_scope": "every card across Bilauppboð public current-auction pages; only detail-confirmed passenger cars emitted",
         "declared": len(second_cards), "visited": len(second_cards), "detail_visited": len(details), "normalized_rows": len(rows), "passenger_cars": len(rows),
-        "source_excluded": dict(sorted(exclusions.items())), "pages": second_pages, "two_pass_verified": True, "stable_ids_unique": True, "publication_ready": False,
+        "source_excluded": dict(sorted(exclusions.items())), "pages": second_pages, "two_pass_verified": True, "snapshot_attempt": snapshot_attempt, "stable_ids_unique": True, "publication_ready": False,
     }
     return {"schema_version": 1, "lane": "official_auction_watch", "generated_at_utc": observed_at, "research_only": True,
             "publication_status": "review_required", "row_count": len(rows), "rows": rows, "source_reports": {SOURCE_KEY: report}}
@@ -344,12 +353,13 @@ def main() -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+    parser.add_argument("--snapshot-attempts", type=int, default=DEFAULT_SNAPSHOT_ATTEMPTS)
     args = parser.parse_args()
     started = time.monotonic()
-    payload = build_watch(timeout=args.timeout, workers=args.workers)
+    payload = build_watch(timeout=args.timeout, workers=args.workers, snapshot_attempts=args.snapshot_attempts)
     atomic_write_json(args.out, payload)
     report = payload["source_reports"][SOURCE_KEY]
-    print(json.dumps({"result": "BILAUPPBOD_WATCH_PASS", "row_count": payload["row_count"], "declared": report["declared"], "pages": report["pages"], "seconds": round(time.monotonic() - started, 1)}, sort_keys=True))
+    print(json.dumps({"result": "BILAUPPBOD_WATCH_PASS", "row_count": payload["row_count"], "declared": report["declared"], "pages": report["pages"], "snapshot_attempt": report["snapshot_attempt"], "seconds": round(time.monotonic() - started, 1)}, sort_keys=True))
     return 0
 
 

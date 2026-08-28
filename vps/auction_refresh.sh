@@ -245,8 +245,9 @@ OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "bilauppbod" \
   python3 /opt/sonardeals-radar/bilauppbod_official_watch.py \
   --out "$BILAUPPBOD_WATCH" \
-  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" \
-  --workers "${RADAR_BILAUPPBOD_WATCH_WORKERS:-6}" &
+  --timeout "${RADAR_BILAUPPBOD_WATCH_TIMEOUT_SEC:-45}" \
+  --workers "${RADAR_BILAUPPBOD_WATCH_WORKERS:-6}" \
+  --snapshot-attempts "${RADAR_BILAUPPBOD_SNAPSHOT_ATTEMPTS:-4}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "kiertonet" \
   python3 /opt/sonardeals-radar/kiertonet_official_watch.py \

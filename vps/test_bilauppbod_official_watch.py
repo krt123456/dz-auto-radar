@@ -68,8 +68,19 @@ class BilauppbodWatchTest(unittest.TestCase):
         self.assertEqual(report["source_excluded"], {"explicit_non_passenger_title": 1})
 
     def test_card_change_between_passes_fails_closed(self) -> None:
-        with self.assertRaisesRegex(watch.BilauppbodWatchError, "lifecycle changed"):
-            watch.build_watch(session=Session({watch.SOURCE_URL: [page(card("100", "MAZDA 6")), page(card("100", "TOYOTA RAV4"))]}), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1)
+        with self.assertRaisesRegex(watch.BilauppbodWatchError, "coherent snapshot"):
+            watch.build_watch(session=Session({watch.SOURCE_URL: [page(card("100", "MAZDA 6")), page(card("100", "TOYOTA RAV4"))]}), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=1)
+
+    def test_later_coherent_snapshot_is_accepted(self) -> None:
+        stable = page(card("100", "MAZDA 6"))
+        changed = page(card("100", "TOYOTA RAV4"))
+        responses: dict[str, str | list[str]] = {
+            watch.SOURCE_URL: [stable, changed, stable, stable],
+            f"{watch.SOURCE_URL}auction/view/100": detail("Mazda", "4"),
+        }
+        payload = watch.build_watch(session=Session(responses), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=2)
+        self.assertEqual(payload["row_count"], 1)
+        self.assertEqual(payload["source_reports"][watch.SOURCE_KEY]["snapshot_attempt"], 2)
 
     def test_door_count_and_recreational_title_are_excluded(self) -> None:
         vehicle = watch.Card("100", "https://www.bilauppbod.is/auction/view/100", "SUZUKI VITARA", "0 kr.", 0, dt.datetime(2026, 8, 30, 20, tzinfo=UTC), "19.05.2017", 123, "", None)
