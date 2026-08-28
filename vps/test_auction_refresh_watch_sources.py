@@ -62,6 +62,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "auction24-cz"', content)
         self.assertIn('AUTOMOTIVE_AUCTIONS_NL_WATCH="$STATE/runtime/automotive_auctions_nl_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "automotive-auctions-nl"', content)
+        self.assertGreater(content.index('run_official_watch "automotive-auctions-nl"'), content.index('for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do'))
+        self.assertLess(content.index('run_official_watch "automotive-auctions-nl"'), content.index("MONITORED_INPUT_ARGS=()"))
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",

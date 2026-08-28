@@ -285,13 +285,6 @@ run_official_watch "auction24-cz" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" \
   --workers "${RADAR_AUCTION24_CZ_WATCH_WORKERS:-4}" &
 OFFICIAL_WATCH_PIDS+=("$!")
-run_official_watch "automotive-auctions-nl" \
-  python3 /opt/sonardeals-radar/automotive_auctions_nl_official_watch.py \
-  --out "$AUTOMOTIVE_AUCTIONS_NL_WATCH" \
-  --timeout "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_TIMEOUT_SEC:-40}" \
-  --workers "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_WORKERS:-2}" &
-OFFICIAL_WATCH_PIDS+=("$!")
-
 run_official_watch "pvp-giustizia"   python3 /opt/sonardeals-radar/pvp_official_auction_watch.py   --out "$PVP_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "schengen-wide"   python3 /opt/sonardeals-radar/schengen_wide_official_watch.py   --out "$SCHENGEN_WIDE_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" &
@@ -311,6 +304,16 @@ OFFICIAL_WATCH_PIDS+=("$!")
 for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do
   wait "$watch_pid"
 done
+
+# Automotive Auctions publishes a finite Dutch catalogue that has proved
+# coherent in isolated reads but can time out under the wide parallel network
+# burst. Collect it after the batch so its two complete passes remain finite
+# and source-confirmed rather than silently publishing a partial snapshot.
+run_official_watch "automotive-auctions-nl" \
+  python3 /opt/sonardeals-radar/automotive_auctions_nl_official_watch.py \
+  --out "$AUTOMOTIVE_AUCTIONS_NL_WATCH" \
+  --timeout "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_TIMEOUT_SEC:-40}" \
+  --workers "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_WORKERS:-2}"
 
 # Bilauppboð exposes a small, finite public catalogue.  Read it after the
 # broad parallel batch has quiesced so its two-pass coherence proof is not
