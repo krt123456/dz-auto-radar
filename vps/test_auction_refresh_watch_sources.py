@@ -21,6 +21,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('RADAR_EXLEASINGCAR_WATCH_WORKERS:-12', content)
         self.assertIn('VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "vpauto"', content)
+        self.assertIn('RBAUCTION_WATCH="$STATE/runtime/rbauction_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "rbauction-eu"', content)
         self.assertIn('HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "huutokaupat"', content)
         self.assertIn('VAVATO_WATCH="$STATE/runtime/vavato_official_auction_watch.json"', content)
@@ -47,6 +49,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
             "VPAUTO_WATCH",
+            "RBAUCTION_WATCH",
             "HUUTOKAUPAT_WATCH",
             "VAVATO_WATCH",
             "PONIP_WATCH",

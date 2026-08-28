@@ -79,6 +79,7 @@ install -m 0644 "$SOURCE/auction_raw_evidence.py" /opt/sonardeals-radar/auction_
 install -m 0755 "$SOURCE/copart_schengen_official_watch.py" /opt/sonardeals-radar/copart_schengen_official_watch.py
 install -m 0755 "$SOURCE/exleasingcar_official_watch.py" /opt/sonardeals-radar/exleasingcar_official_watch.py
 install -m 0755 "$SOURCE/vpauto_official_watch.py" /opt/sonardeals-radar/vpauto_official_watch.py
+install -m 0755 "$SOURCE/rbauction_official_watch.py" /opt/sonardeals-radar/rbauction_official_watch.py
 install -m 0755 "$SOURCE/huutokaupat_official_watch.py" /opt/sonardeals-radar/huutokaupat_official_watch.py
 install -m 0755 "$SOURCE/vavato_official_watch.py" /opt/sonardeals-radar/vavato_official_watch.py
 install -m 0755 "$SOURCE/ponip_official_watch.py" /opt/sonardeals-radar/ponip_official_watch.py

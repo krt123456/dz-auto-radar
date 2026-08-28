@@ -86,6 +86,9 @@ SOURCE_COUNTRY_OVERRIDES = {
     # Vavato's public Cars category combines Belgian, Dutch, French, and
     # German assets; country comes from the public lot card when present.
     "vavato": SCHENGEN_COUNTRIES,
+    # Ritchie Bros exposes one public automobile catalogue across Europe;
+    # retain the explicit asset country from each official card.
+    "rbauction-eu": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }

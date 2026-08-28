@@ -253,7 +253,7 @@ _AUCTION_SOURCES: List[AuctionSource] = [
                   ("troostwijkauctions.com",), 22,
                   "Schengen_Trusted_Online_Car_Auctions_2026: European auction house since 1930s"),
     AuctionSource("rbauction-eu", "Ritchie Bros. Europe", "nl",
-                  ("rbauction.eu",), 22,
+                  ("rbauction.eu", "rbauction.com"), 22,
                   "Schengen_Trusted_Online_Car_Auctions_2026: global auction house European arm"),
     AuctionSource("ironplanet-eu", "IronPlanet Europe", "nl",
                   ("eu.ironplanet.com",), 22,
