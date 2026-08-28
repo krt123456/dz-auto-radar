@@ -117,6 +117,7 @@ class ObservedValueBoardTest(unittest.TestCase):
             insert("Source C", number, 12_100 + number * 20, "FR")
             insert("Source D", number, 12_400 + number * 20, "NL")
         insert("Source B", 100, 7_500, "DE", title="Renault Clio Cesja")
+        insert("Source D", 101, 7_500, "NL", title="Renault Clio repairable vehicle")
         insert("Source C", 100, 7_500, "FR", fuel="diesel", title="Renault Clio dCi diesel")
         insert("Blocked", 1, 7_500, "NL")
         connection.commit()
@@ -312,8 +313,12 @@ class ObservedValueBoardTest(unittest.TestCase):
         self.assertTrue(forbidden.isdisjoint(candidate))
         self.assertEqual(ranked["unsupported_economics_published"], 0)
         self.assertIn("non_vehicle_price", ranked["rejected_counts"])
+        self.assertIn("risk_or_ghost", ranked["rejected_counts"])
         self.assertIn("unsupported_fuel", ranked["rejected_counts"])
         self.assertIn("blocked_source", ranked["rejected_counts"])
+        self.assertFalse(
+            any("repairable vehicle" in offer["title"].casefold() for offer in ranked["offers"])
+        )
         compact = next(
             offer for offer in board["offers"] if offer["id"] == candidate["id"]
         )

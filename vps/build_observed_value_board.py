@@ -48,6 +48,11 @@ except ImportError:
         autoscout24_non_detail_url,
     )
 
+try:
+    from .listing_condition import condition_exclusion_reason
+except ImportError:
+    from listing_condition import condition_exclusion_reason
+
 
 ALGORITHM = "schengen-observed-peer-value-v7-live-verified"
 SCHENGEN_COUNTRIES = frozenset(
@@ -421,7 +426,11 @@ def eligible_rows(
             reason = "auction_bid"
         elif any(pattern.search(text) for pattern in SEMANTIC_PRICE_PATTERNS):
             reason = "non_vehicle_price"
-        elif RISK_PATTERN.search(text) or GHOST_PATTERN.search(text):
+        elif (
+            condition_exclusion_reason(title, model)
+            or RISK_PATTERN.search(text)
+            or GHOST_PATTERN.search(text)
+        ):
             reason = "risk_or_ghost"
         elif not fuel_label:
             reason = "unsupported_fuel"
