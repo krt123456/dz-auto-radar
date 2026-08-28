@@ -34,6 +34,7 @@ AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"
 EXLEASINGCAR_WATCH="$STATE/runtime/exleasingcar_official_auction_watch.json"
 VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"
 RBAUCTION_WATCH="$STATE/runtime/rbauction_official_auction_watch.json"
+AUTOROLA_WATCH="$STATE/runtime/autorola_official_auction_watch.json"
 HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"
 VAVATO_WATCH="$STATE/runtime/vavato_official_auction_watch.json"
 PONIP_WATCH="$STATE/runtime/ponip_official_auction_watch.json"
@@ -188,6 +189,13 @@ run_official_watch "rbauction-eu" \
   --out "$RBAUCTION_WATCH" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "autorola-eu" \
+  python3 /opt/sonardeals-radar/autorola_official_watch.py \
+  --out "$AUTOROLA_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" \
+  --max-workers "${RADAR_AUTOROLA_WATCH_WORKERS:-6}" \
+  --max-catalogue-rows "${RADAR_AUTOROLA_MAX_CATALOGUE_ROWS:-1000000}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "huutokaupat" \
   python3 /opt/sonardeals-radar/huutokaupat_official_watch.py \
   --out "$HUUTOKAUPAT_WATCH" \
@@ -280,7 +288,7 @@ for watch_file in \
   "$BOE_KRONO_WATCH" "$FR_CZ_DE_WATCH" "$ZOLL_WATCH" "$BE_PL_PT_WATCH" \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
-  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$RBAUCTION_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$CARAUKCE_WATCH" "$AURENA_WATCH" "$AUCTIONMASTER_WATCH" "$BILWEB_WATCH" "$KVDCARS_WATCH" "$KIERTONET_WATCH" "$AUKTIONSHUSET_DAB_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
+  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$RBAUCTION_WATCH" "$AUTOROLA_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$CARAUKCE_WATCH" "$AURENA_WATCH" "$AUCTIONMASTER_WATCH" "$BILWEB_WATCH" "$KVDCARS_WATCH" "$KIERTONET_WATCH" "$AUKTIONSHUSET_DAB_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
   "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then

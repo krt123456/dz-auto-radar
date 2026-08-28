@@ -34,7 +34,11 @@ SOURCE_KEY = "rbauction-eu"
 SOURCE_NAME = "Ritchie Bros. Europe"
 CATALOGUE_URL = "https://www.rbauction.com/cp/automobile"
 PAGE_SIZE = 60
-MAX_CATALOGUE_ROWS = 10_000
+# Public catalogue growth must not be silently capped below the scale target.
+# This remains an operational guard against a malformed counter, not a 200k
+# publication ceiling; the broad-watch architecture will shard before a single
+# artifact approaches its host-size limit.
+MAX_CATALOGUE_ROWS = 1_000_000
 DEFAULT_TIMEOUT = 35
 SCHENGEN_COUNTRIES = frozenset({
     "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI",

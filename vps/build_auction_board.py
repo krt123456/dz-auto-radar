@@ -89,6 +89,9 @@ SOURCE_COUNTRY_OVERRIDES = {
     # Ritchie Bros exposes one public automobile catalogue across Europe;
     # retain the explicit asset country from each official card.
     "rbauction-eu": SCHENGEN_COUNTRIES,
+    # Autorola's single public dealer catalogue contains cross-border fleet
+    # auctions; every card carries its official asset-country flag.
+    "autorola-eu": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }
