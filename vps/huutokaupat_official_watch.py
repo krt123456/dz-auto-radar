@@ -36,7 +36,11 @@ SOURCE_URL = "https://huutokaupat.com/osasto/henkiloautot"
 DEFAULT_TIMEOUT = 35
 DEFAULT_WORKERS = 4
 MAX_PAGES = 1_000
-SNAPSHOT_ATTEMPTS = 3
+# A busy auction category can change while its pages are being read.  Prefer an
+# atomic snapshot, but retain complete ID coverage if the public catalogue has
+# no stable snapshot token and never stops moving.
+STRICT_SNAPSHOT_ATTEMPTS = 3
+MOVING_CATALOGUE_PASSES = 3
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
@@ -304,6 +308,173 @@ def _collect_coherent_snapshot(
     return first, rows
 
 
+def _validate_moving_page(
+    parsed: ParsedPage,
+    *,
+    page: int,
+    page_size: int,
+) -> bool:
+    """Validate one executable page from a catalogue that is advancing.
+
+    The advertised row counter can change a few seconds before the terminal
+    pagination link.  In moving-coverage mode, the page contract is therefore
+    authoritative for traversal; the latest first page supplies the final
+    declared count after stable IDs have been accumulated.
+    """
+    if parsed.current_page != page or parsed.page_count < 1 or parsed.page_count > MAX_PAGES:
+        raise HuutokaupatWatchError("Huutokaupat moving catalogue has invalid pagination")
+    if page > parsed.page_count:
+        return False
+    if page < parsed.page_count and len(parsed.rows) != page_size:
+        raise HuutokaupatWatchError(
+            f"Huutokaupat moving page {page} cardinality is invalid: {len(parsed.rows)}"
+        )
+    if page == parsed.page_count and not 1 <= len(parsed.rows) <= page_size:
+        raise HuutokaupatWatchError(
+            f"Huutokaupat moving page {page} cardinality is invalid: {len(parsed.rows)}"
+        )
+    return True
+
+
+def _build_moving_catalogue_snapshot(
+    *,
+    session: requests.Session | None = None,
+    now: dt.datetime | None = None,
+    timeout: int = DEFAULT_TIMEOUT,
+    workers: int = DEFAULT_WORKERS,
+) -> dict[str, Any]:
+    """Exhaustively cover a public catalogue that cannot stay atomic.
+
+    Huutokaupat exposes no catalogue revision or snapshot token.  If all
+    strict attempts observe a change, each normally navigable page is read and
+    accumulated by immutable public lot ID.  The collector publishes only
+    when that unique coverage reaches the final public page-one total, and it
+    reports this mode honestly rather than calling it an atomic snapshot.
+    """
+    current = now or dt.datetime.now(UTC)
+    if current.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    observed_at = current.astimezone(UTC).isoformat()
+    supplied_session = session
+    active_session = session or configured_session()
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    id_by_url: dict[str, str] = {}
+    latest: ParsedPage | None = None
+    max_pages_seen = 0
+
+    def add_rows(parsed: ParsedPage) -> None:
+        for row in parsed.rows:
+            row_id = str(row["id"])
+            row_url = str(row["url"])
+            other_id = id_by_url.get(row_url)
+            if other_id is not None and other_id != row_id:
+                raise HuutokaupatWatchError(
+                    "Huutokaupat moving catalogue reuses a URL for different IDs"
+                )
+            previous = rows_by_id.get(row_id)
+            if previous is not None and previous["url"] != row_url:
+                raise HuutokaupatWatchError(
+                    "Huutokaupat moving catalogue changes a stable ID URL"
+                )
+            rows_by_id[row_id] = row
+            id_by_url[row_url] = row_id
+
+    def fetch_and_parse_page(page: int) -> tuple[int, ParsedPage]:
+        local_session = configured_session()
+        try:
+            markup = fetch_markup(local_session, page_url(page), timeout=timeout)
+            return page, parse_page(markup, observed_at=observed_at)
+        finally:
+            close = getattr(local_session, "close", None)
+            if callable(close):
+                close()
+
+    try:
+        seed = parse_page(
+            fetch_markup(active_session, SOURCE_URL, timeout=timeout),
+            observed_at=observed_at,
+        )
+        for coverage_pass in range(1, MOVING_CATALOGUE_PASSES + 1):
+            baseline = seed if coverage_pass == 1 else parse_page(
+                fetch_markup(active_session, SOURCE_URL, timeout=timeout),
+                observed_at=observed_at,
+            )
+            page_size = len(baseline.rows)
+            if not _validate_moving_page(baseline, page=1, page_size=page_size):
+                raise HuutokaupatWatchError("Huutokaupat first moving page became unavailable")
+            add_rows(baseline)
+            pending = set(range(2, baseline.page_count + 1))
+            visited_pages = {1}
+            while pending:
+                batch = sorted(pending)
+                pending = set()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                    futures = {executor.submit(fetch_and_parse_page, page): page for page in batch}
+                    for future in concurrent.futures.as_completed(futures):
+                        page, parsed = future.result()
+                        if _validate_moving_page(parsed, page=page, page_size=page_size):
+                            add_rows(parsed)
+                            visited_pages.add(page)
+                        if parsed.page_count > MAX_PAGES:
+                            raise HuutokaupatWatchError(
+                                "Huutokaupat moving catalogue exceeds the page safety limit"
+                            )
+                        for extra_page in range(
+                            max(visited_pages, default=0) + 1,
+                            parsed.page_count + 1,
+                        ):
+                            pending.add(extra_page)
+            max_pages_seen = max(max_pages_seen, len(visited_pages))
+            latest = parse_page(
+                fetch_markup(active_session, SOURCE_URL, timeout=timeout),
+                observed_at=observed_at,
+            )
+            if not _validate_moving_page(
+                latest,
+                page=1,
+                page_size=len(latest.rows),
+            ):
+                raise HuutokaupatWatchError("Huutokaupat final moving page became unavailable")
+            add_rows(latest)
+            if len(rows_by_id) >= latest.total:
+                rows = [rows_by_id[row_id] for row_id in sorted(rows_by_id)]
+                report = {
+                    "status": "ok",
+                    "connector_status": "ok",
+                    "catalogue_scope": "every public card in the advancing passenger-car category",
+                    "declared": latest.total,
+                    "visited": len(rows),
+                    "normalized_rows": len(rows),
+                    "page_size": len(latest.rows),
+                    "pages": latest.page_count,
+                    "maximum_pages_seen": max_pages_seen,
+                    "coverage_passes": coverage_pass,
+                    "snapshot_mode": "moving_catalogue_coverage",
+                    "final_first_page_rechecked": True,
+                    "stable_ids_unique": True,
+                    "publication_ready": False,
+                }
+                return {
+                    "schema_version": 1,
+                    "lane": "official_auction_watch",
+                    "generated_at_utc": observed_at,
+                    "research_only": True,
+                    "publication_status": "review_required",
+                    "row_count": len(rows),
+                    "rows": rows,
+                    "source_reports": {SOURCE_KEY: report},
+                }
+            seed = latest
+    finally:
+        if supplied_session is None:
+            active_session.close()
+    declared = latest.total if latest is not None else 0
+    raise HuutokaupatWatchError(
+        "Huutokaupat moving coverage contains "
+        f"{len(rows_by_id)} unique IDs for declared total {declared}"
+    )
+
+
 def build_watch(
     *,
     session: requests.Session | None = None,
@@ -321,7 +492,7 @@ def build_watch(
     root_session = session or configured_session()
     last_snapshot_change: HuutokaupatSnapshotChanged | None = None
     try:
-        for snapshot_attempt in range(1, SNAPSHOT_ATTEMPTS + 1):
+        for snapshot_attempt in range(1, STRICT_SNAPSHOT_ATTEMPTS + 1):
             try:
                 first, rows = _collect_coherent_snapshot(
                     root_session=root_session,
@@ -336,10 +507,16 @@ def build_watch(
             break
         else:
             assert last_snapshot_change is not None
-            raise HuutokaupatWatchError(
-                "Huutokaupat passenger-car category did not stabilize after "
-                f"{SNAPSHOT_ATTEMPTS} snapshot attempts"
-            ) from last_snapshot_change
+            payload = _build_moving_catalogue_snapshot(
+                session=session,
+                now=now,
+                timeout=timeout,
+                workers=workers,
+            )
+            moving_report = payload["source_reports"][SOURCE_KEY]
+            moving_report["strict_snapshot_failures"] = STRICT_SNAPSHOT_ATTEMPTS
+            moving_report["strict_snapshot_last_error"] = str(last_snapshot_change)
+            return payload
 
         report = {
             "status": "ok",

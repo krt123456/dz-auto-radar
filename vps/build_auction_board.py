@@ -116,6 +116,16 @@ NON_PASSENGER_CAR_CATEGORIES = frozenset({
     "high-roof panel transporter", "light duty truck", "flatbed", "box",
     "car transporter",
 })
+# Some upstream catalogues publish detailed commercial category labels rather
+# than the generic ``van``/``truck`` values above.  Reject their prefixes
+# before a passenger-car make in the title can accidentally promote the lot.
+NON_PASSENGER_CAR_CATEGORY_PREFIXES = (
+    "utility vehicle",
+    "motorhome",
+    "refrigeration vehicle",
+    "special vehicle",
+    "pickup truck",
+)
 CAR_ONLY_WATCH_SOURCES = frozenset({
     "autorola-eu", "exleasingcar", "vpauto", "kvdcars", "caraukce",
     "bilweb", "rbauction-eu", "vavato",
@@ -136,6 +146,7 @@ NON_PASSENGER_CAR_TEXT_PATTERN = re.compile(
     # abbreviations (Business Edition/Solution/Wagon), not buses.  Keep real
     # buses excluded while avoiding false negatives in the public car lane.
     r"tractor|excavator|forklift|truck|lorry|lkw|van|minibus|"
+    r"utility vehicle|refrigeration vehicle|special vehicle|"
     r"bus(?!\s*(?:\.|ed\.?\b|edition\b|sol(?:ution)?\b|wagon\b))|"
     r"computer|laptop|"
     r"console|gaming|property|house|immobilien|wohnung)\b",
@@ -448,7 +459,10 @@ def is_passenger_car_watch_row(row: Dict[str, Any]) -> bool:
     category = " ".join(str(row.get("category") or "unknown").split()).casefold()
     if category in PASSENGER_CAR_CATEGORIES:
         return True
-    if category in NON_PASSENGER_CAR_CATEGORIES:
+    if (
+        category in NON_PASSENGER_CAR_CATEGORIES
+        or category.startswith(NON_PASSENGER_CAR_CATEGORY_PREFIXES)
+    ):
         return False
     text = " ".join(
         str(value or "")

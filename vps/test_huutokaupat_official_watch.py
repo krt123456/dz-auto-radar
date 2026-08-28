@@ -116,6 +116,57 @@ class HuutokaupatWatchTest(unittest.TestCase):
         self.assertEqual(payload["row_count"], 3)
         self.assertEqual(payload["source_reports"]["huutokaupat"]["snapshot_attempts"], 2)
 
+    def test_continuously_advancing_category_uses_complete_moving_coverage(self) -> None:
+        first = PAGE_1
+        changed_second = page(
+            4,
+            2,
+            2,
+            card(13, "Ford Focus, 2023, Kuopio", "Diesel, 45000 km", 3600, 2)
+            + card(14, "Kia Niro, 2024, Espoo", "Hybridi, 9000 km", 11800, 4),
+        )
+        final = page(
+            4,
+            1,
+            2,
+            card(11, "Mazda 5, 2024, Raisio", "1.8 l, Bensiini, 85 kW, 12000 km", 450, 5)
+            + card(12, "Toyota Yaris, 2025, Turku", "Hybridi, 8000 km", 8200, 3),
+        )
+        responses = {
+            watch.SOURCE_URL: [first, first, first, first, final],
+            watch.page_url(2): [changed_second, changed_second, changed_second, changed_second],
+        }
+        original_factory = watch.configured_session
+        sequence_session = SequencedSession(responses)
+        try:
+            watch.configured_session = lambda: sequence_session  # type: ignore[assignment]
+            payload = watch.build_watch(
+                session=sequence_session,
+                now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+                workers=1,
+            )
+        finally:
+            watch.configured_session = original_factory
+        report = payload["source_reports"]["huutokaupat"]
+        self.assertEqual(payload["row_count"], 4)
+        self.assertEqual(report["declared"], 4)
+        self.assertEqual(report["snapshot_mode"], "moving_catalogue_coverage")
+        self.assertEqual(report["strict_snapshot_failures"], 3)
+        self.assertTrue(report["final_first_page_rechecked"])
+
+    def test_moving_page_accepts_counter_ahead_of_terminal_pagination(self) -> None:
+        parsed = watch.parse_page(
+            page(
+                5,
+                1,
+                2,
+                card(11, "Mazda 5, 2024, Raisio", "Bensiini, 12000 km", 450, 5)
+                + card(12, "Toyota Yaris, 2025, Turku", "Hybridi, 8000 km", 8200, 3),
+            ),
+            observed_at="2026-08-27T20:00:00+00:00",
+        )
+        self.assertTrue(watch._validate_moving_page(parsed, page=1, page_size=2))
+
     def test_mismatched_page_count_fails_closed(self) -> None:
         invalid = PAGE_1.replace('aria-label="Sivu 1/2"', 'aria-label="Sivu 1/3"')
         with self.assertRaises(watch.HuutokaupatWatchError):

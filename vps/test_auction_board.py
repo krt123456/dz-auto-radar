@@ -423,6 +423,24 @@ exleasingcar_minibus = dict(
 )
 check("passenger-car gate rejects a real minibus",
       not bab.is_passenger_car_watch_row(exleasingcar_minibus), negative=True)
+for category, title in (
+    ("utility vehicle 7.5 t upwards", "Mercedes-Benz Sprinter Kasten"),
+    ("motorhome pickup", "Mercedes-Benz V 300 d Marco Polo"),
+    ("special vehicle", "VW T6 Kasten Kombi"),
+    ("refrigeration vehicle", "VW Crafter Kuehlkasten"),
+):
+    commercial_category_row = dict(
+        exleasingcar_normalized,
+        id=f"exleasingcar:{category}",
+        category=category,
+        title=title,
+        model=title,
+    )
+    check(
+        f"passenger-car gate rejects declared commercial category: {category}",
+        not bab.is_passenger_car_watch_row(commercial_category_row),
+        negative=True,
+    )
 exleasingcar_unmarked, exleasingcar_unmarked_reason = bab._normalize_monitored_row(
     dict(exleasingcar_raw, id="exleasingcar:unmarked", adapter_authorized=False),
     generated_at=watch_now,
