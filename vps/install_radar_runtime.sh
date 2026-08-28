@@ -99,6 +99,7 @@ install -m 0755 "$SOURCE/zoll_official_auction_watch.py" /opt/sonardeals-radar/z
 install -m 0755 "$SOURCE/be_pl_pt_official_watch.py" /opt/sonardeals-radar/be_pl_pt_official_watch.py
 install -m 0755 "$SOURCE/enrich_auction_ouedkniss.py" /opt/sonardeals-radar/enrich_auction_ouedkniss.py
 install -m 0755 "$SOURCE/publish_radar_dashboard.py" /opt/sonardeals-radar/publish_radar_dashboard.py
+install -m 0755 "$SOURCE/publish_official_auction_watch_only.py" /opt/sonardeals-radar/publish_official_auction_watch_only.py
 install -m 0755 "$SOURCE/audit_best_selection.py" /opt/sonardeals-radar/audit_best_selection.py
 install -m 0755 "$SOURCE/audit_live_convergence.py" /opt/sonardeals-radar/audit_live_convergence.py
 install -m 0755 "$SOURCE/build_observed_value_board.py" /opt/sonardeals-radar/build_observed_value_board.py

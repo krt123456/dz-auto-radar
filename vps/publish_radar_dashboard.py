@@ -72,7 +72,15 @@ DEFAULT_SOURCE_COMPLETION_LEDGER = Path(
 )
 OFFICIAL_AUCTION_WATCH_SCHEMA_VERSION = 1
 OFFICIAL_AUCTION_WATCH_MAX_AGE = timedelta(hours=8)
-OFFICIAL_AUCTION_WATCH_MAX_ROWS = 50_000
+# The collector keeps one complete schema-v1 artifact internally.  GitHub
+# Pages receives a schema-v2 manifest plus small immutable-row shards, so the
+# public catalogue has no artificial total-row ceiling or single-file blob
+# ceiling.  This is deliberately a *part* size rather than a catalogue limit.
+OFFICIAL_AUCTION_WATCH_PUBLIC_SCHEMA_VERSION = 2
+OFFICIAL_AUCTION_WATCH_PART_SCHEMA_VERSION = 1
+OFFICIAL_AUCTION_WATCH_PART_ROWS = 5_000
+OFFICIAL_AUCTION_WATCH_PART_DIRECTORY = "official_auction_watch_parts"
+OFFICIAL_AUCTION_WATCH_PART_NAME = re.compile(r"part-(\d{6})\.json\Z")
 OFFICIAL_AUCTION_PRICE_KINDS = frozenset({
     "current_bid", "starting_bid", "minimum_bid", "guide_price",
     "sealed_bid", "hidden", "unknown",
@@ -607,7 +615,7 @@ def validate_official_auction_watch(
     if current - generated > OFFICIAL_AUCTION_WATCH_MAX_AGE:
         raise RuntimeError("official auction watch is stale")
     rows = watch.get("rows")
-    if not isinstance(rows, list) or len(rows) > OFFICIAL_AUCTION_WATCH_MAX_ROWS:
+    if not isinstance(rows, list):
         raise RuntimeError("official auction watch rows are invalid")
     if watch.get("row_count") != len(rows):
         raise RuntimeError("official auction watch count mismatch")
@@ -697,6 +705,217 @@ def validate_official_auction_watch(
                 raise RuntimeError(
                     f"official auction watch row {index} has an invalid Ouedkniss reference"
                 )
+
+
+def _compact_json_bytes(value: Any) -> bytes:
+    return (
+        json.dumps(
+            value, ensure_ascii=False, separators=(",", ":"), allow_nan=False,
+        ) + "\n"
+    ).encode("utf-8")
+
+
+def _official_watch_part_relative_path(index: int) -> str:
+    return f"{OFFICIAL_AUCTION_WATCH_PART_DIRECTORY}/part-{index:06d}.json"
+
+
+def _official_watch_part_path(site: Path, relative_path: str) -> Path:
+    """Resolve one generated shard without permitting path traversal."""
+    expected_parent = (site / OFFICIAL_AUCTION_WATCH_PART_DIRECTORY).resolve()
+    relative = Path(relative_path)
+    if (
+        relative.is_absolute()
+        or len(relative.parts) != 2
+        or relative.parts[0] != OFFICIAL_AUCTION_WATCH_PART_DIRECTORY
+        or not OFFICIAL_AUCTION_WATCH_PART_NAME.fullmatch(relative.parts[1])
+    ):
+        raise RuntimeError("official auction watch part path is invalid")
+    output = (site / relative).resolve()
+    if output.parent != expected_parent:
+        raise RuntimeError("official auction watch part escapes its publication directory")
+    return output
+
+
+def _published_official_watch_part_files(site: Path) -> list[Path]:
+    directory = site / OFFICIAL_AUCTION_WATCH_PART_DIRECTORY
+    if not directory.is_dir():
+        return []
+    output = []
+    expected_parent = directory.resolve()
+    for candidate in directory.iterdir():
+        if (
+            candidate.is_file()
+            and candidate.parent.resolve() == expected_parent
+            and OFFICIAL_AUCTION_WATCH_PART_NAME.fullmatch(candidate.name)
+        ):
+            output.append(candidate)
+    return sorted(output, key=lambda candidate: candidate.name)
+
+
+def build_published_official_auction_watch(
+    watch: Any,
+    *,
+    part_rows: int = OFFICIAL_AUCTION_WATCH_PART_ROWS,
+    now: datetime | None = None,
+) -> tuple[bytes, list[tuple[str, bytes]], dict[str, Any]]:
+    """Create the public manifest and bounded files for an unlimited watch.
+
+    ``watch`` remains a single schema-v1 file inside the runtime.  The public
+    artifact is deliberately split by row count so no individual GitHub blob
+    grows with the whole catalogue.  ``part_rows`` controls only one file's
+    size; it never caps total offers.
+    """
+    if type(part_rows) is not int or part_rows < 1:
+        raise RuntimeError("official auction watch part size is invalid")
+    validate_official_auction_watch(watch, now=now)
+    rows = watch["rows"]
+    parts: list[dict[str, Any]] = []
+    output_parts: list[tuple[str, bytes]] = []
+    for index, start in enumerate(range(0, len(rows), part_rows)):
+        part_rows_value = rows[start:start + part_rows]
+        relative_path = _official_watch_part_relative_path(index)
+        part = {
+            "schema_version": OFFICIAL_AUCTION_WATCH_PART_SCHEMA_VERSION,
+            "lane": "official_auction_watch_part",
+            "part_index": index,
+            "row_count": len(part_rows_value),
+            "rows": part_rows_value,
+        }
+        part_bytes = _compact_json_bytes(part)
+        parts.append({
+            "path": relative_path,
+            "part_index": index,
+            "row_count": len(part_rows_value),
+            "sha256": hashlib.sha256(part_bytes).hexdigest(),
+        })
+        output_parts.append((relative_path, part_bytes))
+    manifest = {
+        "schema_version": OFFICIAL_AUCTION_WATCH_PUBLIC_SCHEMA_VERSION,
+        "lane": "official_auction_watch",
+        "registry_digest": watch["registry_digest"],
+        "generated_at_utc": watch["generated_at_utc"],
+        "row_count": watch["row_count"],
+        "source_reports": watch["source_reports"],
+        "rejected_counts": watch.get("rejected_counts", {}),
+        "storage": {
+            "format": "json-row-shards",
+            "part_rows": part_rows,
+        },
+        "parts": parts,
+    }
+    return _compact_json_bytes(manifest), output_parts, manifest
+
+
+def write_published_official_auction_watch(site: Path, watch: Any) -> dict[str, Any]:
+    """Atomically materialize the generated public manifest and its shards."""
+    manifest_bytes, part_bytes, manifest = build_published_official_auction_watch(watch)
+    desired = {relative_path for relative_path, _ in part_bytes}
+    for relative_path, content in part_bytes:
+        atomic_write(_official_watch_part_path(site, relative_path), content, 0o644)
+    # Fixed, validated children make removal of superseded shards recoverable
+    # through the same Git commit that updates the manifest.
+    for obsolete in _published_official_watch_part_files(site):
+        relative_path = f"{OFFICIAL_AUCTION_WATCH_PART_DIRECTORY}/{obsolete.name}"
+        if relative_path not in desired:
+            obsolete.unlink()
+    atomic_write(site / "official_auction_watch.json", manifest_bytes, 0o644)
+    return manifest
+
+
+def remove_published_official_auction_watch(site: Path) -> None:
+    """Remove only the generated root artifact and validated direct children."""
+    (site / "official_auction_watch.json").unlink(missing_ok=True)
+    for part in _published_official_watch_part_files(site):
+        part.unlink()
+    directory = site / OFFICIAL_AUCTION_WATCH_PART_DIRECTORY
+    if directory.is_dir() and not any(directory.iterdir()):
+        directory.rmdir()
+
+
+def load_published_official_auction_watch(
+    site: Path, *, now: datetime | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate a public schema-v1 file or reconstruct schema-v2 shards."""
+    root_path = site / "official_auction_watch.json"
+    root = load_json(root_path)
+    if root.get("schema_version") == OFFICIAL_AUCTION_WATCH_SCHEMA_VERSION:
+        validate_official_auction_watch(root, now=now)
+        return root, root
+    if (
+        root.get("schema_version") != OFFICIAL_AUCTION_WATCH_PUBLIC_SCHEMA_VERSION
+        or root.get("lane") != "official_auction_watch"
+        or type(root.get("row_count")) is not int
+        or root["row_count"] < 0
+        or not isinstance(root.get("parts"), list)
+        or not isinstance(root.get("storage"), dict)
+        or root["storage"].get("format") != "json-row-shards"
+    ):
+        raise RuntimeError("unsupported published official auction watch schema")
+    descriptors = root["parts"]
+    if root["row_count"] == 0 and descriptors:
+        raise RuntimeError("empty official auction watch has unexpected parts")
+    if root["row_count"] > 0 and not descriptors:
+        raise RuntimeError("official auction watch is missing parts")
+    rows: list[dict[str, Any]] = []
+    total = 0
+    seen_paths: set[str] = set()
+    for index, descriptor in enumerate(descriptors):
+        if not isinstance(descriptor, dict):
+            raise RuntimeError("official auction watch part descriptor is invalid")
+        relative_path = descriptor.get("path")
+        expected_sha256 = descriptor.get("sha256")
+        expected_count = descriptor.get("row_count")
+        if (
+            not isinstance(relative_path, str)
+            or relative_path in seen_paths
+            or descriptor.get("part_index") != index
+            or type(expected_count) is not int
+            or expected_count < 1
+            or not isinstance(expected_sha256, str)
+            or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None
+        ):
+            raise RuntimeError("official auction watch part descriptor is invalid")
+        expected_path = _official_watch_part_relative_path(index)
+        if relative_path != expected_path:
+            raise RuntimeError("official auction watch part sequence is invalid")
+        part_path = _official_watch_part_path(site, relative_path)
+        try:
+            raw = part_path.read_bytes()
+            part = json.loads(raw.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            raise RuntimeError("official auction watch part is unreadable") from exc
+        if hashlib.sha256(raw).hexdigest() != expected_sha256:
+            raise RuntimeError("official auction watch part digest mismatch")
+        part_rows_value = part.get("rows") if isinstance(part, dict) else None
+        if (
+            not isinstance(part, dict)
+            or part.get("schema_version") != OFFICIAL_AUCTION_WATCH_PART_SCHEMA_VERSION
+            or part.get("lane") != "official_auction_watch_part"
+            or part.get("part_index") != index
+            or part.get("row_count") != expected_count
+            or not isinstance(part_rows_value, list)
+            or len(part_rows_value) != expected_count
+        ):
+            raise RuntimeError("official auction watch part contract is invalid")
+        if not all(isinstance(row, dict) for row in part_rows_value):
+            raise RuntimeError("official auction watch part contains an invalid row")
+        rows.extend(part_rows_value)
+        total += expected_count
+        seen_paths.add(relative_path)
+    if total != root["row_count"]:
+        raise RuntimeError("official auction watch part count mismatch")
+    reconstructed = {
+        "schema_version": OFFICIAL_AUCTION_WATCH_SCHEMA_VERSION,
+        "lane": "official_auction_watch",
+        "registry_digest": root.get("registry_digest"),
+        "generated_at_utc": root.get("generated_at_utc"),
+        "row_count": root["row_count"],
+        "source_reports": root.get("source_reports"),
+        "rejected_counts": root.get("rejected_counts", {}),
+        "rows": rows,
+    }
+    validate_official_auction_watch(reconstructed, now=now)
+    return reconstructed, root
 def embed_auction_lane(
     lane: dict[str, Any],
     data_generated_at: str,
@@ -1034,7 +1253,7 @@ def prepare(args: argparse.Namespace) -> None:
         completion_bytes
     ).hexdigest()
     args.site.mkdir(parents=True, exist_ok=True)
-    watch_bytes: bytes | None = None
+    published_watch: dict[str, Any] | None = None
     if args.official_auction_watch.is_file():
         try:
             watch = load_json(args.official_auction_watch)
@@ -1047,18 +1266,21 @@ def prepare(args: argparse.Namespace) -> None:
                 raise RuntimeError(
                     "official auction watch does not match the strict auction registry"
                 )
-            watch_bytes = (
-                json.dumps(watch, ensure_ascii=False, indent=2, allow_nan=False) + "\n"
-            ).encode("utf-8")
+            published_watch = write_published_official_auction_watch(args.site, watch)
+            public_watch_bytes = (args.site / "official_auction_watch.json").read_bytes()
             manifest["official_auction_watch_count"] = watch["row_count"]
-            manifest["official_auction_watch_sha256"] = hashlib.sha256(watch_bytes).hexdigest()
+            manifest["official_auction_watch_sha256"] = hashlib.sha256(public_watch_bytes).hexdigest()
+            manifest["official_auction_watch_parts_sha256"] = canonical_json_sha256(
+                published_watch["parts"]
+            )
         except (OSError, ValueError, TypeError, RuntimeError) as exc:
             # The broad watch is an optional, explicitly less-qualified lane.
             # Fail it closed without blocking the encrypted strict dashboard.
             print(f"OFFICIAL_AUCTION_WATCH_OMITTED reason={exc}", file=sys.stderr)
-    if watch_bytes is None:
+    if published_watch is None:
         manifest["official_auction_watch_count"] = None
         manifest["official_auction_watch_sha256"] = None
+        manifest["official_auction_watch_parts_sha256"] = None
     atomic_write(
         args.site / ".gitignore",
         b"board.json\n__pycache__/\n*.pyc\nworker/.dev.vars\nworker/.wrangler/\nworker/node_modules/\n",
@@ -1068,10 +1290,8 @@ def prepare(args: argparse.Namespace) -> None:
     atomic_write(args.site / "data.enc", encrypt_payload(pin, payload), 0o600)
     atomic_write(args.site / "auction_source_inventory.json", inventory_bytes, 0o644)
     atomic_write(args.site / "source_completion_ledger.json", completion_bytes, 0o644)
-    if watch_bytes is not None:
-        atomic_write(args.site / "official_auction_watch.json", watch_bytes, 0o644)
-    else:
-        (args.site / "official_auction_watch.json").unlink(missing_ok=True)
+    if published_watch is None:
+        remove_published_official_auction_watch(args.site)
     fx_bytes: bytes | None = None
     try:
         fx_bytes = args.fx_config.read_bytes() if args.fx_config.is_file() else None
@@ -1146,12 +1366,20 @@ def enforce_publication_audit(args: argparse.Namespace) -> None:
         public_watch = args.site / "official_auction_watch.json"
         if not public_watch.is_file() or sha256_file(public_watch) != watch_sha256:
             raise RuntimeError("official auction watch does not match publication manifest")
-        watch = load_json(public_watch)
-        validate_official_auction_watch(watch)
+        watch, published_root = load_published_official_auction_watch(args.site)
         if watch.get("row_count") != manifest.get("official_auction_watch_count"):
             raise RuntimeError("official auction watch count does not match publication manifest")
         if watch.get("registry_digest") != manifest.get("auction_lane_registry_digest"):
             raise RuntimeError("official auction watch registry does not match publication manifest")
+        expected_parts_sha256 = manifest.get("official_auction_watch_parts_sha256")
+        if published_root.get("schema_version") == OFFICIAL_AUCTION_WATCH_PUBLIC_SCHEMA_VERSION:
+            if (
+                not isinstance(expected_parts_sha256, str)
+                or expected_parts_sha256 != canonical_json_sha256(published_root.get("parts"))
+            ):
+                raise RuntimeError("official auction watch parts do not match publication manifest")
+        elif expected_parts_sha256 is not None:
+            raise RuntimeError("legacy official auction watch has unexpected parts evidence")
     for filename, manifest_key in (
         ("auction_source_inventory.json", "auction_source_inventory_sha256"),
         ("source_completion_ledger.json", "source_completion_ledger_sha256"),
@@ -1184,6 +1412,20 @@ def publish(args: argparse.Namespace) -> None:
     if watch_path.is_file() or watch_tracked:
         publication_paths.append("official_auction_watch.json")
     run_git(args.site, "add", "--", *publication_paths)
+    tracked_part_paths = [
+        line.strip()
+        for line in run_git(
+            args.site, "ls-files", "--", OFFICIAL_AUCTION_WATCH_PART_DIRECTORY,
+        ).stdout.splitlines()
+        if line.strip()
+    ]
+    generated_part_paths = [
+        str(path.relative_to(args.site))
+        for path in _published_official_watch_part_files(args.site)
+    ]
+    watch_publication_paths = sorted(set(tracked_part_paths + generated_part_paths))
+    if watch_publication_paths:
+        run_git(args.site, "add", "-A", "--", *watch_publication_paths)
     staged = {
         line.strip()
         for line in run_git(args.site, "diff", "--cached", "--name-only").stdout.splitlines()
@@ -1194,7 +1436,14 @@ def publish(args: argparse.Namespace) -> None:
         "official_auction_watch.json", "auction_source_inventory.json",
         "source_completion_ledger.json", "board.json",
     }
-    unexpected = staged - allowed
+    unexpected = {
+        path for path in staged
+        if path not in allowed
+        and not (
+            path.startswith(f"{OFFICIAL_AUCTION_WATCH_PART_DIRECTORY}/")
+            and OFFICIAL_AUCTION_WATCH_PART_NAME.fullmatch(Path(path).name)
+        )
+    }
     if unexpected:
         raise RuntimeError(f"refusing to publish unexpected files: {sorted(unexpected)}")
     if not staged:

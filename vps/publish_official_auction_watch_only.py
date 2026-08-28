@@ -22,7 +22,14 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from publish_radar_dashboard import validate_official_auction_watch  # noqa: E402
+from publish_radar_dashboard import (  # noqa: E402
+    OFFICIAL_AUCTION_WATCH_PART_DIRECTORY,
+    OFFICIAL_AUCTION_WATCH_PART_NAME,
+    build_published_official_auction_watch,
+    load_published_official_auction_watch,
+    validate_official_auction_watch,
+    write_published_official_auction_watch,
+)
 
 
 DEFAULT_WATCH = Path("/home/krt/car_deal_finder/mobile_site_local/official_auction_watch.json")
@@ -72,34 +79,68 @@ def main() -> int:
         raise SystemExit(f"official auction watch is not valid UTF-8 JSON: {exc}")
     validate_official_auction_watch(watch)
     row_count = watch.get("row_count")
+    manifest_bytes, part_bytes, public_manifest = build_published_official_auction_watch(watch)
     if args.dry_run:
         print(json.dumps({
             "result": "OFFICIAL_AUCTION_WATCH_ONLY_VALID",
             "row_count": row_count,
-            "sha256": hashlib.sha256(raw).hexdigest(),
+            "source_sha256": hashlib.sha256(raw).hexdigest(),
+            "public_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+            "part_count": len(part_bytes),
         }, sort_keys=True))
         return 0
 
     if not (args.site / ".git").exists():
         raise SystemExit(f"publication directory is not a Git checkout: {args.site}")
+    public_manifest = write_published_official_auction_watch(args.site, watch)
     target = args.site / "official_auction_watch.json"
-    atomic_write(target, raw)
-    git(args.site, "add", "--", target.name)
-    if not git(args.site, "diff", "--cached", "--quiet", "--", target.name, check=False).returncode:
+    staged_paths = [target.name]
+    tracked_parts = [
+        line.strip()
+        for line in git(args.site, "ls-files", "--", OFFICIAL_AUCTION_WATCH_PART_DIRECTORY).stdout.splitlines()
+        if line.strip()
+    ]
+    if (args.site / OFFICIAL_AUCTION_WATCH_PART_DIRECTORY).is_dir():
+        staged_paths.append(OFFICIAL_AUCTION_WATCH_PART_DIRECTORY)
+    staged_paths.extend(tracked_parts)
+    git(args.site, "add", "-A", "--", *sorted(set(staged_paths)))
+    staged = {
+        line.strip()
+        for line in git(args.site, "diff", "--cached", "--name-only").stdout.splitlines()
+        if line.strip()
+    }
+    unexpected = {
+        path for path in staged
+        if path != target.name
+        and not (
+            path.startswith(f"{OFFICIAL_AUCTION_WATCH_PART_DIRECTORY}/")
+            and OFFICIAL_AUCTION_WATCH_PART_NAME.fullmatch(Path(path).name)
+        )
+    }
+    if unexpected:
+        raise SystemExit(f"refusing to publish unexpected files: {sorted(unexpected)}")
+    if not staged:
         print(json.dumps({
             "result": "OFFICIAL_AUCTION_WATCH_ONLY_NO_CHANGE",
             "row_count": row_count,
-            "sha256": hashlib.sha256(raw).hexdigest(),
+            "source_sha256": hashlib.sha256(raw).hexdigest(),
+            "public_manifest_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+            "part_count": len(public_manifest["parts"]),
         }, sort_keys=True))
         return 0
     git(args.site, "diff", "--cached", "--check")
     generated = str(watch.get("generated_at_utc") or "unknown").replace(" ", "T")[:32]
-    git(args.site, "commit", "-m", f"official auction watch {generated}", "--", target.name)
+    git(args.site, "commit", "-m", f"official auction watch {generated}")
     git(args.site, "push", "origin", "HEAD:main")
+    reconstructed, _ = load_published_official_auction_watch(args.site)
+    if reconstructed.get("row_count") != row_count:
+        raise SystemExit("published official auction watch count mismatch")
     print(json.dumps({
         "result": "OFFICIAL_AUCTION_WATCH_ONLY_PUSHED",
         "row_count": row_count,
-        "sha256": hashlib.sha256(raw).hexdigest(),
+        "source_sha256": hashlib.sha256(raw).hexdigest(),
+        "public_manifest_sha256": hashlib.sha256(target.read_bytes()).hexdigest(),
+        "part_count": len(public_manifest["parts"]),
     }, sort_keys=True))
     return 0
 

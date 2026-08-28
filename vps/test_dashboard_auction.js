@@ -4,6 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
+const { createHash, webcrypto } = require("crypto");
 
 const INDEX = process.env.INDEX_HTML || path.join(__dirname, "..", "index.html");
 const html = fs.readFileSync(INDEX, "utf8");
@@ -60,7 +61,7 @@ function stubElement(id) {
   };
 }
 
-function makeSandbox({ local = {}, session = {} } = {}) {
+function makeSandbox({ local = {}, session = {}, fetchImpl = null } = {}) {
   const elements = new Map();
   const sandbox = {
     console,
@@ -73,6 +74,9 @@ function makeSandbox({ local = {}, session = {} } = {}) {
     scrollTo() {},
     location: { reload() {} },
     TextEncoder,
+    TextDecoder,
+    Uint8Array,
+    crypto: webcrypto,
     Intl,
     Date,
     Math,
@@ -88,7 +92,7 @@ function makeSandbox({ local = {}, session = {} } = {}) {
     parseFloat,
     localStorage: makeStorage(local),
     sessionStorage: makeStorage(session),
-    fetch: async () => ({ ok: false, status: 404 }),
+    fetch: fetchImpl || (async () => ({ ok: false, status: 404 })),
   };
   sandbox.window = sandbox;
   sandbox.document = {
@@ -171,7 +175,7 @@ const lane = (end, bid, priority, seen, id) => ({
   registry_key: "zoll-auktion",
   registry_priority: priority,
   url: `https://www.zoll-auktion.de/lot/${id}`,
-  title: `Auction ${id}`,
+  title: `Volkswagen Golf ${id}`,
   model: "golf",
   country: "DE",
   year: 2018,
@@ -223,6 +227,7 @@ function bootWith(sandbox, payload) {
   evaluate(sandbox, "boot(__payload)");
 }
 
+async function main() {
 try {
   const wrapHtml = (html.match(/<label class="f check" id="auctionToggleWrap"[\s\S]*?<\/label>/) || [""])[0];
   check(wrapHtml.includes('id="fauction"'), "auction toggle checkbox must exist");
@@ -335,7 +340,7 @@ try {
   evaluate(withLane, "apply();");
   const firstCard = evaluate(withLane, "cardForTest=auctionCard(VIEW[0]); cardForTest");
   check(firstCard.includes("المزايدة الحالية") && !/roi|profit|ربح|عائد/i.test(firstCard), "auction card must show bid without profit claims");
-  check(firstCard.includes("Auction a-1") && firstCard.includes("https://www.zoll-auktion.de/lot/a-1"),
+  check(firstCard.includes("Volkswagen Golf a-1") && firstCard.includes("https://www.zoll-auktion.de/lot/a-1"),
     "auction card must preserve the canonical title and source URL");
 
   const scheduledNoReserveCard = evaluate(withLane, `auctionCard({
@@ -410,7 +415,7 @@ try {
       id: "boe-hidden", source: "boe-subastas", source_key: "boe-subastas",
       registry_key: "boe-subastas", registry_priority: 4,
       url: "https://subastas.boe.es/detalleSubasta.php?idSub=BOE-SUB-1",
-      title: "Vehículo con puja oculta", model: "", country: "ES", year: null,
+      title: "Peugeot 208 con puja oculta", model: "Peugeot 208", country: "ES", year: null,
       mileage: null, fuel: "", seller: "state",
       price_amount: null, price_currency: "EUR", price_eur: null,
       price_kind: "hidden", price_label: "Con puja",
@@ -468,8 +473,8 @@ try {
     {
       id: "auto1-adapter", source: "auto1", source_key: "auto1",
       registry_key: "auto1", registry_priority: 13,
-      url: "https://www.auto1.com/offer/adapter-lot", title: "Configured AUTO1 feed",
-      model: "Configured AUTO1 feed", country: "DE", year: 2025, mileage: 12000,
+      url: "https://www.auto1.com/offer/adapter-lot", title: "BMW X1 configured AUTO1 feed",
+      model: "BMW X1", country: "DE", year: 2025, mileage: 12000,
       fuel: "petrol", seller: "configured feed", price_amount: 12345,
       price_currency: "EUR", price_eur: null, price_kind: "unknown",
       price_label: "configured source feed", bid_visibility: "source feed",
@@ -500,31 +505,10 @@ try {
   check(evaluate(broad, "VIEW.some(row=>row.id==='pvp-4620200')"), "broad PVP row must be visible in all-official scope");
   check(evaluate(broad, "VIEW.some(row=>row.id==='auto1-adapter')"),
     "configured adapter row must be visible even when its registry source is otherwise blocked");
-  check(evaluate(broad, "!VIEW.some(row=>row.id==='gaming-console')"),
-    "the cars-first default must not mix generic auction lots into the vehicle view");
-  broad.document.getElementById("fcat").value = "gaming";
-  evaluate(broad, "apply();");
-  check(evaluate(broad, "VIEW.map(row=>row.id).join(',')") === "gaming-console",
-    "a gaming lot must remain visible despite having no car fuel field");
-  const gamingCard = evaluate(broad, "auctionCard(VIEW[0])");
-  check(gamingCard.includes("Gaming console bundle") && gamingCard.includes("gaming equipment") && !gamingCard.includes("⛽"),
-    "generic auction cards must display their own metadata rather than car fuel fields");
-  broad.document.getElementById("fcat").value = "property";
-  broad.document.getElementById("fProperty").value = "residential";
-  evaluate(broad, "apply();");
-  check(evaluate(broad, "VIEW.map(row=>row.id).join(',')") === "residential-property",
-    "the residential-property filter must not be affected by the car fuel policy");
-  const propertyCard = evaluate(broad, "auctionCard(VIEW[0])");
-  check(propertyCard.includes("Villa with garden") && propertyCard.includes("residential property") && !propertyCard.includes("⛽"),
-    "property cards must show property metadata rather than car fuel fields");
-  broad.document.getElementById("fcat").value = "land";
-  broad.document.getElementById("fProperty").value = "land";
-  evaluate(broad, "apply();");
-  check(evaluate(broad, "VIEW.map(row=>row.id).join(',')") === "building-land",
-    "the land filter must isolate land listings");
-  broad.document.getElementById("fcat").value = "vehicles";
-  broad.document.getElementById("fProperty").value = "";
-  evaluate(broad, "apply();");
+  check(evaluate(broad, "!VIEW.some(row=>['gaming-console','residential-property','building-land'].includes(row.id))"),
+    "the car-only scope must exclude gaming, property, and land lots");
+  check(!html.includes('<option value="motorcycle">') && !html.includes('<option value="property">') &&
+    !html.includes('<option value="jetski">'), "the auction category selector must no longer expose non-car modes");
 
   // A broad public watch may be newer than data.enc.  It must remain usable
   // after its own registry and rows validate, even when the encrypted payload
@@ -547,6 +531,50 @@ try {
     "a valid independent watch must enable the auction section without an embedded lane");
   check(evaluate(independent, "VIEW.map(row=>row.id).join(',')") === "pvp-4620200",
     "a newer independently published watch must not disappear from the dashboard");
+
+  // A large public watch is stored as a small manifest plus integrity-checked
+  // row shards.  The browser must reconstruct every part without a total-row
+  // cap, and fail closed when any part changes in transit.
+  const shardRows = [[broadRows[0]], [broadRows[1]]];
+  const shardBytes = shardRows.map((rows, part_index) => Buffer.from(JSON.stringify({
+    schema_version: 1, lane: "official_auction_watch_part", part_index,
+    row_count: rows.length, rows,
+  }) + "\n", "utf8"));
+  const shardedWatch = {
+    schema_version: 2, lane: "official_auction_watch", registry_digest: REGISTRY,
+    generated_at_utc: nowIso, row_count: shardRows.length, source_reports: {},
+    rejected_counts: {}, storage: { format: "json-row-shards", part_rows: 1 },
+    parts: shardBytes.map((bytes, part_index) => ({
+      path: `official_auction_watch_parts/part-${String(part_index).padStart(6, "0")}.json`,
+      part_index, row_count: 1,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
+    })),
+  };
+  const shardFetch = async url => {
+    const key = String(url);
+    if (key.startsWith("official_auction_watch.json")) return { ok: true, json: async () => shardedWatch };
+    const index = shardedWatch.parts.findIndex(part => key.startsWith(part.path));
+    if (index < 0) return { ok: false, status: 404 };
+    const bytes = shardBytes[index];
+    return { ok: true, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+  };
+  const sharded = makeSandbox({ local, fetchImpl: shardFetch });
+  sharded.__payload = { ...BASE, auction_lane: null };
+  const loadedShards = await evaluate(sharded, "loadOfficialAuctionWatch(__payload)");
+  check(loadedShards.map(row => row.id).join(",") === "pvp-4620200,boe-hidden" &&
+    evaluate(sharded, "AUCTION_WATCH_STATE") === "ready",
+    "sharded official watch must reconstruct all validated car rows");
+  const tamperedWatch = { ...shardedWatch, parts: shardedWatch.parts.map((part, index) =>
+    index === 0 ? { ...part, sha256: "0".repeat(64) } : part) };
+  const tampered = makeSandbox({ local, fetchImpl: async url => {
+    const key = String(url);
+    if (key.startsWith("official_auction_watch.json")) return { ok: true, json: async () => tamperedWatch };
+    return shardFetch(url);
+  }});
+  tampered.__payload = { ...BASE, auction_lane: null };
+  check(await evaluate(tampered, "loadOfficialAuctionWatch(__payload)") === null &&
+    evaluate(tampered, "AUCTION_WATCH_STATE") === "invalid",
+    "a tampered public shard must fail closed");
 
   broad.__unmarkedAdapter = { ...broadRows.find(row => row.id === "auto1-adapter"), adapter_authorized: false };
   let unmarkedRejected = false;
@@ -662,3 +690,6 @@ try {
   console.error(`DASHBOARD_AUCTION_TEST_FAIL assertions=${assertions}: ${error.message}`);
   process.exit(1);
 }
+}
+
+main();

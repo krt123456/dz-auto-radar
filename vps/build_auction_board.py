@@ -95,6 +95,43 @@ SOURCE_COUNTRY_OVERRIDES = {
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }
+# The public auction watch is now deliberately passenger-car only.  Explicit
+# source categories take precedence.  For older public feeds that only expose
+# a generic vehicle/unknown category, retain a row only when its official text
+# identifies a passenger-car make (or it comes from a car-only catalogue).
+PASSENGER_CAR_CATEGORIES = frozenset({
+    "car", "estate", "saloon", "sedan", "compact", "small car",
+    "sports car / coupé", "sports car / coupe", "convertible / roadster",
+    "cabriolet", "coupe", "hatchback", "suv", "crossover",
+})
+NON_PASSENGER_CAR_CATEGORIES = frozenset({
+    "van", "truck", "commercial_vehicle", "part", "motorcycle", "bicycle",
+    "equipment", "boat", "jetski", "computer", "electronics", "gaming",
+    "property", "land", "mixed", "other", "all-terrain vehicle",
+    "vehicle_related", "pickup", "bus", "motorhome", "public service vehicle",
+    "high-roof panel transporter", "light duty truck", "flatbed", "box",
+    "car transporter",
+})
+CAR_ONLY_WATCH_SOURCES = frozenset({
+    "autorola-eu", "exleasingcar", "vpauto", "kvdcars", "caraukce",
+    "bilweb", "rbauction-eu", "vavato",
+})
+PASSENGER_CAR_MAKE_PATTERN = re.compile(
+    r"\b(?:mercedes(?:[- ]benz)?|land rover|range rover|alfa romeo|volkswagen|"
+    r"renault|peugeot|citro[eë]n|opel|vauxhall|toyota|bmw|audi|ford|nissan|"
+    r"hyundai|kia|honda|mazda|fiat|skoda|seat|volvo|mitsubishi|suzuki|dacia|"
+    r"chevrolet|jeep|porsche|mini|lexus|subaru|jaguar|chrysler|dodge|tesla|"
+    r"ssangyong|isuzu|daihatsu|infiniti|genesis|cupra|smart|chery|geely|"
+    r"haval|byd|mg|ds|vw)\b",
+    re.IGNORECASE,
+)
+NON_PASSENGER_CAR_TEXT_PATTERN = re.compile(
+    r"\b(?:motorcycle|motorbike|motorrad|motocycle|motocicleta|motociclette|"
+    r"scooter|quad|atv|utv|jet[ -]?ski|boat|yacht|trailer|caravan|camper|"
+    r"tractor|excavator|forklift|truck|lorry|lkw|van|bus|computer|laptop|"
+    r"console|gaming|property|house|land|immobilien|wohnung)\b",
+    re.IGNORECASE,
+)
 # Founder directive (mgr-fb167017e21a4f598f763b1211af2888): the auction lane
 # shows ONLY model years 2023-2026 (cars eligible for import to Algeria in
 # 2026, i.e. not more than ~3 years old), and year 2023 rows additionally
@@ -397,6 +434,25 @@ def _strict_monitored_row(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def is_passenger_car_watch_row(row: Dict[str, Any]) -> bool:
+    """Classify a broad-watch row without treating generic auction lots as cars."""
+    category = " ".join(str(row.get("category") or "unknown").split()).casefold()
+    if category in PASSENGER_CAR_CATEGORIES:
+        return True
+    if category in NON_PASSENGER_CAR_CATEGORIES:
+        return False
+    text = " ".join(
+        str(value or "")
+        for value in (row.get("title"), row.get("model"), row.get("category_raw"))
+    )
+    if NON_PASSENGER_CAR_TEXT_PATTERN.search(text):
+        return False
+    if PASSENGER_CAR_MAKE_PATTERN.search(text):
+        return True
+    source = str(row.get("source_key") or row.get("source") or "").strip()
+    return source in CAR_ONLY_WATCH_SOURCES and category in {"vehicle", "unknown"}
+
+
 def _normalize_monitored_row(
     value: Any,
     *,
@@ -615,6 +671,9 @@ def monitored_rows(
             row, reason = _normalize_monitored_row(raw, generated_at=generated)
             if row is None:
                 reject(reason)
+                continue
+            if not is_passenger_car_watch_row(row):
+                reject("not_passenger_car")
                 continue
             if row["id"] in seen_ids or row["url"] in seen_urls:
                 reject("duplicate")

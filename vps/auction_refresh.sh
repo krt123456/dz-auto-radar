@@ -328,18 +328,26 @@ python3 /opt/sonardeals-radar/enrich_auction_ouedkniss.py \
 FULL_DASHBOARD_PUBLISHED=0
 if python3 /opt/sonardeals-radar/publish_radar_dashboard.py \
   --root "$ROOT" --site "$SITE" --prepare-only --top-n "${VERIFIED_TARGET:-10000}"; then
-python3 - "$PUBLIC_WATCH" "$STATE/latest_selection_manifest.json" \
-  "$SITE/official_auction_watch.json" <<'PY'
+python3 - "$PUBLIC_WATCH" "$STATE/latest_selection_manifest.json" "$SITE" <<'PY'
 import hashlib
 import json
 import sys
+
+sys.path.insert(0, "/opt/sonardeals-radar")
+from publish_radar_dashboard import (  # noqa: E402
+    canonical_json_sha256,
+    load_published_official_auction_watch,
+)
 
 with open(sys.argv[1], encoding="utf-8") as handle:
     source = json.load(handle)
 with open(sys.argv[2], encoding="utf-8") as handle:
     manifest = json.load(handle)
-with open(sys.argv[3], "rb") as handle:
+with open(f"{sys.argv[3]}/official_auction_watch.json", "rb") as handle:
     published = handle.read()
+published_watch, published_root = load_published_official_auction_watch(
+    __import__("pathlib").Path(sys.argv[3])
+)
 
 source_rows = source.get("rows")
 source_count = len(source_rows) if isinstance(source_rows, list) else -1
@@ -349,12 +357,17 @@ if (
     source.get("row_count") != source_count
     or published_count != source_count
     or manifest.get("official_auction_watch_sha256") != published_digest
+    or published_watch.get("row_count") != source_count
+    or canonical_json_sha256(published_watch) != canonical_json_sha256(source)
+    or manifest.get("official_auction_watch_parts_sha256")
+       != canonical_json_sha256(published_root.get("parts"))
 ):
     raise SystemExit("OFFICIAL_AUCTION_WATCH_PUBLICATION_MISMATCH")
 print(json.dumps({
     "result": "OFFICIAL_AUCTION_WATCH_PUBLICATION_PASS",
     "row_count": source_count,
-    "sha256": published_digest,
+    "manifest_sha256": published_digest,
+    "part_count": len(published_root.get("parts", [])),
 }, sort_keys=True))
 PY
 python3 /opt/sonardeals-radar/audit_best_selection.py \
@@ -384,7 +397,7 @@ fi
 # enabling this flag so deployment does not notify the whole existing top 50.
 if [[ "${RADAR_AUCTION_TOP50_ALERTS_ENABLED:-0}" == "1" && "$FULL_DASHBOARD_PUBLISHED" == "1" ]]; then
   if ! python3 /opt/sonardeals-radar/auction_top50_alerts.py \
-    --watch "$SITE/official_auction_watch.json" \
+    --watch "$PUBLIC_WATCH" \
     --fx "$SITE/display_currency.json" \
     --state "$STATE/runtime/auction_top50_alerts_state.json" \
     --telegram-token-file "${CREDENTIALS_DIRECTORY:?}/auction_alert_bot_token" \

@@ -341,6 +341,9 @@ property_normalized, property_reason = bab._normalize_monitored_row(property_raw
 check("broad watch preserves a declared property subtype",
       property_normalized is not None and property_reason == "" and
       property_normalized["property_type"] == "residential")
+check("passenger-car scope rejects property while retaining a car row",
+      bab.is_passenger_car_watch_row(normalized) and
+      not bab.is_passenger_car_watch_row(property_normalized), negative=True)
 check("broad watch preserves connector evidence fields",
       normalized["mileage"] == 12000 and normalized["registration_date"] == "2024-03-12" and
       normalized["bid_visibility"] == "hidden_on_pvp" and normalized["price_label"] == "Prezzo base")
@@ -428,6 +431,16 @@ with _tf.TemporaryDirectory() as _td:
         [lane[0]], [input_path], generated_at=watch_now.isoformat(),
     )
     check("broad input merges alongside strict rows", len(merged) == 2 and not rejected_counts)
+    car_only_doc = _json.loads(input_path.read_text(encoding="utf-8"))
+    car_only_doc["row_count"] = 2
+    car_only_doc["rows"] = [pvp_raw, property_raw]
+    input_path.write_text(_json.dumps(car_only_doc), encoding="utf-8")
+    car_only_rows, car_only_rejected = bab.monitored_rows(
+        [lane[0]], [input_path], generated_at=watch_now.isoformat(),
+    )
+    check("broad watch excludes a non-car source row without hiding the car",
+          len(car_only_rows) == 2 and car_only_rejected.get("not_passenger_car") == 1,
+          negative=True)
     stale_doc = _json.loads(input_path.read_text(encoding="utf-8"))
     stale_doc["generated_at_utc"] = "2026-08-16T05:00:00Z"
     input_path.write_text(_json.dumps(stale_doc), encoding="utf-8")

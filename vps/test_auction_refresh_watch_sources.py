@@ -74,6 +74,13 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         ):
             self.assertIn(f'"${variable}"', monitored_inputs)
 
+    def test_public_watch_verification_uses_shard_manifest(self) -> None:
+        content = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("load_published_official_auction_watch", content)
+        self.assertIn("official_auction_watch_parts_sha256", content)
+        self.assertIn('"part_count": len(published_root.get("parts", []))', content)
+        self.assertIn('--watch "$PUBLIC_WATCH"', content)
+
 
 if __name__ == "__main__":
     unittest.main()

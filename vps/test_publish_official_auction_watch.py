@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import tempfile
 import unittest
+from pathlib import Path
 
 import build_auction_board as builder
 import publish_radar_dashboard as publisher
@@ -152,6 +154,51 @@ class OfficialAuctionWatchPublicationTests(unittest.TestCase):
         watch["rows"][0]["ouedkniss_reference"]["sample_count"] = 1
         with self.assertRaisesRegex(RuntimeError, "Ouedkniss reference"):
             publisher.validate_official_auction_watch(watch, now=self.now)
+
+    def test_sharded_public_watch_reconstructs_all_rows(self) -> None:
+        second = copy.deepcopy(self.row)
+        second["id"] = "pvp-giustizia:fixture-2"
+        second["url"] = (
+            "https://pvp.giustizia.it/pvp/it/"
+            "detail_annuncio.page?idAnnuncio=fixture-2"
+        )
+        watch = builder.build_monitored_watch(
+            [self.row, second], generated_at=self.now.isoformat(), rejected_counts={}
+        )
+        root_bytes, parts, root = publisher.build_published_official_auction_watch(
+            watch, part_rows=1, now=self.now
+        )
+        self.assertEqual(root["schema_version"], 2)
+        self.assertEqual(len(parts), 2)
+        with tempfile.TemporaryDirectory() as temporary:
+            site = Path(temporary)
+            (site / "official_auction_watch.json").write_bytes(root_bytes)
+            for relative_path, content in parts:
+                path = site / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            reconstructed, published_root = publisher.load_published_official_auction_watch(
+                site, now=self.now
+            )
+        self.assertEqual(reconstructed["row_count"], 2)
+        self.assertEqual([row["id"] for row in reconstructed["rows"]], [
+            "pvp-giustizia:fixture-1", "pvp-giustizia:fixture-2",
+        ])
+        self.assertEqual(published_root["parts"], root["parts"])
+
+    def test_sharded_public_watch_rejects_tampered_part(self) -> None:
+        root_bytes, parts, _ = publisher.build_published_official_auction_watch(
+            self.watch(), part_rows=1, now=self.now
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            site = Path(temporary)
+            (site / "official_auction_watch.json").write_bytes(root_bytes)
+            relative_path, content = parts[0]
+            path = site / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content + b" ")
+            with self.assertRaisesRegex(RuntimeError, "digest mismatch"):
+                publisher.load_published_official_auction_watch(site, now=self.now)
 
 
 if __name__ == "__main__":
