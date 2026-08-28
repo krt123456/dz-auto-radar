@@ -61,6 +61,25 @@ class Session:
         return Response(self.responses[url])
 
 
+class FluctuatingHomeSession(Session):
+    def __init__(self, responses: dict[str, str], *, final_total: int) -> None:
+        super().__init__(responses)
+        self.final_total = final_total
+        self.home_requests = 0
+
+    def get(self, url: str, **_: object) -> Response:
+        if url == watch.CATALOGUE_URL:
+            self.home_requests += 1
+            if self.home_requests > 1:
+                return Response(
+                    self.responses[url].replace(
+                        "Search (3 vehicles)",
+                        f"Search ({self.final_total} vehicles)",
+                    )
+                )
+        return super().get(url)
+
+
 class VPAutoWatchTest(unittest.TestCase):
     def responses(self, *, total: int = 3) -> dict[str, str]:
         home = HOME.replace("Search (3 vehicles)", f"Search ({total} vehicles)")
@@ -123,6 +142,19 @@ class VPAutoWatchTest(unittest.TestCase):
             report["count_reconciliation"],
             "landing_total_lags_unique_cards",
         )
+
+    def test_rechecked_landing_total_can_change_without_losing_cards(self) -> None:
+        payload = watch.build_watch(
+            session=FluctuatingHomeSession(self.responses(), final_total=4),
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+            workers=1,
+            fetch_details=False,
+        )
+        report = payload["source_reports"]["vpauto"]
+        self.assertEqual(payload["row_count"], 3)
+        self.assertEqual(report["declared"], 3)
+        self.assertEqual(report["declared_rechecked"], 4)
+        self.assertTrue(report["declared_total_changed_during_scan"])
 
 
 if __name__ == "__main__":

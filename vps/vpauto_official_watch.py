@@ -477,14 +477,16 @@ def build_watch(
 
     final_home = fetch_markup(root_session, CATALOGUE_URL, timeout=timeout)
     final_declared, final_sales = parse_home(final_home)
-    if final_declared != declared or set(final_sales) != set(sales):
-        raise VPAutoWatchError("VPauto catalogue changed before the final check")
+    if set(final_sales) != set(sales):
+        raise VPAutoWatchError("VPauto catalogue sale routes changed before the final check")
 
     report = {
         "status": "ok",
         "connector_status": "ok",
         "catalogue_scope": "every public vehicle card reachable from the VPauto PRO catalogue",
         "declared": declared,
+        "declared_rechecked": final_declared,
+        "declared_total_changed_during_scan": final_declared != declared,
         "catalogue_count_delta": catalogue_count_delta,
         "count_reconciliation": (
             "exact"
