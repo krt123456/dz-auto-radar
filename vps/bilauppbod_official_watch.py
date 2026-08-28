@@ -287,6 +287,10 @@ def resolve_mileage(
 
 def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: int | None) -> dict[str, Any]:
     year_match = YEAR_RE.search(card.registration_date) or YEAR_RE.search(card.title)
+    # A visible ``0 kr.`` is an open auction with no bid yet, not a hidden or
+    # invalid price.  Mark it unknown so the monitored-board price validator
+    # keeps the listing without inventing a positive starting bid.
+    has_positive_current_bid = card.price_amount is not None and card.price_amount > 0
     return {
         "id": f"{SOURCE_KEY}:{card.listing_id}", "source": SOURCE_KEY, "source_key": SOURCE_KEY, "source_name": SOURCE_NAME,
         "url": card.url, "title": card.title, "model": card.title, "country": "IS", "asset_country": "IS", "category": "car",
@@ -294,7 +298,7 @@ def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: 
         "year": int(year_match.group(1)) if year_match else None, "mileage": mileage_km, "mileage_km": mileage_km, "fuel": normalize_fuel(detail.fuel_raw),
         "seller": detail.seller or card.seller or SOURCE_NAME, "image_url": card.image_url,
         "price_amount": card.price_amount, "price_currency": "ISK" if card.price_amount is not None else "", "price_eur": None,
-        "price_kind": "current_bid" if card.price_amount is not None else "unknown", "price_label": card.price_label,
+        "price_kind": "current_bid" if has_positive_current_bid else "unknown", "price_label": card.price_label,
         "bid_visibility": "public Bilauppboð current-auction card", "reserve_met": None, "no_reserve": None,
         "sale_terms": "Official Bilauppboð current auction listing", "auction_status": "active",
         "canonical_end_utc": card.end_utc.isoformat(), "sale_end_utc": card.end_utc.isoformat(), "sale_event_utc": None,
