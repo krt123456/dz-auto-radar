@@ -46,6 +46,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "kvdcars"', content)
         self.assertIn('BILAUPPBOD_WATCH="$STATE/runtime/bilauppbod_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "bilauppbod"', content)
+        self.assertGreater(content.index('run_official_watch "bilauppbod"'), content.index('for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do'))
+        self.assertLess(content.index('run_official_watch "bilauppbod"'), content.index("MONITORED_INPUT_ARGS=()"))
         self.assertIn('KIERTONET_WATCH="$STATE/runtime/kiertonet_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "kiertonet"', content)
         self.assertIn('AUKTIONSHUSET_DAB_WATCH="$STATE/runtime/auktionshuset_dab_official_auction_watch.json"', content)

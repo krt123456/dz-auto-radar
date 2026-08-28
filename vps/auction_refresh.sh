@@ -242,13 +242,6 @@ run_official_watch "kvdcars" \
   --out "$KVDCARS_WATCH" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
 OFFICIAL_WATCH_PIDS+=("$!")
-run_official_watch "bilauppbod" \
-  python3 /opt/sonardeals-radar/bilauppbod_official_watch.py \
-  --out "$BILAUPPBOD_WATCH" \
-  --timeout "${RADAR_BILAUPPBOD_WATCH_TIMEOUT_SEC:-45}" \
-  --workers "${RADAR_BILAUPPBOD_WATCH_WORKERS:-6}" \
-  --snapshot-attempts "${RADAR_BILAUPPBOD_SNAPSHOT_ATTEMPTS:-4}" &
-OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "kiertonet" \
   python3 /opt/sonardeals-radar/kiertonet_official_watch.py \
   --out "$KIERTONET_WATCH" \
@@ -311,6 +304,16 @@ OFFICIAL_WATCH_PIDS+=("$!")
 for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do
   wait "$watch_pid"
 done
+
+# Bilauppboð exposes a small, finite public catalogue.  Read it after the
+# broad parallel batch has quiesced so its two-pass coherence proof is not
+# distorted by the large concurrent network burst from unrelated collectors.
+run_official_watch "bilauppbod" \
+  python3 /opt/sonardeals-radar/bilauppbod_official_watch.py \
+  --out "$BILAUPPBOD_WATCH" \
+  --timeout "${RADAR_BILAUPPBOD_WATCH_TIMEOUT_SEC:-45}" \
+  --workers "${RADAR_BILAUPPBOD_WATCH_WORKERS:-6}" \
+  --snapshot-attempts "${RADAR_BILAUPPBOD_SNAPSHOT_ATTEMPTS:-4}"
 
 MONITORED_INPUT_ARGS=()
 # The generated adapter bridge reports all 118 source identities and merges
