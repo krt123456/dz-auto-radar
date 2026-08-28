@@ -129,7 +129,7 @@ NON_PASSENGER_CAR_TEXT_PATTERN = re.compile(
     r"\b(?:motorcycle|motorbike|motorrad|motocycle|motocicleta|motociclette|"
     r"scooter|quad|atv|utv|jet[ -]?ski|boat|yacht|trailer|caravan|camper|"
     r"tractor|excavator|forklift|truck|lorry|lkw|van|bus|computer|laptop|"
-    r"console|gaming|property|house|land|immobilien|wohnung)\b",
+    r"console|gaming|property|house|immobilien|wohnung)\b",
     re.IGNORECASE,
 )
 # Founder directive (mgr-fb167017e21a4f598f763b1211af2888): the auction lane

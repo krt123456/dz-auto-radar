@@ -1125,7 +1125,7 @@ function isPassengerCarAuction(row){
   if(AUCTION_PASSENGER_CAR_CATEGORIES.has(category))return true;
   if(AUCTION_NON_PASSENGER_CAR_CATEGORIES.has(category))return false;
   const text=normalizeAuctionVehicleText(`${row&&row.title||""} ${row&&row.model||""} ${row&&row.category_raw||""}`);
-  if(/(?:^| )(?:motorcycle|motorbike|motorrad|motocycle|motocicleta|motociclette|scooter|quad|atv|utv|jetski|jet ski|boat|yacht|trailer|caravan|camper|tractor|excavator|forklift|truck|lorry|lkw|van|bus|computer|laptop|console|gaming|property|house|land|immobilien|wohnung)(?: |$)/.test(text))return false;
+  if(/(?:^| )(?:motorcycle|motorbike|motorrad|motocycle|motocicleta|motociclette|scooter|quad|atv|utv|jetski|jet ski|boat|yacht|trailer|caravan|camper|tractor|excavator|forklift|truck|lorry|lkw|van|bus|computer|laptop|console|gaming|property|house|immobilien|wohnung)(?: |$)/.test(text))return false;
   if(auctionVehicleIdentities(text).length)return true;
   return AUCTION_CAR_ONLY_SOURCE_KEYS.has(String(row&&row.source_key||row&&row.source||""))&&
     (category==="vehicle"||category==="unknown");
