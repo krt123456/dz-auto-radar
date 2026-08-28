@@ -139,6 +139,18 @@ class ExleasingcarWatchTest(unittest.TestCase):
         self.assertEqual(report["strict_snapshot_failures"], 3)
         self.assertTrue(report["final_first_page_rechecked"])
 
+    def test_moving_page_accepts_a_counter_that_precedes_terminal_pagination(self) -> None:
+        original_page_size = watch.PAGE_SIZE
+        try:
+            watch.PAGE_SIZE = 2
+            parsed = watch.parse_page(
+                page(5, card(1, "DE", "ABARTH 500", price=7098) + card(2, "FR", "PEUGEOT 308", price=8200)),
+                observed_at="2026-08-27T20:00:00+00:00",
+            )
+            self.assertTrue(watch._validate_moving_page(parsed, page=1))
+        finally:
+            watch.PAGE_SIZE = original_page_size
+
     def test_missing_country_is_rejected(self) -> None:
         markup = page(1, '<div class="auto-block" car-id="1"><h5>Car</h5></div>')
         with self.assertRaises(watch.ExleasingcarWatchError):

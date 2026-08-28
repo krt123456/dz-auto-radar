@@ -356,15 +356,19 @@ def _validate_moving_page(parsed: ParsedPage, *, page: int) -> bool:
     a concurrent catalogue shrink.  It is not used for coverage; the final
     page-one probe below determines the current advertised total.
     """
-    expected_pages = math.ceil(parsed.total / PAGE_SIZE) if parsed.total else 0
-    if parsed.page_count != expected_pages:
-        raise ExleasingcarWatchError(
-            f"Exleasingcar pagination mismatch: total={parsed.total} pages={parsed.page_count}"
-        )
+    # The source can update the visible counter a few seconds before its
+    # terminal pagination link.  In moving mode, pagination is the executable
+    # page contract and the counter is checked only against accumulated unique
+    # IDs after the final first-page probe.
+    if parsed.page_count < 1 or parsed.page_count > MAX_PAGES:
+        raise ExleasingcarWatchError("Exleasingcar moving catalogue has an invalid terminal page")
     if page > parsed.page_count:
         return False
-    expected_rows = PAGE_SIZE if page < parsed.page_count else parsed.total - PAGE_SIZE * (page - 1)
-    if expected_rows < 1 or len(parsed.rows) != expected_rows:
+    if page < parsed.page_count and len(parsed.rows) != PAGE_SIZE:
+        raise ExleasingcarWatchError(
+            f"Exleasingcar moving page {page} cardinality is invalid: {len(parsed.rows)}"
+        )
+    if page == parsed.page_count and not 1 <= len(parsed.rows) <= PAGE_SIZE:
         raise ExleasingcarWatchError(
             f"Exleasingcar moving page {page} cardinality is invalid: {len(parsed.rows)}"
         )
@@ -517,7 +521,7 @@ def build_watch(
             # public pages are read.  Restart from page one rather than
             # accepting a mixed snapshot; the higher default concurrency
             # keeps each retry short enough to obtain a stable complete pass.
-            if "catalogue changed" not in str(error):
+            if not any(marker in str(error) for marker in ("catalogue changed", "pagination mismatch")):
                 raise
             last_error = error
     payload = _build_moving_catalogue_snapshot(
