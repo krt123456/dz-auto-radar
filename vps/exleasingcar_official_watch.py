@@ -46,8 +46,12 @@ MAX_PAGES = 2_000
 # atomic snapshots; when the upstream counter changes continuously, switch to
 # the explicit moving-catalogue coverage mode below rather than dropping the
 # entire large car source from publication.
-STRICT_SNAPSHOT_ATTEMPTS = 3
-MOVING_CATALOGUE_PASSES = 3
+# Two strict attempts preserve the preferred atomic path without spending the
+# whole refresh window repeating a scan that an actively changing catalogue
+# cannot satisfy.  The saved scan is allocated to one extra moving-coverage
+# pass, so the bounded worst case remains six full catalogue sweeps.
+STRICT_SNAPSHOT_ATTEMPTS = 2
+MOVING_CATALOGUE_PASSES = 4
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
@@ -291,6 +295,19 @@ def _build_watch_snapshot(
     if len(first.rows) != min(PAGE_SIZE, first.total):
         raise ExleasingcarWatchError("Exleasingcar first page cardinality is invalid")
 
+    # A quick second page-one probe avoids starting hundreds of concurrent
+    # detail-free catalogue requests when the public ordering is already
+    # moving.  It is merely an early restart signal: the final page-one probe
+    # below remains the publication check for a strict snapshot.
+    preflight = parse_page(fetch_markup(session, SOURCE_URL, timeout=timeout), observed_at=observed_at)
+    if (
+        preflight.total != first.total
+        or preflight.page_count != first.page_count
+        or preflight.page_url_prefix != first.page_url_prefix
+        or [row["id"] for row in preflight.rows] != [row["id"] for row in first.rows]
+    ):
+        raise ExleasingcarWatchError("Exleasingcar catalogue changed before pagination")
+
     def fetch_and_parse(page: int) -> tuple[int, list[dict[str, Any]]]:
         local_session = configured_session()
         markup = fetch_markup(local_session, f"{first.page_url_prefix}/{page}", timeout=timeout)
@@ -333,6 +350,7 @@ def _build_watch_snapshot(
         "normalized_rows": len(rows),
         "page_size": PAGE_SIZE,
         "pages": expected_pages,
+        "first_page_preflight_rechecked": True,
         "first_page_rechecked": True,
         "stable_ids_unique": True,
         "publication_ready": False,

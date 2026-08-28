@@ -49,8 +49,8 @@ class ExleasingcarWatchTest(unittest.TestCase):
     def test_default_catalogue_route_uses_largest_public_page_size(self) -> None:
         self.assertEqual(watch.PAGE_SIZE, 60)
         self.assertEqual(watch.DEFAULT_WORKERS, 16)
-        self.assertEqual(watch.STRICT_SNAPSHOT_ATTEMPTS, 3)
-        self.assertEqual(watch.MOVING_CATALOGUE_PASSES, 3)
+        self.assertEqual(watch.STRICT_SNAPSHOT_ATTEMPTS, 2)
+        self.assertEqual(watch.MOVING_CATALOGUE_PASSES, 4)
         self.assertTrue(watch.SOURCE_URL.endswith("/show-60/1"))
 
     def test_current_show_results_counter_is_accepted(self) -> None:
@@ -92,7 +92,7 @@ class ExleasingcarWatchTest(unittest.TestCase):
         changed_second = page(4, card(3, "NL", "TOYOTA YARIS", price=6300) + card(4, "NL", "VW POLO", price=6400))
         second = page(3, card(3, "NL", "TOYOTA YARIS", price=6300))
         responses = {
-            watch.SOURCE_URL: [first, first, first],
+            watch.SOURCE_URL: [first, first, first, first, first],
             "https://www.exleasingcar.com/en/auto-auction/show-20/2": [changed_second, second],
         }
         original_page_size = watch.PAGE_SIZE
@@ -116,8 +116,8 @@ class ExleasingcarWatchTest(unittest.TestCase):
         changed = page(4, card(3, "NL", "TOYOTA YARIS", price=6300) + card(4, "NL", "VW POLO", price=6400))
         final = page(4, card(1, "DE", "ABARTH 500", price=7098) + card(2, "FR", "PEUGEOT 308", price=8200))
         responses = {
-            watch.SOURCE_URL: [first, first, first, first, final],
-            "https://www.exleasingcar.com/en/auto-auction/show-20/2": [changed, changed, changed, changed],
+            watch.SOURCE_URL: [first, first, first, first, first, final],
+            "https://www.exleasingcar.com/en/auto-auction/show-20/2": [changed, changed, changed],
         }
         original_page_size = watch.PAGE_SIZE
         original_factory = watch.configured_session
@@ -136,8 +136,41 @@ class ExleasingcarWatchTest(unittest.TestCase):
         self.assertEqual(payload["row_count"], 4)
         self.assertEqual(report["declared"], 4)
         self.assertEqual(report["snapshot_mode"], "moving_catalogue_coverage")
-        self.assertEqual(report["strict_snapshot_failures"], 3)
+        self.assertEqual(report["strict_snapshot_failures"], 2)
         self.assertTrue(report["final_first_page_rechecked"])
+
+    def test_moving_coverage_uses_the_extra_reconciliation_pass(self) -> None:
+        strict = page(3, card(1, "DE", "ABARTH 500", price=7098) + card(2, "FR", "PEUGEOT 308", price=8200))
+        changed = page(4, card(3, "NL", "TOYOTA YARIS", price=6300) + card(4, "NL", "VW POLO", price=6400))
+        moving = page(4, card(1, "DE", "ABARTH 500", price=7098) + card(2, "FR", "PEUGEOT 308", price=8200))
+        only_three = page(4, card(3, "NL", "TOYOTA YARIS", price=6300))
+        only_four = page(4, card(4, "NL", "VW POLO", price=6400))
+        responses = {
+            # Two strict passes consume the first four probes.  Moving mode
+            # then needs four coverage passes before the final ID arrives.
+            watch.SOURCE_URL: [strict, strict, strict, strict] + [moving] * 8,
+            "https://www.exleasingcar.com/en/auto-auction/show-20/2": [
+                changed, changed, only_three, only_three, only_three, only_four,
+            ],
+        }
+        original_page_size = watch.PAGE_SIZE
+        original_factory = watch.configured_session
+        try:
+            watch.PAGE_SIZE = 2
+            watch.configured_session = lambda: Session(responses)  # type: ignore[assignment]
+            payload = watch.build_watch(
+                session=Session(responses),
+                now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+                workers=1,
+            )
+        finally:
+            watch.PAGE_SIZE = original_page_size
+            watch.configured_session = original_factory
+        report = payload["source_reports"]["exleasingcar"]
+        self.assertEqual(payload["row_count"], 4)
+        self.assertEqual(report["declared"], 4)
+        self.assertEqual(report["coverage_passes"], 4)
+        self.assertEqual(report["strict_snapshot_failures"], 2)
 
     def test_moving_page_accepts_a_counter_that_precedes_terminal_pagination(self) -> None:
         original_page_size = watch.PAGE_SIZE
