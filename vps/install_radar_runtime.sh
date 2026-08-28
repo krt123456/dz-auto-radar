@@ -82,6 +82,7 @@ install -m 0755 "$SOURCE/vpauto_official_watch.py" /opt/sonardeals-radar/vpauto_
 install -m 0755 "$SOURCE/huutokaupat_official_watch.py" /opt/sonardeals-radar/huutokaupat_official_watch.py
 install -m 0755 "$SOURCE/vavato_official_watch.py" /opt/sonardeals-radar/vavato_official_watch.py
 install -m 0755 "$SOURCE/ponip_official_watch.py" /opt/sonardeals-radar/ponip_official_watch.py
+install -m 0755 "$SOURCE/caraukce_official_watch.py" /opt/sonardeals-radar/caraukce_official_watch.py
 install -m 0755 "$SOURCE/pvp_official_auction_watch.py" /opt/sonardeals-radar/pvp_official_auction_watch.py
 install -m 0755 "$SOURCE/boe_kronofogden_watch_fetcher.py" /opt/sonardeals-radar/boe_kronofogden_watch_fetcher.py
 install -m 0755 "$SOURCE/fr_cz_de_official_watch.py" /opt/sonardeals-radar/fr_cz_de_official_watch.py

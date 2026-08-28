@@ -36,6 +36,7 @@ VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"
 HUUTOKAUPAT_WATCH="$STATE/runtime/huutokaupat_official_auction_watch.json"
 VAVATO_WATCH="$STATE/runtime/vavato_official_auction_watch.json"
 PONIP_WATCH="$STATE/runtime/ponip_official_auction_watch.json"
+CARAUKCE_WATCH="$STATE/runtime/caraukce_official_auction_watch.json"
 SOURCE_ADAPTER_WATCH="$STATE/runtime/source_adapter_watch.json"
 PUBLIC_WATCH="$ROOT/mobile_site_local/official_auction_watch.json"
 
@@ -192,6 +193,11 @@ run_official_watch "fina-ponip" \
   --out "$PONIP_WATCH" \
   --timeout "${RADAR_PONIP_WATCH_TIMEOUT_SEC:-360}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "caraukce" \
+  python3 /opt/sonardeals-radar/caraukce_official_watch.py \
+  --out "$CARAUKCE_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "troostwijk"   python3 /opt/sonardeals-radar/troostwijk_fetcher.py   --out "$TROOSTWIJK_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
@@ -230,7 +236,7 @@ for watch_file in \
   "$BOE_KRONO_WATCH" "$FR_CZ_DE_WATCH" "$ZOLL_WATCH" "$BE_PL_PT_WATCH" \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
-  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
+  "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$CARAUKCE_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
   "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then

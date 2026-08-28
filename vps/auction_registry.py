@@ -47,7 +47,7 @@ LEGACY_OPERATIONAL_SOURCE_KEYS = frozenset({
     "justiz-auktion", "onlineveilingmeester", "zoll-auktion", "finshop",
     "licytacje-komornik", "copart-de", "copart-es", "copart-fi",
     "oksjonikeskus", "anabi", "eaukcionai", "sodnedrazbe", "e-arveres-mnv",
-    "ropk", "nva-latvia",
+    "ropk", "nva-latvia", "caraukce",
 })
 BLOCKED_SOURCE_KEYS = frozenset({
     "retrade", "autoa-bid", "avariilised", "avcars",
