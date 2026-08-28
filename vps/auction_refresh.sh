@@ -45,6 +45,7 @@ BILWEB_WATCH="$STATE/runtime/bilweb_official_auction_watch.json"
 KVDCARS_WATCH="$STATE/runtime/kvdcars_official_auction_watch.json"
 KIERTONET_WATCH="$STATE/runtime/kiertonet_official_auction_watch.json"
 AUKTIONSHUSET_DAB_WATCH="$STATE/runtime/auktionshuset_dab_official_auction_watch.json"
+AGORASTORE_WATCH="$STATE/runtime/agorastore_official_auction_watch.json"
 SOURCE_ADAPTER_WATCH="$STATE/runtime/source_adapter_watch.json"
 PUBLIC_WATCH="$ROOT/mobile_site_local/official_auction_watch.json"
 
@@ -248,6 +249,11 @@ run_official_watch "auktionshuset-dab" \
   --out "$AUKTIONSHUSET_DAB_WATCH" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "agorastore" \
+  python3 /opt/sonardeals-radar/agorastore_official_watch.py \
+  --out "$AGORASTORE_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "troostwijk"   python3 /opt/sonardeals-radar/troostwijk_fetcher.py   --out "$TROOSTWIJK_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
@@ -289,7 +295,7 @@ for watch_file in \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
   "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$RBAUCTION_WATCH" "$AUTOROLA_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$CARAUKCE_WATCH" "$AURENA_WATCH" "$AUCTIONMASTER_WATCH" "$BILWEB_WATCH" "$KVDCARS_WATCH" "$KIERTONET_WATCH" "$AUKTIONSHUSET_DAB_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$PVP_WATCH" \
-  "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" \
+  "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" "$AGORASTORE_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then
     MONITORED_INPUT_ARGS+=(--monitored-input "$watch_file")

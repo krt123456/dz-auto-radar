@@ -381,6 +381,24 @@ check("cross-border Exleasingcar card enters broad watch",
       exleasingcar_normalized is not None and exleasingcar_reason == "" and
       exleasingcar_normalized["country"] == "DE" and
       exleasingcar_normalized["eligibility_status"] == "review_required")
+agorastore_cross_border_raw = dict(
+    pvp_raw,
+    id="agorastore:agora-123",
+    source="agorastore",
+    source_key="agorastore",
+    url="https://www.agorastore.fr/fr/ventes-occasions/voiture/agora-123",
+    title="PEUGEOT 208 2024",
+    model="PEUGEOT 208 2024",
+    country="BE",
+    category="car",
+    adapter_authorized=True,
+)
+agorastore_cross_border, agorastore_cross_border_reason = bab._normalize_monitored_row(
+    agorastore_cross_border_raw, generated_at=watch_now
+)
+check("Agorastore retains its official Belgian car asset country",
+      agorastore_cross_border is not None and agorastore_cross_border_reason == "" and
+      agorastore_cross_border["country"] == "BE")
 exleasingcar_business_edition = dict(
     exleasingcar_normalized,
     id="exleasingcar:business-edition",

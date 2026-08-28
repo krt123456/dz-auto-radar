@@ -92,6 +92,10 @@ SOURCE_COUNTRY_OVERRIDES = {
     # Autorola's single public dealer catalogue contains cross-border fleet
     # auctions; every card carries its official asset-country flag.
     "autorola-eu": SCHENGEN_COUNTRIES,
+    # Agorastore's French public cars category also contains officially marked
+    # Belgian and other Schengen assets; retain the asset country from each
+    # public API card rather than relabelling every lot as France.
+    "agorastore": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }

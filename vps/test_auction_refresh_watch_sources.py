@@ -48,6 +48,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "kiertonet"', content)
         self.assertIn('AUKTIONSHUSET_DAB_WATCH="$STATE/runtime/auktionshuset_dab_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "auktionshuset-dab"', content)
+        self.assertIn('AGORASTORE_WATCH="$STATE/runtime/agorastore_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "agorastore"', content)
         self.assertIn('run_official_watch "klaravik-se,klaravik-dk"', content)
         self.assertIn('python3 /opt/sonardeals-radar/klaravik_official_watch.py', content)
         for variable in (
@@ -66,6 +68,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
             "KVDCARS_WATCH",
             "KIERTONET_WATCH",
             "AUKTIONSHUSET_DAB_WATCH",
+            "AGORASTORE_WATCH",
             "ASTE_WATCH",
             "KLARAVIK_WATCH",
             "VEACOM_WATCH",
