@@ -89,6 +89,43 @@ class OfficialAuctionWatchPublicationTests(unittest.TestCase):
         )
         publisher.validate_official_auction_watch(watch, now=self.now)
 
+    def test_cross_border_rbauction_asset_country_is_accepted(self) -> None:
+        row = copy.deepcopy(self.row)
+        row.update(
+            {
+                "id": "rbauction-eu:fixture-1",
+                "source": "rbauction-eu",
+                "source_key": "rbauction-eu",
+                "registry_key": "rbauction-eu",
+                "registry_priority": 22,
+                "url": "https://www.rbauction.com/pdp/fixture/fixture-1",
+                "country": "ES",
+            }
+        )
+        watch = builder.build_monitored_watch(
+            [row], generated_at=self.now.isoformat(), rejected_counts={}
+        )
+        publisher.validate_official_auction_watch(watch, now=self.now)
+
+    def test_cross_border_autorola_asset_country_is_accepted(self) -> None:
+        row = copy.deepcopy(self.row)
+        row.update(
+            {
+                "id": "autorola-eu:111:fixture-1",
+                "source": "autorola-eu",
+                "source_key": "autorola-eu",
+                "registry_key": "autorola-eu",
+                "registry_priority": 22,
+                "url": "https://www.autorola.eu/dealer/bid?eid=fixture-1&aid=111",
+                "country": "BE",
+                "adapter_authorized": True,
+            }
+        )
+        watch = builder.build_monitored_watch(
+            [row], generated_at=self.now.isoformat(), rejected_counts={}
+        )
+        publisher.validate_official_auction_watch(watch, now=self.now)
+
     def test_priced_semantic_without_amount_is_rejected(self) -> None:
         watch = self.watch()
         watch["rows"][0]["price_eur"] = None

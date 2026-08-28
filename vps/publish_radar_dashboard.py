@@ -94,6 +94,12 @@ OFFICIAL_AUCTION_SOURCE_COUNTRY_OVERRIDES = {
     "exleasingcar": SCHENGEN_COUNTRIES,
     # Vavato's public Cars category is likewise a cross-border catalogue.
     "vavato": SCHENGEN_COUNTRIES,
+    # Ritchie Bros publishes one European automobile catalogue whose official
+    # card carries the asset's country rather than the NL registry home.
+    "rbauction-eu": SCHENGEN_COUNTRIES,
+    # Autorola's public dealer catalogue is also cross-border; each card
+    # supplies the official location flag used by its source-specific watcher.
+    "autorola-eu": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }
