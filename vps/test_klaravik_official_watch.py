@@ -9,150 +9,126 @@ import klaravik_official_watch as watch
 
 
 UTC = dt.timezone.utc
-SOURCE = watch.SourceSpec("klaravik-se", "Klaravik Sweden", "SE", "www.klaravik.se", "SEK")
 NOW = dt.datetime(2026, 8, 27, 12, 0, tzinfo=UTC)
+SOURCE = watch.SourceSpec(
+    "klaravik-se", "Klaravik Sweden", "SE", "www.klaravik.se", "SEK",
+    "/auktion/fordon/latta-fordon/personbilar/",
+)
 
 
-def item(
+def card(
     item_id: int,
-    name: str,
-    category1: str,
-    category2: str,
+    title: str,
     *,
-    bid: int = 1000,
-) -> dict[str, Any]:
-    return {
-        "id": item_id,
-        "name": name,
-        "make": "Sea-Doo" if "Sea-Doo" in name else "",
-        "model": "RXT260" if "Sea-Doo" in name else "",
-        "url": f"https://www.klaravik.se/auktion/produkt/{item_id}-lot/",
-        "endDate": "2026-08-29T12:00:00+02:00",
-        "ended": False,
-        "currentBid": bid,
-        "startingPrice": 500,
-        "amountOfBids": 2,
-        "nextBidStep": 100,
-        "reservationPriceReached": True,
-        "categoryNameLevel1": category1,
-        "categoryNameLevel2": category2,
-        "categoryNameLevel3": None,
-        "municipalityName": "Aarhus",
-        "countyName": "Region Midtjylland",
-    }
+    price: str = "31.000 SEK",
+    bids: int = 2,
+    end: str = "2026-08-29T12:00:00+02:00",
+    location: str = "Aarhus",
+) -> str:
+    return f'''<article class="product_card" id="product_card--{item_id}">
+      <a href="/auktion/produkt/{item_id}-lot/" title="{title}">
+        <span data-prod-id="{item_id}" data-auction-close="{end}"></span>
+        <p class="product_card__title">{title}</p>
+        <p class="product_card__info-text">{location}</p>
+        <p class="product_card__current-bid">{price}</p>
+        <p id="antbids_{item_id}">{bids}</p>
+      </a>
+    </article>'''
+
+
+def page(total: int, cards: str) -> str:
+    return f"<script>window.objectsInList = {total};</script>{cards}"
+
+
+PAGE_1 = page(
+    3,
+    card(1, "Personbil Volvo V60 Bensin, 2024")
+    + card(2, "Sea-Doo RXT260 Vandscooter"),
+)
+PAGE_2 = page(3, card(3, "Varebil Ford Transit, 2023"))
 
 
 class Response:
-    def __init__(self, payload: dict[str, Any]) -> None:
-        self.payload = payload
+    def __init__(self, body: str) -> None:
+        self.text = body
 
     def raise_for_status(self) -> None:
         return None
 
-    def json(self) -> dict[str, Any]:
-        return self.payload
+
+class Session:
+    def __init__(self, responses: dict[str, str]) -> None:
+        self.responses = responses
+
+    def get(self, url: str, **_: Any) -> Response:
+        return Response(self.responses[url])
 
 
-class SnapshotSession:
-    """Serves one complete page set for each pass beginning at page one."""
+class SequencedSession:
+    def __init__(self, responses: dict[str, list[str]]) -> None:
+        self.responses = {url: list(bodies) for url, bodies in responses.items()}
 
-    def __init__(self, snapshots: list[dict[int, list[dict[str, Any]]]]) -> None:
-        self.snapshots = snapshots
-        self.pass_index = -1
-
-    def get(self, _: str, *, params: dict[str, Any], **__: Any) -> Response:
-        page = int(params["page"])
-        if page == 1:
-            self.pass_index += 1
-        snapshot = self.snapshots[min(self.pass_index, len(self.snapshots) - 1)]
-        total = sum(len(entries) for entries in snapshot.values())
-        pages = len(snapshot)
-        return Response({
-            "data": {
-                "pagination": {
-                    "totalPages": pages,
-                    "totalCount": total,
-                    "pageSize": watch.PAGE_SIZE,
-                    "pageItemCount": len(snapshot[page]),
-                },
-                "items": snapshot[page],
-            }
-        })
+    def get(self, url: str, **_: Any) -> Response:
+        bodies = self.responses[url]
+        if not bodies:
+            raise AssertionError(f"unexpected extra request for {url}")
+        return Response(bodies.pop(0))
 
 
 class KlaravikWatchTest(unittest.TestCase):
-    def test_two_complete_passes_preserve_vehicle_and_general_lot_categories(self) -> None:
-        snapshot = {
-            1: [
-                item(1, "Personbil Volvo V60 Bensin, 2022", "Fordon", "Personbilar", bid=150000),
-                item(2, "Sea-Doo RXT260 & GTX260 Vandscootere", "Køretøjer", "Vandscootere", bid=5300),
-            ],
-            2: [
-                item(3, "Gaming PC with console bundle", "Elektronik", "Gaming", bid=4200),
-                item(4, "Villa med tomt", "Fastigheter", "Bostad", bid=900000),
-            ],
-            3: [
-                item(5, "Byggklar grund", "Fastigheter", "Tomter", bid=240000),
-                item(6, "Kontor/Fritidshus 12x5,5m", "Bygg", "Husstommar och småbyggnader", bid=120000),
-            ],
-            4: [
-                item(7, "Hårdhedstester CV Instruments Ltd. Mark II Rangemaster", "Byggeri", "Måle- og kontrolinstrumenter", bid=9000),
-            ],
+    def responses(self, first: str = PAGE_1) -> dict[str, str]:
+        return {
+            watch.page_url(SOURCE, 1): first,
+            watch.page_url(SOURCE, 2): PAGE_2,
         }
+
+    def test_dedicated_category_emits_only_passenger_cars(self) -> None:
         original_page_size = watch.PAGE_SIZE
         try:
             watch.PAGE_SIZE = 2
             payload = watch.build_watch(
-                session=SnapshotSession([snapshot, snapshot]),
-                source_specs=(SOURCE,),
-                now=NOW,
-                timeout=10,
+                session=Session(self.responses()), source_specs=(SOURCE,), now=NOW, timeout=10,
             )
         finally:
             watch.PAGE_SIZE = original_page_size
-        rows = {row["id"]: row for row in payload["rows"]}
-        self.assertEqual(payload["row_count"], 7)
-        self.assertEqual(rows["klaravik:se:1"]["category"], "car")
-        self.assertEqual(rows["klaravik:se:1"]["fuel"], "petrol")
-        self.assertEqual(rows["klaravik:se:2"]["category"], "jetski")
-        self.assertEqual(rows["klaravik:se:3"]["category"], "gaming")
-        self.assertEqual(rows["klaravik:se:4"]["category"], "property")
-        self.assertEqual(rows["klaravik:se:4"]["property_type"], "residential")
-        self.assertEqual(rows["klaravik:se:5"]["category"], "land")
-        self.assertEqual(rows["klaravik:se:5"]["property_type"], "land")
-        self.assertNotIn(rows["klaravik:se:6"]["category"], {"property", "land"})
-        self.assertEqual(rows["klaravik:se:6"]["property_type"], "")
-        self.assertNotIn(rows["klaravik:se:7"]["category"], {"property", "land"})
-        self.assertEqual(rows["klaravik:se:7"]["property_type"], "")
-        self.assertEqual(rows["klaravik:se:2"]["country"], "SE")
-        self.assertEqual(payload["source_reports"]["klaravik-se"]["declared"], 7)
-        self.assertTrue(payload["source_reports"]["klaravik-se"]["full_catalogue_rechecked"])
+        self.assertEqual(payload["row_count"], 1)
+        row = payload["rows"][0]
+        report = payload["source_reports"]["klaravik-se"]
+        self.assertEqual(row["id"], "klaravik:se:1")
+        self.assertEqual(row["category"], "car")
+        self.assertEqual(row["fuel"], "petrol")
+        self.assertEqual(row["price_amount"], 31000)
+        self.assertEqual(row["bid_count"], 2)
+        self.assertEqual(report["declared"], 3)
+        self.assertEqual(report["non_passenger_excluded"], 2)
+        self.assertEqual(report["snapshot_attempts"], 1)
+        self.assertIn("personbilar", SOURCE.category_url)
 
-    def test_changed_second_pass_fails_closed(self) -> None:
-        first = {
-            1: [item(1, "Personbil Volvo Bensin, 2022", "Fordon", "Personbilar"), item(2, "Laptop Dell", "Elektronik", "Datorer")],
-            2: [item(3, "Sea-Doo Jetski", "Køretøjer", "Vandscootere")],
-        }
-        changed = {
-            1: [item(1, "Personbil Volvo Bensin, 2022", "Fordon", "Personbilar"), item(2, "Laptop Dell", "Elektronik", "Datorer")],
-            2: [item(4, "Gaming console", "Elektronik", "Gaming")],
-        }
+    def test_retries_if_the_category_changes_during_pagination(self) -> None:
+        changed_second_page = page(4, card(3, "Varebil Ford Transit, 2023"))
         original_page_size = watch.PAGE_SIZE
         try:
             watch.PAGE_SIZE = 2
-            with self.assertRaises(watch.KlaravikWatchError):
-                watch.build_watch(
-                    session=SnapshotSession([first, changed]),
-                    source_specs=(SOURCE,),
-                    now=NOW,
-                    timeout=10,
-                )
+            session = SequencedSession({
+                watch.page_url(SOURCE, 1): [PAGE_1, PAGE_1, PAGE_1],
+                watch.page_url(SOURCE, 2): [changed_second_page, PAGE_2],
+            })
+            payload = watch.build_watch(session=session, source_specs=(SOURCE,), now=NOW, timeout=10)
         finally:
             watch.PAGE_SIZE = original_page_size
+        self.assertEqual(payload["row_count"], 1)
+        self.assertEqual(payload["source_reports"]["klaravik-se"]["snapshot_attempts"], 2)
 
     def test_cross_domain_lot_url_is_rejected(self) -> None:
         with self.assertRaises(watch.KlaravikWatchError):
-            watch.source_url(SOURCE, "https://example.test/auction/1")
+            watch.canonical_lot_url(SOURCE, "https://example.test/auction/1")
+
+    def test_common_visible_powertrain_markers_are_not_left_unknown(self) -> None:
+        self.assertEqual(watch.normalize_fuel("Volkswagen Touareg V6 TDI"), "diesel")
+        self.assertEqual(watch.normalize_fuel("Mercedes-Benz E 220 CDI"), "diesel")
+        self.assertEqual(watch.normalize_fuel("Mercedes-Benz E 220 d 4MATIC"), "diesel")
+        self.assertEqual(watch.normalize_fuel("Veteranbil Mercedes-Benz 200D"), "diesel")
+        self.assertEqual(watch.normalize_fuel("Audi A6 55 TFSI e Quattro"), "petrol/electric hybrid")
 
 
 if __name__ == "__main__":

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Collect every public current Klaravik auction lot in Sweden and Denmark.
+"""Collect only public Klaravik passenger-car auction cards.
 
-Klaravik exposes a first-party JSON catalogue for each country.  Unlike the
-older vehicle-only adapter, this connector enumerates every active lot and
-keeps its source category.  Cars remain classed separately for the primary
-vehicle view; motorcycles, jet skis, computers, gaming equipment, electronics,
-boats, machinery, and other public lots are preserved for the wider auction
-view.  Each country catalogue is read twice and must retain the same advertised
-total and stable lot IDs before a snapshot is emitted.
+Klaravik's dedicated ``Personbiler`` pages in Sweden and Denmark are normal
+server-rendered public catalogues. This collector reads those pages directly,
+instead of the site's broad all-lot JSON endpoint, so motorcycles, jet skis,
+boats, property, land, equipment, computers, and other categories never enter
+the watch input. Some cards in the dedicated category are nevertheless vans
+or minibuses; their visible titles are excluded before publication.
 """
 from __future__ import annotations
 
@@ -18,30 +17,56 @@ import math
 import os
 import re
 import unicodedata
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urljoin, urlsplit
 
 import requests
+from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 
 UTC = dt.timezone.utc
 PAGE_SIZE = 60
-DEFAULT_TIMEOUT = 30
-MAX_PAGES = 500
+DEFAULT_TIMEOUT = 35
+MAX_PAGES = 100
+SNAPSHOT_ATTEMPTS = 3
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
-    "Accept": "application/json",
-    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Language": "sv-SE,sv;q=0.9,da-DK,da;q=0.8,en;q=0.7",
 }
+OBJECTS_IN_LIST_RE = re.compile(r"window\.objectsInList\s*=\s*([0-9]+)", re.I)
+CARD_ID_RE = re.compile(r"^product_card--([0-9]+)$")
+YEAR_RE = re.compile(r"\b(19[7-9]\d|20[0-2]\d)\b")
+MILEAGE_RE = re.compile(r"\b([0-9][0-9\s,.\u00a0]*)\s*km\b", re.I)
+NON_PASSENGER_TEXT_RE = re.compile(
+    r"\b(?:motorcykel|motorcycle|moped|scooter|atv|utv|vandscooter|"
+    r"jet[ -]?ski|sea[- ]?doo|waverunner|boat|b[aå]t|trailer|campingvogn|"
+    r"autocamper|husbil|motorhome|tractor|traktor|gr[aä]vmaskin|excavator|"
+    r"forklift|lastbil|truck|kranbil|varebil|varevogn|kassevogn|sk[aå]pbil|"
+    r"budbil|minibus|bus|pickup|pick[- ]?up|transit|light truck|"
+    r"computer|laptop|gaming|console|property|land)\b",
+    re.I,
+)
+PASSENGER_CAR_MAKE_RE = re.compile(
+    r"\b(?:mercedes(?:[- ]benz)?|land rover|range rover|alfa romeo|"
+    r"volkswagen|renault|peugeot|citro[eë]n|opel|vauxhall|toyota|bmw|audi|"
+    r"ford|nissan|hyundai|kia|honda|mazda|fiat|skoda|seat|volvo|mitsubishi|"
+    r"suzuki|dacia|chevrolet|jeep|porsche|mini|lexus|subaru|jaguar|chrysler|"
+    r"dodge|tesla|ssangyong|isuzu|daihatsu|infiniti|genesis|cupra|smart|"
+    r"chery|geely|haval|byd|mg|ds|vw)\b",
+    re.I,
+)
 
 
 class KlaravikWatchError(RuntimeError):
-    """The public Klaravik catalogue could not be reconciled safely."""
+    """The public passenger-car catalogue could not be reconciled safely."""
+
+
+class KlaravikSnapshotChanged(KlaravikWatchError):
+    """The live Personbiler category changed while it was being read."""
 
 
 @dataclass(frozen=True)
@@ -51,16 +76,38 @@ class SourceSpec:
     country: str
     domain: str
     currency: str
+    category_path: str
 
     @property
     def origin(self) -> str:
         return f"https://{self.domain}"
 
+    @property
+    def category_url(self) -> str:
+        return urljoin(self.origin, self.category_path)
+
 
 SOURCES: tuple[SourceSpec, ...] = (
-    SourceSpec("klaravik-se", "Klaravik Sweden", "SE", "www.klaravik.se", "SEK"),
-    SourceSpec("klaravik-dk", "Klaravik Denmark", "DK", "www.klaravik.dk", "DKK"),
+    SourceSpec(
+        "klaravik-se", "Klaravik Sweden", "SE", "www.klaravik.se", "SEK",
+        "/auktion/fordon/latta-fordon/personbilar/",
+    ),
+    SourceSpec(
+        "klaravik-dk", "Klaravik Denmark", "DK", "www.klaravik.dk", "DKK",
+        "/auction/koretojer/lette-koretojer/personbiler/",
+    ),
 )
+
+
+@dataclass(frozen=True)
+class ParsedPage:
+    total: int
+    page: int
+    page_count: int
+    listed_ids: tuple[str, ...]
+    rows: tuple[dict[str, Any], ...]
+    non_passenger_excluded: int
+    ended_excluded: int
 
 
 @dataclass(frozen=True)
@@ -68,39 +115,44 @@ class Catalogue:
     source: SourceSpec
     declared_total: int
     pages: int
-    ids: tuple[str, ...]
+    listed_ids: tuple[str, ...]
     rows: tuple[dict[str, Any], ...]
+    non_passenger_excluded: int
     ended_excluded: int
-
-    @property
-    def fingerprint(self) -> tuple[int, tuple[str, ...]]:
-        return self.declared_total, tuple(sorted(self.ids))
+    snapshot_attempts: int
 
 
 def clean(value: Any) -> str:
-    return " ".join(str(value or "").split())
+    return " ".join(unicodedata.normalize("NFKC", str(value or "")).split())
 
 
 def ascii_fold(value: Any) -> str:
-    return " ".join(
-        unicodedata.normalize("NFKD", clean(value))
-        .encode("ascii", "ignore")
-        .decode("ascii")
-        .casefold()
-        .split()
-    )
+    normalized = unicodedata.normalize("NFKD", clean(value))
+    return "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
 
 
 def positive_number(value: Any) -> int | float | None:
-    if isinstance(value, bool):
+    compact = re.sub(r"[^0-9,.-]", "", clean(value))
+    if not compact:
         return None
+    if "," in compact and "." in compact:
+        compact = (
+            compact.replace(".", "").replace(",", ".")
+            if compact.rfind(",") > compact.rfind(".")
+            else compact.replace(",", "")
+        )
+    elif "," in compact:
+        tail = compact.rsplit(",", 1)[-1]
+        compact = compact.replace(",", ".") if len(tail) <= 2 else compact.replace(",", "")
+    elif "." in compact and len(compact.rsplit(".", 1)[-1]) == 3:
+        compact = compact.replace(".", "")
     try:
-        number = float(value)
-    except (TypeError, ValueError):
+        parsed = float(compact)
+    except ValueError:
         return None
-    if not math.isfinite(number) or number <= 0:
+    if not math.isfinite(parsed) or parsed <= 0:
         return None
-    return int(number) if number.is_integer() else number
+    return int(parsed) if parsed.is_integer() else parsed
 
 
 def normalize_end(value: Any) -> str | None:
@@ -116,224 +168,201 @@ def normalize_end(value: Any) -> str | None:
     return parsed.astimezone(UTC).isoformat()
 
 
-def source_url(source: SourceSpec, value: Any) -> str:
-    url = clean(value)
-    if not url:
-        raise KlaravikWatchError(f"{source.key} lot has no canonical public URL")
-    parsed = urlparse(url)
-    if parsed.scheme != "https" or parsed.hostname is None:
-        raise KlaravikWatchError(f"{source.key} lot URL is not HTTPS")
-    host = parsed.hostname.casefold().removeprefix("www.")
+def page_url(source: SourceSpec, page: int) -> str:
+    if page < 1 or page > MAX_PAGES:
+        raise KlaravikWatchError("Klaravik page exceeds the safety limit")
+    if page == 1:
+        return source.category_url
+    return f"{source.category_url}?{urlencode({'page': page})}"
+
+
+def canonical_lot_url(source: SourceSpec, href: Any) -> str:
+    parsed = urlsplit(urljoin(source.category_url, clean(href)))
     expected = source.domain.casefold().removeprefix("www.")
-    if host != expected:
-        raise KlaravikWatchError(f"{source.key} lot URL escaped its public domain")
-    return url
+    host = (parsed.hostname or "").casefold().removeprefix("www.")
+    if (
+        parsed.scheme != "https" or host != expected or parsed.username is not None
+        or parsed.password is not None or not parsed.path
+    ):
+        raise KlaravikWatchError(f"{source.key} card leaves its official public domain")
+    return f"https://{source.domain}{parsed.path}" + (f"?{parsed.query}" if parsed.query else "")
 
 
-def category_context(item: dict[str, Any]) -> str:
-    return ascii_fold(" ".join(
-        clean(item.get(key))
-        for key in (
-            "categoryNameLevel1", "categoryNameLevel2", "categoryNameLevel3",
-            "name", "make", "model",
-        )
+def is_passenger_car_title(title: str) -> bool:
+    folded = ascii_fold(title)
+    if NON_PASSENGER_TEXT_RE.search(folded):
+        return False
+    return "personbil" in folded or bool(PASSENGER_CAR_MAKE_RE.search(folded))
+
+
+def normalize_fuel(value: Any) -> str:
+    folded = ascii_fold(value)
+    diesel = bool(re.search(
+        r"\b(?:diesel|gazole|tdi|cdi|dci|hdi|crdi|tdci|tddi|bluehdi|d[2-5]|[0-9]{2,3}\s*d|[0-9]{2,3}d)\b",
+        folded,
     ))
-
-
-def category_labels(item: dict[str, Any]) -> str:
-    """Return only the catalogue hierarchy, not incidental product wording."""
-    return ascii_fold(" ".join(
-        clean(item.get(key))
-        for key in ("categoryNameLevel1", "categoryNameLevel2", "categoryNameLevel3")
+    petrol = bool(re.search(
+        r"\b(?:bensin|benzin|petrol|gasoline|essence|tfsi|tsi|ecoboost|gdi|mpi|fsi)\b",
+        folded,
     ))
-
-
-def category_for_item(item: dict[str, Any]) -> str:
-    text = category_context(item)
-    title = ascii_fold(clean(item.get("name")))
-    labels = category_labels(item)
-    real_estate_category = bool(re.search(
-        r"\b(?:fastighet(?:er|en)?|fastigheder|ejendom(?:me)?|real estate|immobili(?:are|en)?|property)\b",
-        labels,
+    hybrid = bool(re.search(
+        r"\b(?:hybrid|mildhybrid|phev|hev|plug[- ]?in|e[- ]?hybrid|tfsi e|tsi e)\b",
+        folded,
     ))
-    residential = bool(re.search(
-        r"\b(?:villa|bostad(?:er)?|fritidshus|sommarhus|summer house|lejlighed|lagenhet|hus(?!vagn)\b)\b",
-        title,
-    ))
-    direct_property = bool(re.search(
-        r"\b(?:fastighet(?:er|en)?|fastigheder|ejendom(?:me)?|commercial property|erhvervsejendom|warehouse property)\b",
-        title,
-    ))
-    land_terms = re.compile(
-        r"\b(?:tomt(?:er|en)?|grund(?:e|en|er)?|jordbruksmark|skogsmark|building plot|land parcel|byggeklar)\b"
-    )
-    direct_land = bool(land_terms.search(title))
-    category_land = bool(land_terms.search(labels))
-    # A home with a plot belongs in properties; an explicit plot term or a
-    # real-estate category prevents movable cabins and product names such as
-    # "Mark II" from leaking into the real-estate filters.
-    if residential and (real_estate_category or direct_land or direct_property):
-        return "property"
-    if direct_land or (real_estate_category and category_land):
-        return "land"
-    if real_estate_category or direct_property:
-        return "property"
-    if re.search(r"\b(?:vandscooter[a-z]*|jet[- ]?ski[a-z]*|sea[- ]?doo|waverunner|personal watercraft)\b", text):
-        return "jetski"
-    if re.search(r"\b(?:playstation|xbox|nintendo|gaming|spilkonsol|game console|videogame)\b", text):
-        return "gaming"
-    if re.search(r"\b(?:computer|laptop|notebook|stationaer pc|stationar pc|baerbar|baerbare|dator)\b", text):
-        return "computer"
-    if re.search(r"\b(?:tv|television|projektor|projector|kamera|camera|hi fi|hifi|audio|stereo|monitor)\b", text):
-        return "electronics"
-    if re.search(r"\b(?:motorcykel|motorcycle|moped|scooter|mc )\b", f" {text}"):
-        return "motorcycle"
-    if re.search(r"\b(?:bat|boat|jolle|kajak|canoe|segelbat|segelbad)\b", text):
-        return "boat"
-    if re.search(r"\b(?:cykel|bicycle|bike)\b", text):
-        return "bicycle"
-    if re.search(r"\b(?:reservdel|reservedel|bildel|car part|dack|tyre|tire|falgar|felg|wheel)\b", text):
-        return "part"
-    if re.search(r"\b(?:lastbil|truck|tunga fordon|tunge koretojer|kranbil|tow truck|bargningsbil)\b", text):
-        return "truck"
-    if re.search(r"\b(?:skabil|van|varebil|kassevogn|transporter|light commercial)\b", text):
-        return "van"
-    if re.search(r"\b(?:personbil|passagerbil|car|bil|automobile)\b", text):
-        return "car"
-    if re.search(r"\b(?:fordon|koretojer|vehicle)\b", text):
-        return "vehicle"
-    if re.search(r"\b(?:entreprenad|lantbruk|landbrug|skogsbruk|construction|tractor|traktor|gr[a-z]*vmaskin|excavator|lift)\b", text):
-        return "equipment"
-    return "other"
-
-
-def property_type_for_item(item: dict[str, Any], category: str) -> str:
-    if category == "land":
-        return "land"
-    if category != "property":
-        return ""
-    text = category_context(item)
-    if re.search(r"\b(?:villa|bostad|fritidshus|sommarhus|lejlighed|lagenhet|hus(?!vagn)\b)\b", text):
-        return "residential"
-    if re.search(r"\b(?:erhverv|commercial|warehouse|industri|office|kontor|butik)\b", text):
-        return "commercial"
-    return "property"
-
-
-def fuel_for_item(item: dict[str, Any]) -> str:
-    text = category_context(item)
-    if re.search(r"\b(?:hybrid|phev|hev|plug in)\b", text):
-        return "hybrid"
-    if re.search(r"\b(?:bensin|benzin|petrol|gasoline)\b", text):
-        return "petrol"
-    if re.search(r"\b(?:diesel)\b", text):
+    electric = bool(re.search(r"\b(?:electric|elektrisk|elbil)\b", folded))
+    if diesel and hybrid:
+        return "diesel/electric hybrid"
+    if diesel:
         return "diesel"
-    if re.search(r"\b(?:electric|elbil|elektrisk)\b", text):
+    if petrol and hybrid:
+        return "petrol/electric hybrid"
+    if hybrid:
+        return "hybrid"
+    if electric:
         return "electric"
+    if petrol:
+        return "petrol"
     return "unknown"
 
 
-YEAR_RE = re.compile(r"\b((?:19|20)\d{2})\b")
-MILEAGE_RE = re.compile(r"\b([0-9][0-9 .,'\u00a0]*)\s*km\b", re.I)
-
-
-def parsed_year(item: dict[str, Any], *, now: dt.datetime) -> int | None:
-    match = YEAR_RE.search(clean(item.get("name")))
+def parsed_year(title: str, *, now: dt.datetime) -> int | None:
+    match = YEAR_RE.search(title)
     if match is None:
         return None
     value = int(match.group(1))
     return value if 1950 <= value <= now.year + 1 else None
 
 
-def parsed_mileage(item: dict[str, Any]) -> int | None:
-    match = MILEAGE_RE.search(clean(item.get("name")))
+def parsed_mileage(title: str) -> int | None:
+    match = MILEAGE_RE.search(title)
     if match is None:
         return None
-    raw = re.sub(r"[^0-9]", "", match.group(1))
-    if not raw:
-        return None
-    value = int(raw)
-    return value if value >= 0 else None
+    value = positive_number(match.group(1))
+    return int(value) if isinstance(value, (int, float)) and value >= 0 else None
 
 
-def location_for_item(item: dict[str, Any]) -> str:
-    return ", ".join(filter(None, (clean(item.get("municipalityName")), clean(item.get("countyName")))))
+def parse_declared_total(markup: str) -> int:
+    match = OBJECTS_IN_LIST_RE.search(markup)
+    if match is None:
+        raise KlaravikWatchError("Klaravik Personbiler category has no public item total")
+    return int(match.group(1))
 
 
-def normalize_item(item: dict[str, Any], source: SourceSpec, *, observed_at: str, now: dt.datetime) -> dict[str, Any]:
-    item_id = str(item.get("id") or "").strip()
-    if not item_id.isdigit():
-        raise KlaravikWatchError(f"{source.key} lot has no stable numeric ID")
-    title = clean(item.get("name"))
+def parse_card(
+    card: Tag,
+    source: SourceSpec,
+    *,
+    observed_at: str,
+    now: dt.datetime,
+) -> tuple[str, dict[str, Any] | None]:
+    id_match = CARD_ID_RE.fullmatch(clean(card.get("id")))
+    if id_match is None:
+        raise KlaravikWatchError(f"{source.key} category card has no stable numeric ID")
+    item_id = id_match.group(1)
+    link = card.select_one("a[href]")
+    if link is None:
+        raise KlaravikWatchError(f"{source.key} car {item_id} has no public card link")
+    url = canonical_lot_url(source, link.get("href"))
+    title_node = card.select_one(".product_card__title")
+    title = clean(title_node.get_text(" ", strip=True) if title_node else link.get("title"))
     if not title:
-        raise KlaravikWatchError(f"{source.key} lot {item_id} has no title")
-    end = normalize_end(item.get("endDate"))
+        raise KlaravikWatchError(f"{source.key} car {item_id} has no title")
+    close_node = card.select_one("[data-auction-close]")
+    end = normalize_end(close_node.get("data-auction-close") if close_node else None)
     if end is None:
-        raise KlaravikWatchError(f"{source.key} lot {item_id} has no valid auction end")
-    category_raw = " / ".join(filter(None, (
-        clean(item.get("categoryNameLevel1")),
-        clean(item.get("categoryNameLevel2")),
-        clean(item.get("categoryNameLevel3")),
-    )))
-    category = category_for_item(item)
-    property_type = property_type_for_item(item, category)
-    fuel = fuel_for_item(item)
-    current_bid = positive_number(item.get("currentBid"))
-    starting_bid = positive_number(item.get("startingPrice"))
-    if current_bid is not None:
-        price_amount, price_kind, price_label = current_bid, "current_bid", "public current bid"
-    elif starting_bid is not None:
-        price_amount, price_kind, price_label = starting_bid, "starting_bid", "public starting bid"
-    else:
-        price_amount, price_kind, price_label = None, "unknown", "price not shown in public catalogue"
-    if category in {"car", "van", "truck", "vehicle"} and fuel in {"diesel", "electric"}:
-        eligibility_status = "not_eligible"
-        eligibility_reason = "Declared fuel is outside the petrol/hybrid car filter; the public auction remains visible for review."
-    else:
-        eligibility_status = "review_required"
-        eligibility_reason = "Public Klaravik auction listing; confirm the item condition, fees, collection, documents, and buyer requirements before bidding."
-    reserve_met = item.get("reservationPriceReached")
-    return {
+        raise KlaravikWatchError(f"{source.key} car {item_id} has no exact public auction end")
+    if not is_passenger_car_title(title):
+        return "not_passenger_car", None
+    if dt.datetime.fromisoformat(end) <= now:
+        return "ended", None
+    price_node = card.select_one(".product_card__current-bid")
+    price = positive_number(price_node.get_text(" ", strip=True) if price_node else "")
+    bid_node = card.select_one("[id^='antbids_']")
+    bid_value = positive_number(bid_node.get_text(" ", strip=True) if bid_node else "")
+    location_node = card.select_one(".product_card__info-text")
+    reserve_classes = {str(value) for value in (card.get("class") or [])}
+    reserve_met = False if "product_card--reserve-not-reached" in reserve_classes else (
+        True if card.select_one(".product_card__reserve-reached-tag") is not None else None
+    )
+    return "car", {
         "id": f"klaravik:{source.country.casefold()}:{item_id}",
         "source": source.key,
         "source_key": source.key,
         "source_name": source.name,
-        "url": source_url(source, item.get("url")),
+        "url": url,
         "title": title,
-        "model": clean(" ".join(filter(None, (clean(item.get("make")), clean(item.get("model"))))) or title),
+        "model": title,
         "country": source.country,
         "asset_country": source.country,
-        "category": category,
-        "category_raw": category_raw or "public Klaravik catalogue",
-        "property_type": property_type,
-        "year": parsed_year(item, now=now),
-        "mileage_km": parsed_mileage(item),
-        "fuel": fuel,
+        "category": "car",
+        "category_raw": "Klaravik Personbiler",
+        "year": parsed_year(title, now=now),
+        "mileage_km": parsed_mileage(title),
+        "fuel": normalize_fuel(title),
         "seller": "Klaravik public auction seller",
-        "location": location_for_item(item),
-        "price_amount": price_amount,
+        "location": clean(location_node.get_text(" ", strip=True) if location_node else ""),
+        "price_amount": price,
         "price_currency": source.currency,
-        "price_eur": price_amount if source.currency == "EUR" else None,
-        "price_kind": price_kind,
-        "price_label": price_label,
-        "bid_visibility": "public catalogue summary",
-        "bid_count": int(item["amountOfBids"]) if isinstance(item.get("amountOfBids"), int) and item["amountOfBids"] >= 0 else None,
-        "minimum_next_bid": positive_number(item.get("nextBidStep")),
-        "reserve_met": reserve_met if isinstance(reserve_met, bool) else None,
-        "no_reserve": None,
-        "sale_terms": "",
+        "price_eur": price if source.currency == "EUR" else None,
+        "price_kind": "current_bid" if price is not None else "unknown",
+        "price_label": "public current bid" if price is not None else "price not shown in public catalogue card",
+        "bid_visibility": "public passenger-car catalogue summary",
+        "bid_count": int(bid_value) if isinstance(bid_value, int) else None,
+        "reserve_met": reserve_met,
+        "no_reserve": card.select_one(".product_card__no-reserve-tag") is not None,
         "auction_status": "active",
         "canonical_end_utc": end,
         "sale_end_utc": end,
         "sale_event_utc": None,
         "last_seen_at": observed_at,
-        "eligibility_status": eligibility_status,
-        "eligibility_reason": eligibility_reason,
+        "eligibility_status": "review_required",
+        "eligibility_reason": "Public Klaravik passenger-car listing; confirm condition, fees, collection, documents, and buyer requirements before bidding.",
         "access_sale_note": "Klaravik collection and buyer terms are published with each lot; verify them before bidding.",
         "adapter_authorized": True,
-        "raw_evidence_ref": f"{source.key}:public-json-catalogue:{item_id}",
-        "evidence": "Public Klaravik JSON catalogue fields: category, public bid/starting price, and auction end.",
+        "raw_evidence_ref": f"{source.key}:public-personbiler:{item_id}",
+        "evidence": "Public Klaravik Personbiler category card: title, price, bid count, and auction end.",
     }
+
+
+def parse_page(
+    markup: str,
+    source: SourceSpec,
+    *,
+    page: int,
+    observed_at: str,
+    now: dt.datetime,
+) -> ParsedPage:
+    total = parse_declared_total(markup)
+    pages = max(1, math.ceil(total / PAGE_SIZE))
+    if pages > MAX_PAGES:
+        raise KlaravikWatchError(f"{source.key} Personbiler category exceeds the page safety limit")
+    expected_cards = PAGE_SIZE if page < pages else total - PAGE_SIZE * (page - 1)
+    cards = BeautifulSoup(markup, "html.parser").select("article.product_card[id^='product_card--']")
+    if len(cards) != expected_cards:
+        raise KlaravikSnapshotChanged(
+            f"{source.key} Personbiler page {page} cardinality changed ({len(cards)} != {expected_cards})"
+        )
+    listed_ids: list[str] = []
+    rows: list[dict[str, Any]] = []
+    non_passenger_excluded = 0
+    ended_excluded = 0
+    for card in cards:
+        id_match = CARD_ID_RE.fullmatch(clean(card.get("id")))
+        if id_match is None:
+            raise KlaravikWatchError(f"{source.key} category card has no stable numeric ID")
+        listed_ids.append(id_match.group(1))
+        result, row = parse_card(card, source, observed_at=observed_at, now=now)
+        if result == "not_passenger_car":
+            non_passenger_excluded += 1
+        elif result == "ended":
+            ended_excluded += 1
+        elif row is not None:
+            rows.append(row)
+        else:
+            raise KlaravikWatchError(f"{source.key} card {id_match.group(1)} has an invalid result")
+    if len(listed_ids) != len(set(listed_ids)):
+        raise KlaravikSnapshotChanged(f"{source.key} Personbiler page {page} has duplicate IDs")
+    return ParsedPage(total, page, pages, tuple(listed_ids), tuple(rows), non_passenger_excluded, ended_excluded)
 
 
 def configured_session() -> requests.Session:
@@ -342,69 +371,55 @@ def configured_session() -> requests.Session:
         total=3, connect=3, read=3, status=3, backoff_factor=0.5,
         status_forcelist=(429, 500, 502, 503, 504), allowed_methods=frozenset({"GET"}),
     )
-    session.mount("https://", HTTPAdapter(max_retries=retry, pool_connections=8, pool_maxsize=8))
+    session.mount("https://", HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=4))
     return session
 
 
-def fetch_page(session: Any, source: SourceSpec, *, page: int, timeout: int) -> tuple[int, int, list[dict[str, Any]]]:
-    response = session.get(
-        f"{source.origin}/api/products/list/search",
-        params={"page": page, "pageSize": PAGE_SIZE}, headers=HEADERS, timeout=timeout,
-    )
+def fetch_page(
+    session: Any,
+    source: SourceSpec,
+    *,
+    page: int,
+    observed_at: str,
+    now: dt.datetime,
+    timeout: int,
+) -> ParsedPage:
+    response = session.get(page_url(source, page), headers=HEADERS, timeout=timeout)
     response.raise_for_status()
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise KlaravikWatchError(f"{source.key} page {page} is not JSON") from exc
-    data = payload.get("data") if isinstance(payload, dict) else None
-    pagination = data.get("pagination") if isinstance(data, dict) else None
-    items = data.get("items") if isinstance(data, dict) else None
-    if not isinstance(pagination, dict) or not isinstance(items, list):
-        raise KlaravikWatchError(f"{source.key} page {page} has no public catalogue payload")
-    total = pagination.get("totalCount")
-    pages = pagination.get("totalPages")
-    if not isinstance(total, int) or total < 0 or not isinstance(pages, int) or pages < 1:
-        raise KlaravikWatchError(f"{source.key} page {page} has invalid public pagination")
-    if not all(isinstance(item, dict) for item in items):
-        raise KlaravikWatchError(f"{source.key} page {page} contains an invalid item")
-    return total, pages, items
+    return parse_page(response.text, source, page=page, observed_at=observed_at, now=now)
 
 
-def fetch_catalogue(session: Any, source: SourceSpec, *, observed_at: str, now: dt.datetime, timeout: int) -> Catalogue:
-    total, pages, first_items = fetch_page(session, source, page=1, timeout=timeout)
-    expected_pages = max(1, math.ceil(total / PAGE_SIZE))
-    if pages != expected_pages or pages > MAX_PAGES:
-        raise KlaravikWatchError(f"{source.key} public pagination disagrees with its declared total")
-    all_items = list(first_items)
-    if total == 0:
-        if first_items:
-            raise KlaravikWatchError(f"{source.key} empty catalogue returned items")
-    elif len(first_items) != min(PAGE_SIZE, total):
-        raise KlaravikWatchError(f"{source.key} first page cardinality is invalid")
-    for page in range(2, pages + 1):
-        page_total, page_count, items = fetch_page(session, source, page=page, timeout=timeout)
-        if page_total != total or page_count != pages:
-            raise KlaravikWatchError(f"{source.key} catalogue changed during pagination")
-        expected_items = PAGE_SIZE if page < pages else total - PAGE_SIZE * (page - 1)
-        if len(items) != expected_items:
-            raise KlaravikWatchError(f"{source.key} page {page} cardinality is invalid")
-        all_items.extend(items)
-    ids = [str(item.get("id") or "").strip() for item in all_items]
-    if len(all_items) != total or not all(ids) or len(ids) != len(set(ids)):
-        raise KlaravikWatchError(f"{source.key} total/ID reconciliation failed")
-    rows: list[dict[str, Any]] = []
-    ended_excluded = 0
-    for item in all_items:
-        if item.get("ended") is True:
-            ended_excluded += 1
-            continue
-        row = normalize_item(item, source, observed_at=observed_at, now=now)
-        if dt.datetime.fromisoformat(row["canonical_end_utc"]) <= now:
-            ended_excluded += 1
-            continue
-        rows.append(row)
-    rows.sort(key=lambda row: (str(row.get("canonical_end_utc") or ""), str(row["id"])))
-    return Catalogue(source, total, pages, tuple(ids), tuple(rows), ended_excluded)
+def _collect_coherent_snapshot(
+    session: Any,
+    source: SourceSpec,
+    *,
+    observed_at: str,
+    now: dt.datetime,
+    timeout: int,
+) -> Catalogue:
+    first = fetch_page(session, source, page=1, observed_at=observed_at, now=now, timeout=timeout)
+    pages: dict[int, ParsedPage] = {1: first}
+    for page in range(2, first.page_count + 1):
+        parsed = fetch_page(session, source, page=page, observed_at=observed_at, now=now, timeout=timeout)
+        if parsed.total != first.total or parsed.page_count != first.page_count:
+            raise KlaravikSnapshotChanged(f"{source.key} Personbiler category changed during pagination")
+        pages[page] = parsed
+    listed_ids = tuple(listing_id for page in range(1, first.page_count + 1) for listing_id in pages[page].listed_ids)
+    if len(listed_ids) != first.total or len(listed_ids) != len(set(listed_ids)):
+        raise KlaravikSnapshotChanged(f"{source.key} Personbiler total/ID reconciliation failed")
+    final = fetch_page(session, source, page=1, observed_at=observed_at, now=now, timeout=timeout)
+    if final.total != first.total or final.page_count != first.page_count or final.listed_ids != first.listed_ids:
+        raise KlaravikSnapshotChanged(f"{source.key} Personbiler category changed before final check")
+    rows = tuple(row for page in range(1, first.page_count + 1) for row in pages[page].rows)
+    row_ids = [str(row["id"]) for row in rows]
+    row_urls = [str(row["url"]) for row in rows]
+    if len(row_ids) != len(set(row_ids)) or len(row_urls) != len(set(row_urls)):
+        raise KlaravikSnapshotChanged(f"{source.key} produced duplicate passenger-car identities")
+    return Catalogue(
+        source, first.total, first.page_count, listed_ids, rows,
+        sum(p.non_passenger_excluded for p in pages.values()),
+        sum(p.ended_excluded for p in pages.values()), 0,
+    )
 
 
 def build_watch(
@@ -422,41 +437,51 @@ def build_watch(
     now = now.astimezone(UTC)
     observed_at = now.isoformat()
     root_session = session or configured_session()
-    first_pass = [
-        fetch_catalogue(root_session, source, observed_at=observed_at, now=now, timeout=timeout)
-        for source in source_specs
-    ]
-    second_pass = [
-        fetch_catalogue(root_session, source, observed_at=observed_at, now=now, timeout=timeout)
-        for source in source_specs
-    ]
-    if len(first_pass) != len(second_pass):
-        raise KlaravikWatchError("Klaravik source scope changed during recheck")
-    for first, second in zip(first_pass, second_pass):
-        if first.source != second.source or first.fingerprint != second.fingerprint:
-            raise KlaravikWatchError(f"{first.source.key} catalogue changed before final check")
-    rows = [row for catalogue in first_pass for row in catalogue.rows]
-    ids = [str(row["id"]) for row in rows]
-    urls = [str(row["url"]) for row in rows]
-    if len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
-        raise KlaravikWatchError("Klaravik produced duplicate public lot identities")
-    reports: dict[str, dict[str, Any]] = {}
-    for catalogue in first_pass:
-        categories = Counter(str(row["category"]) for row in catalogue.rows)
-        reports[catalogue.source.key] = {
+    catalogues: list[Catalogue] = []
+    try:
+        for source in source_specs:
+            last_change: KlaravikSnapshotChanged | None = None
+            for attempt in range(1, SNAPSHOT_ATTEMPTS + 1):
+                try:
+                    captured = _collect_coherent_snapshot(
+                        root_session, source, observed_at=observed_at, now=now, timeout=timeout,
+                    )
+                except KlaravikSnapshotChanged as exc:
+                    last_change = exc
+                    continue
+                catalogues.append(Catalogue(
+                    captured.source, captured.declared_total, captured.pages, captured.listed_ids,
+                    captured.rows, captured.non_passenger_excluded, captured.ended_excluded, attempt,
+                ))
+                break
+            else:
+                assert last_change is not None
+                raise KlaravikWatchError(
+                    f"{source.key} Personbiler category did not stabilize after {SNAPSHOT_ATTEMPTS} attempts"
+                ) from last_change
+    finally:
+        if session is None:
+            root_session.close()
+    rows = [row for catalogue in catalogues for row in catalogue.rows]
+    reports = {
+        catalogue.source.key: {
             "status": "ok",
             "connector_status": "ok",
-            "catalogue_scope": "every public current Klaravik auction lot",
+            "catalogue_scope": "every public official Klaravik Personbiler category card; non-passenger titles excluded",
             "declared": catalogue.declared_total,
             "publicly_listed": catalogue.declared_total,
             "normalized_active": len(catalogue.rows),
+            "non_passenger_excluded": catalogue.non_passenger_excluded,
             "ended_excluded": catalogue.ended_excluded,
             "pages": catalogue.pages,
-            "full_catalogue_rechecked": True,
+            "first_page_rechecked": True,
             "stable_ids_unique": True,
-            "category_counts": dict(sorted(categories.items())),
+            "snapshot_attempts": catalogue.snapshot_attempts,
+            "category_counts": {"car": len(catalogue.rows)},
             "publication_ready": False,
         }
+        for catalogue in catalogues
+    }
     return {
         "schema_version": 1,
         "lane": "official_auction_watch",
@@ -480,7 +505,7 @@ def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Fetch every public Klaravik Sweden and Denmark auction lot")
+    parser = argparse.ArgumentParser(description="Fetch public Klaravik passenger-car category cards")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     args = parser.parse_args()
