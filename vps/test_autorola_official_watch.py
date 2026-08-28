@@ -57,6 +57,30 @@ CATALOGUE_HTML = """
 """
 
 
+def index_html(specs: list[AuctionSpec]) -> str:
+    links = "".join(
+        f'<a href="sc?aid={spec.aid}">{spec.name}</a>' for spec in specs
+    )
+    return f"<html><body>{links}</body></html>"
+
+
+def one_car_catalogue(*, aid: str, eid: str, title: str) -> str:
+    return f"""
+    <html><body><div class="showing">Displays: 1 to 1 of 1</div><table>
+      <tr>
+        <td class="image"><a href="bid?eid={eid}&amp;aid={aid}"><img src="x"></a></td>
+        <td class="title"><a href="bid?eid={eid}&amp;aid={aid}">{title}</a></td>
+        <td class="regDate">01/2024</td><td class="mileage">km 12,345</td>
+        <td class="price"><div class="noprice">Register or login to bid</div></td>
+      </tr>
+      <tr>
+        <td class="location"><img src="https://g.autorola.com/g/i/fl/FR.gif">FR, Paris</td>
+        <td class="auctionEnd">End Monday 10:05:00hs+</td>
+      </tr>
+    </table></body></html>
+    """
+
+
 class FakeResponse:
     def __init__(self, text: str, url: str) -> None:
         self.text = text
@@ -78,6 +102,52 @@ class StableSession:
                 raise AssertionError(f"catalogue must use one-page reconciliation {self_params}")
             return FakeResponse(CATALOGUE_HTML, CATALOGUE_URL)
         raise AssertionError(f"unexpected URL {url}")
+
+    def close(self) -> None:
+        return None
+
+
+class MovingIndexFactory:
+    def __init__(self) -> None:
+        self.index_calls = 0
+        self.initial = AuctionSpec(aid="111", name="Initial public auction")
+        self.added = AuctionSpec(aid="222", name="New public auction")
+
+    def __call__(self) -> "MovingIndexSession":
+        return MovingIndexSession(self)
+
+
+class MovingIndexSession:
+    def __init__(self, factory: MovingIndexFactory) -> None:
+        self.factory = factory
+
+    def get(self, url: str, *, params=None, headers=None, timeout=None):
+        if url == AUCTIONS_URL:
+            states = [
+                [self.factory.initial],
+                [self.factory.initial, self.factory.added],
+                [self.factory.initial, self.factory.added],
+            ]
+            index = min(self.factory.index_calls, len(states) - 1)
+            self.factory.index_calls += 1
+            return FakeResponse(index_html(states[index]), AUCTIONS_URL)
+        if url == CATALOGUE_URL:
+            aid = str((params or {}).get("aid"))
+            if aid == "111":
+                return FakeResponse(
+                    one_car_catalogue(
+                        aid="111", eid="1001", title="2024 RENAULT MEGANE Petrol Hybrid"
+                    ),
+                    CATALOGUE_URL,
+                )
+            if aid == "222":
+                return FakeResponse(
+                    one_car_catalogue(
+                        aid="222", eid="2001", title="2025 TOYOTA YARIS Petrol Hybrid"
+                    ),
+                    CATALOGUE_URL,
+                )
+        raise AssertionError(f"unexpected URL {url} {params}")
 
     def close(self) -> None:
         return None
@@ -130,7 +200,24 @@ class AutorolaOfficialWatchTest(unittest.TestCase):
         self.assertEqual(payload["auction_routes"], 1)
         self.assertEqual(payload["restricted_eauction_routes"], 1)
         self.assertEqual(report["pages"], 1)
+        self.assertEqual(report["snapshot_mode"], "atomic")
         self.assertTrue(all(row["adapter_authorized"] is True for row in payload["rows"]))
+
+    def test_moving_auction_index_retains_complete_final_route_coverage(self) -> None:
+        factory = MovingIndexFactory()
+        payload = build_watch(
+            now=NOW,
+            timeout=5,
+            max_workers=1,
+            session_factory=factory,
+        )
+        report = payload["source_reports"]["autorola-eu"]
+        self.assertEqual(payload["auction_routes"], 2)
+        self.assertEqual(payload["catalogue_total"], 2)
+        self.assertEqual(payload["row_count"], 2)
+        self.assertEqual(report["snapshot_mode"], "moving_catalogue_coverage")
+        self.assertEqual(report["index_coverage_passes"], 1)
+        self.assertIn("index changed", report["strict_snapshot_last_error"])
 
 
 if __name__ == "__main__":

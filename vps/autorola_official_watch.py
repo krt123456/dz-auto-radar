@@ -50,6 +50,10 @@ DEFAULT_MAX_CATALOGUE_ROWS = 1_000_000
 DEFAULT_TIMEOUT = 35
 DEFAULT_WORKERS = 6
 ROUTE_RECHECK_ATTEMPTS = 3
+# Public auction routes can appear or expire while thousands of cards are
+# scanned.  Keep strict atomic capture first, then use bounded ID coverage of
+# the final public route index when the index keeps advancing.
+INDEX_COVERAGE_PASSES = 3
 
 SCHENGEN_COUNTRIES = frozenset({
     "AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI",
@@ -621,6 +625,12 @@ def harvest(
         raise AutorolaWatchError(
             "Autorola public catalogue has incomplete routes: " + "; ".join(sorted(failures))
         )
+    return harvest_from_snapshots(snapshots)
+
+
+def harvest_from_snapshots(snapshots: Iterable[RouteSnapshot]) -> Harvest:
+    """Assemble one catalogue from already reconciled public route snapshots."""
+    snapshots = list(snapshots)
     snapshots.sort(key=lambda snapshot: int(snapshot.spec.aid))
     all_ids = tuple(card_id for snapshot in snapshots for card_id in snapshot.card_ids)
     if len(all_ids) != len(set(all_ids)):
@@ -678,25 +688,64 @@ def build_watch(
         session_factory=session_factory,
     )
     final_specs, final_restricted = fetch_index(timeout=timeout, session_factory=session_factory)
-    # If a new auction route appeared or expired during the scan, rebuild from
-    # the final authoritative index once.  A second concurrent change is
-    # fail-closed instead of publishing an incomplete catalogue.
-    if route_key(initial_specs) != route_key(final_specs):
-        captured = harvest(
-            final_specs,
-            now=now,
-            observed_at=observed_at,
-            timeout=timeout,
-            max_workers=max_workers,
-            max_catalogue_rows=max_catalogue_rows,
-            session_factory=session_factory,
-        )
-        settled_specs, settled_restricted = fetch_index(
-            timeout=timeout, session_factory=session_factory
-        )
-        if route_key(final_specs) != route_key(settled_specs):
-            raise AutorolaWatchError("Autorola auction index changed during final reconciliation")
-        final_specs, final_restricted = settled_specs, settled_restricted
+    restricted_eauction_routes = set(initial_restricted) | set(final_restricted)
+    snapshot_mode = "atomic"
+    index_coverage_passes = 0
+    strict_snapshot_last_error = ""
+    # If an auction route appeared, expired, or changed its public name during
+    # the strict pass, retain every individually reconciled route snapshot and
+    # cover the final public index by stable route ID.  This avoids discarding
+    # an otherwise complete multi-thousand-car capture merely because a live
+    # auction opened or closed between index probes.
+    if initial_specs != final_specs:
+        snapshot_by_aid = {snapshot.spec.aid: snapshot for snapshot in captured.routes}
+        current_specs = final_specs
+        current_restricted = final_restricted
+        strict_snapshot_last_error = "Autorola auction index changed during final reconciliation"
+        for coverage_pass in range(1, INDEX_COVERAGE_PASSES + 1):
+            missing = tuple(
+                spec
+                for spec in current_specs
+                if (
+                    spec.aid not in snapshot_by_aid
+                    or snapshot_by_aid[spec.aid].spec != spec
+                )
+            )
+            if missing:
+                refreshed = harvest(
+                    missing,
+                    now=now,
+                    observed_at=observed_at,
+                    timeout=timeout,
+                    max_workers=max_workers,
+                    max_catalogue_rows=max_catalogue_rows,
+                    session_factory=session_factory,
+                )
+                for snapshot in refreshed.routes:
+                    snapshot_by_aid[snapshot.spec.aid] = snapshot
+            settled_specs, settled_restricted = fetch_index(
+                timeout=timeout, session_factory=session_factory
+            )
+            restricted_eauction_routes.update(current_restricted)
+            restricted_eauction_routes.update(settled_restricted)
+            if all(
+                spec.aid in snapshot_by_aid
+                and snapshot_by_aid[spec.aid].spec == spec
+                for spec in settled_specs
+            ):
+                captured = harvest_from_snapshots(
+                    snapshot_by_aid[spec.aid] for spec in settled_specs
+                )
+                final_specs, final_restricted = settled_specs, settled_restricted
+                snapshot_mode = "moving_catalogue_coverage"
+                index_coverage_passes = coverage_pass
+                break
+            current_specs, current_restricted = settled_specs, settled_restricted
+        else:
+            raise AutorolaWatchError(
+                "Autorola final public auction index could not be covered after "
+                f"{INDEX_COVERAGE_PASSES} moving-index passes"
+            )
 
     rows = sorted(
         captured.rows,
@@ -711,13 +760,16 @@ def build_watch(
     report = {
         "status": "ok",
         "auction_routes": len(final_specs),
-        "restricted_eauction_routes": len(set(initial_restricted) | set(final_restricted)),
+        "restricted_eauction_routes": len(restricted_eauction_routes),
         "catalogue_total": captured.catalogue_total,
         "discovered_unique": len(captured.card_ids),
         "pages": captured.pages,
         "current_or_future_vehicle_rows": len(rows),
         "rejected_counts": captured.rejected_counts,
         "raw_capture_id": capture_id,
+        "snapshot_mode": snapshot_mode,
+        "index_coverage_passes": index_coverage_passes,
+        "strict_snapshot_last_error": strict_snapshot_last_error,
     }
     return {
         "schema_version": 1,
