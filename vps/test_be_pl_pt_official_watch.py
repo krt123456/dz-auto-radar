@@ -232,6 +232,8 @@ class ELeiloesTests(unittest.TestCase):
         self.assertEqual(row["price_eur"], 1250)
         self.assertEqual(row["canonical_end_utc"], "2026-08-25T13:30:00+00:00")
         self.assertEqual(row["url"], "https://www.e-leiloes.pt/evento/LO101")
+        self.assertEqual(row["category"], "car")
+        self.assertEqual(row["category_raw"], "e-Leiloes passenger-car subtype")
         self.assertEqual(row["eligibility_status"], "unknown")
         self.assertIn("Portuguese NIF", row["eligibility_reason"])
         self.assertIn("IBAN", row["eligibility_reason"])
@@ -259,11 +261,17 @@ class ELeiloesTests(unittest.TestCase):
 
     def test_motorcycles_boats_and_tractors_are_not_car_radar_rows(self):
         now = dt.datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
-        for subtype in (13, 14, 29):
+        for subtype in (10, 11, 12, 13, 14, 29, 30):
             with self.subTest(subtype=subtype):
                 self.assertIsNone(module.e_leiloes_item_to_row(
                     self.item(200 + subtype, subtype=subtype), now=now,
                 ))
+
+    def test_mislabeled_jawa_motorcycle_is_not_a_car_row(self):
+        now = dt.datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+        self.assertIsNone(module.e_leiloes_item_to_row(
+            self.item(299, subtype=9, title="Jawa modelo 250"), now=now,
+        ))
 
     def test_catalogue_paginates_all_rows_with_stable_id_sort_and_filter(self):
         items = [self.item(item_id) for item_id in range(1, 15)]

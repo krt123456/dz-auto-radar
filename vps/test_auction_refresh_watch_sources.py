@@ -19,6 +19,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "autobid"', content)
         self.assertIn('RADAR_EXLEASINGCAR_WATCH_WORKERS:-12', content)
+        self.assertIn('run_official_watch "finshop,licytacje-komornik,e-leiloes"', content)
+        self.assertIn('--source finshop --source licytacje-komornik --source e-leiloes', content)
         self.assertIn('VPAUTO_WATCH="$STATE/runtime/vpauto_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "vpauto"', content)
         self.assertIn('RBAUCTION_WATCH="$STATE/runtime/rbauction_official_auction_watch.json"', content)

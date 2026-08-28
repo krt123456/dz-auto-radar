@@ -54,18 +54,23 @@ DEFAULT_E_LEILOES_INTERMEDIATE_CA = Path(
 )
 E_LEILOES_PAGE_SIZE = 12
 E_LEILOES_MAX_RECORDS = 5_000
-E_LEILOES_CAR_SUBTYPES = {
+E_LEILOES_PASSENGER_CAR_SUBTYPES = {
     9: "passenger_car",
-    10: "light_commercial",
-    11: "heavy_vehicle",
-    30: "other_registered_vehicle",
 }
 E_LEILOES_EXCLUDED_SUBTYPES = {
+    10: "light_commercial",
+    11: "heavy_vehicle",
     12: "aircraft",
     13: "motorcycle",
     14: "agricultural_tractor",
     29: "boat",
+    30: "other_registered_vehicle",
 }
+# The official passenger-car subtype is normally reliable.  A current source
+# record titled ``Jawa modelo 250`` is a clear motorcycle mislabeled by the
+# upstream type, so reject this known false positive before it can reach the
+# car-only public lane.
+E_LEILOES_FALSE_PASSENGER_CAR_TITLE_RE = re.compile(r"\bjawa\b", re.I)
 E_LEILOES_MODALITIES = {
     1: "Leilao Online",
     2: "Negociacao Particular",
@@ -1016,10 +1021,11 @@ def e_leiloes_item_to_row(
     if (
         item_id <= 0
         or type_id != 2
-        or subtype_id not in E_LEILOES_CAR_SUBTYPES
+        or subtype_id not in E_LEILOES_PASSENGER_CAR_SUBTYPES
         or modality_id not in E_LEILOES_MODALITIES
         or not reference
         or not title
+        or E_LEILOES_FALSE_PASSENGER_CAR_TITLE_RE.search(title) is not None
         or bool(item.get("cancelado"))
         or bool(item.get("terminado"))
     ):
@@ -1082,6 +1088,8 @@ def e_leiloes_item_to_row(
         "title": title,
         "model": title,
         "country": "PT",
+        "category": "car",
+        "category_raw": "e-Leiloes passenger-car subtype",
         "year": year,
         "mileage_km": extract_mileage(title),
         "fuel": fuel,
@@ -1110,7 +1118,7 @@ def e_leiloes_item_to_row(
         "official_modality_id": modality_id,
         "official_sale_mode": mode,
         "official_subtype_id": subtype_id,
-        "official_vehicle_class": E_LEILOES_CAR_SUBTYPES[subtype_id],
+        "official_vehicle_class": E_LEILOES_PASSENGER_CAR_SUBTYPES[subtype_id],
         "official_base_value_eur": base,
         "official_minimum_value_eur": minimum,
         "official_highest_offer_eur": public_offer,
@@ -1136,15 +1144,23 @@ def harvest_e_leiloes(
 
     rows: list[dict[str, Any]] = []
     excluded_subtypes: dict[str, int] = {}
+    excluded_mislabeled_non_car_titles: dict[str, int] = {}
     dropped_non_current = 0
     for item in items:
         try:
             subtype_id = int(item.get("subtipoId"))
         except (TypeError, ValueError):
             subtype_id = -1
-        if subtype_id not in E_LEILOES_CAR_SUBTYPES:
+        if subtype_id not in E_LEILOES_PASSENGER_CAR_SUBTYPES:
             label = E_LEILOES_EXCLUDED_SUBTYPES.get(subtype_id, f"subtype_{subtype_id}")
             excluded_subtypes[label] = excluded_subtypes.get(label, 0) + 1
+            continue
+        title = clean(item.get("titulo"))
+        if E_LEILOES_FALSE_PASSENGER_CAR_TITLE_RE.search(title):
+            label = "jawa_motorcycle_mislabeled_as_passenger_car"
+            excluded_mislabeled_non_car_titles[label] = (
+                excluded_mislabeled_non_car_titles.get(label, 0) + 1
+            )
             continue
         row = e_leiloes_item_to_row(item, now=now)
         if row is None:
@@ -1161,6 +1177,7 @@ def harvest_e_leiloes(
         "rules_url": PORTUGAL_RULES_URL,
         **catalogue,
         "excluded_non_car_vehicle_subtypes": excluded_subtypes,
+        "excluded_mislabeled_non_car_titles": excluded_mislabeled_non_car_titles,
         "dropped_cancelled_ended_or_invalid": dropped_non_current,
         "online_auction_rows": online,
         "private_negotiation_rows": private,

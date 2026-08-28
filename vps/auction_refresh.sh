@@ -128,9 +128,9 @@ run_official_watch "zoll-auktion" \
   --out "$ZOLL_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" \
   --workers "${RADAR_ZOLL_WATCH_WORKERS:-8}" &
 OFFICIAL_WATCH_PIDS+=("$!")
-run_official_watch "finshop,licytacje-komornik" \
+run_official_watch "finshop,licytacje-komornik,e-leiloes" \
   python3 /opt/sonardeals-radar/be_pl_pt_official_watch.py \
-  --source finshop --source licytacje-komornik \
+  --source finshop --source licytacje-komornik --source e-leiloes \
   --out "$BE_PL_PT_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "elicytacje-kas" \
