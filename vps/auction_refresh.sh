@@ -46,6 +46,7 @@ AUCTIONMASTER_WATCH="$STATE/runtime/auctionmaster_official_auction_watch.json"
 BILWEB_WATCH="$STATE/runtime/bilweb_official_auction_watch.json"
 KVDCARS_WATCH="$STATE/runtime/kvdcars_official_auction_watch.json"
 BILAUPPBOD_WATCH="$STATE/runtime/bilauppbod_official_auction_watch.json"
+AUTOMOTIVE_AUCTIONS_NL_WATCH="$STATE/runtime/automotive_auctions_nl_official_auction_watch.json"
 KIERTONET_WATCH="$STATE/runtime/kiertonet_official_auction_watch.json"
 AUKTIONSHUSET_DAB_WATCH="$STATE/runtime/auktionshuset_dab_official_auction_watch.json"
 AGORASTORE_WATCH="$STATE/runtime/agorastore_official_auction_watch.json"
@@ -284,6 +285,12 @@ run_official_watch "auction24-cz" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" \
   --workers "${RADAR_AUCTION24_CZ_WATCH_WORKERS:-4}" &
 OFFICIAL_WATCH_PIDS+=("$!")
+run_official_watch "automotive-auctions-nl" \
+  python3 /opt/sonardeals-radar/automotive_auctions_nl_official_watch.py \
+  --out "$AUTOMOTIVE_AUCTIONS_NL_WATCH" \
+  --timeout "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_TIMEOUT_SEC:-40}" \
+  --workers "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_WORKERS:-2}" &
+OFFICIAL_WATCH_PIDS+=("$!")
 
 run_official_watch "pvp-giustizia"   python3 /opt/sonardeals-radar/pvp_official_auction_watch.py   --out "$PVP_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" &
 OFFICIAL_WATCH_PIDS+=("$!")
@@ -323,6 +330,7 @@ for watch_file in \
   "$ELICYTACJE_KAS_WATCH" "$COPART_SCHENGEN_WATCH" "$ADDITIONAL_SCHENGEN_WATCH" \
   "$ADDITIONAL_BATCH_WATCH" "$MEGA_BATCH_WATCH" "$VEBEG_FAST_WATCH" "$AUKSJONEN_WATCH" \
   "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$RBAUCTION_WATCH" "$AUTOROLA_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$CARAUKCE_WATCH" "$AURENA_WATCH" "$AUCTIONMASTER_WATCH" "$BILWEB_WATCH" "$KVDCARS_WATCH" "$BILAUPPBOD_WATCH" "$KIERTONET_WATCH" "$AUKTIONSHUSET_DAB_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$AUTOAUCTION24_WATCH" "$AUCTION24_CZ_WATCH" "$PVP_WATCH" \
+  "$AUTOMOTIVE_AUCTIONS_NL_WATCH" \
   "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" "$AGORASTORE_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then

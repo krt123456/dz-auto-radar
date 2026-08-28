@@ -60,6 +60,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('run_official_watch "autoauction24-ch"', content)
         self.assertIn('AUCTION24_CZ_WATCH="$STATE/runtime/auction24_cz_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "auction24-cz"', content)
+        self.assertIn('AUTOMOTIVE_AUCTIONS_NL_WATCH="$STATE/runtime/automotive_auctions_nl_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "automotive-auctions-nl"', content)
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
@@ -83,6 +85,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
             "VEACOM_WATCH",
             "AUTOAUCTION24_WATCH",
             "AUCTION24_CZ_WATCH",
+            "AUTOMOTIVE_AUCTIONS_NL_WATCH",
             "PVP_WATCH",
             "SCHENGEN_WIDE_WATCH",
             "RETRADE_WATCH",
