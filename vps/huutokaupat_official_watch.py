@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Enumerate every public Huutokaupat vehicle-and-accessories category card.
+"""Enumerate every public Huutokaupat passenger-car category card.
 
-The public category page states a finite Finnish total ("N ilmoitusta") and
-exposes all page numbers through normal ?sivu=N navigation. The connector
-checks every page and only writes when unique public auction IDs equal that
-declared total. Fuel, bid count, and price come only from visible card fields.
+The official ``Henkilöautot`` page states a finite Finnish total ("N
+ilmoitusta") and exposes all page numbers through normal ``?sivu=N``
+navigation. The connector checks every page and only writes when unique public
+auction IDs equal that declared total. Fuel, bid count, and price come only
+from visible card fields.
 """
 from __future__ import annotations
 
@@ -31,10 +32,11 @@ from urllib3.util.retry import Retry
 UTC = dt.timezone.utc
 SOURCE_KEY = "huutokaupat"
 SOURCE_NAME = "Huutokaupat.com"
-SOURCE_URL = "https://huutokaupat.com/osasto/ajoneuvot-ja-tarvikkeet"
+SOURCE_URL = "https://huutokaupat.com/osasto/henkiloautot"
 DEFAULT_TIMEOUT = 35
 DEFAULT_WORKERS = 4
 MAX_PAGES = 1_000
+SNAPSHOT_ATTEMPTS = 3
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
@@ -56,6 +58,10 @@ LOCATION_RE = re.compile(r",\s*(?:19[7-9]\d|20[0-2]\d)\s*,\s*(.+)$")
 
 class HuutokaupatWatchError(RuntimeError):
     pass
+
+
+class HuutokaupatSnapshotChanged(HuutokaupatWatchError):
+    """The live paginated category changed while it was being enumerated."""
 
 
 @dataclass(frozen=True)
@@ -202,8 +208,8 @@ def parse_card(card: Tag, *, observed_at: str) -> dict[str, Any]:
         "model": title,
         "country": "FI",
         "asset_country": "FI",
-        "category": "vehicle_related",
-        "category_raw": "Ajoneuvot ja tarvikkeet",
+        "category": "car",
+        "category_raw": "Henkilöautot",
         "year": int(year_match.group(1)) if year_match else None,
         "mileage_km": positive_number(mileage_match.group(1)) if mileage_match else None,
         "fuel": normalize_fuel(card_text),
@@ -241,6 +247,63 @@ def parse_page(markup: str, *, observed_at: str) -> ParsedPage:
     return ParsedPage(total, current_page, page_count, rows)
 
 
+def _collect_coherent_snapshot(
+    *,
+    root_session: requests.Session,
+    supplied_session: requests.Session | None,
+    observed_at: str,
+    timeout: int,
+    workers: int,
+) -> tuple[ParsedPage, list[dict[str, Any]]]:
+    """Return one internally consistent catalogue snapshot.
+
+    Huutokaupat is live, so a listing can close between the first-page total
+    and a final-page fetch. The caller retries this specific transient state;
+    it never publishes a mixture of two catalogue snapshots.
+    """
+    first_markup = fetch_markup(root_session, SOURCE_URL, timeout=timeout)
+    first = parse_page(first_markup, observed_at=observed_at)
+    page_size = len(first.rows)
+    expected_pages = math.ceil(first.total / page_size)
+    if first.page_count != expected_pages or first.current_page != 1:
+        raise HuutokaupatSnapshotChanged("Huutokaupat total/pagination metadata mismatch")
+
+    def fetch_and_parse(page: int) -> tuple[int, list[dict[str, Any]]]:
+        local_session = supplied_session or configured_session()
+        try:
+            markup = fetch_markup(local_session, page_url(page), timeout=timeout)
+        finally:
+            if supplied_session is None:
+                local_session.close()
+        parsed = parse_page(markup, observed_at=observed_at)
+        expected_rows = page_size if page < expected_pages else first.total - page_size * (page - 1)
+        if (
+            parsed.total != first.total or parsed.page_count != first.page_count
+            or parsed.current_page != page or len(parsed.rows) != expected_rows
+        ):
+            raise HuutokaupatSnapshotChanged(
+                f"Huutokaupat page {page} changed during reconciliation"
+            )
+        return page, parsed.rows
+
+    pages: dict[int, list[dict[str, Any]]] = {1: first.rows}
+    if expected_pages > 1:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {executor.submit(fetch_and_parse, page): page for page in range(2, expected_pages + 1)}
+            for future in concurrent.futures.as_completed(futures):
+                page, rows = future.result()
+                pages[page] = rows
+    rows = [row for page in range(1, expected_pages + 1) for row in pages[page]]
+    ids = [row["id"] for row in rows]
+    urls = [row["url"] for row in rows]
+    if len(rows) != first.total or len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
+        raise HuutokaupatSnapshotChanged("Huutokaupat total/ID reconciliation failed")
+    final = parse_page(fetch_markup(root_session, SOURCE_URL, timeout=timeout), observed_at=observed_at)
+    if final.total != first.total or final.page_count != first.page_count or [row["id"] for row in final.rows] != [row["id"] for row in first.rows]:
+        raise HuutokaupatSnapshotChanged("Huutokaupat category changed before final check")
+    return first, rows
+
+
 def build_watch(
     *,
     session: requests.Session | None = None,
@@ -256,67 +319,55 @@ def build_watch(
     observed_at = now.astimezone(UTC).isoformat()
     supplied_session = session
     root_session = session or configured_session()
-    first_markup = fetch_markup(root_session, SOURCE_URL, timeout=timeout)
-    first = parse_page(first_markup, observed_at=observed_at)
-    page_size = len(first.rows)
-    expected_pages = math.ceil(first.total / page_size)
-    if first.page_count != expected_pages or first.current_page != 1:
-        raise HuutokaupatWatchError("Huutokaupat total/pagination metadata mismatch")
+    last_snapshot_change: HuutokaupatSnapshotChanged | None = None
+    try:
+        for snapshot_attempt in range(1, SNAPSHOT_ATTEMPTS + 1):
+            try:
+                first, rows = _collect_coherent_snapshot(
+                    root_session=root_session,
+                    supplied_session=supplied_session,
+                    observed_at=observed_at,
+                    timeout=timeout,
+                    workers=workers,
+                )
+            except HuutokaupatSnapshotChanged as exc:
+                last_snapshot_change = exc
+                continue
+            break
+        else:
+            assert last_snapshot_change is not None
+            raise HuutokaupatWatchError(
+                "Huutokaupat passenger-car category did not stabilize after "
+                f"{SNAPSHOT_ATTEMPTS} snapshot attempts"
+            ) from last_snapshot_change
 
-    def fetch_and_parse(page: int) -> tuple[int, list[dict[str, Any]]]:
-        local_session = supplied_session or configured_session()
-        try:
-            markup = fetch_markup(local_session, page_url(page), timeout=timeout)
-        finally:
-            if supplied_session is None:
-                local_session.close()
-        parsed = parse_page(markup, observed_at=observed_at)
-        expected_rows = page_size if page < expected_pages else first.total - page_size * (page - 1)
-        if (
-            parsed.total != first.total or parsed.page_count != first.page_count
-            or parsed.current_page != page or len(parsed.rows) != expected_rows
-        ):
-            raise HuutokaupatWatchError(f"Huutokaupat page {page} failed reconciliation")
-        return page, parsed.rows
-
-    pages: dict[int, list[dict[str, Any]]] = {1: first.rows}
-    if expected_pages > 1:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(fetch_and_parse, page): page for page in range(2, expected_pages + 1)}
-            for future in concurrent.futures.as_completed(futures):
-                page, rows = future.result()
-                pages[page] = rows
-    rows = [row for page in range(1, expected_pages + 1) for row in pages[page]]
-    ids = [row["id"] for row in rows]
-    urls = [row["url"] for row in rows]
-    if len(rows) != first.total or len(ids) != len(set(ids)) or len(urls) != len(set(urls)):
-        raise HuutokaupatWatchError("Huutokaupat total/ID reconciliation failed")
-    final = parse_page(fetch_markup(root_session, SOURCE_URL, timeout=timeout), observed_at=observed_at)
-    if final.total != first.total or final.page_count != first.page_count or [row["id"] for row in final.rows] != [row["id"] for row in first.rows]:
-        raise HuutokaupatWatchError("Huutokaupat category changed before final check")
-    report = {
-        "status": "ok",
-        "connector_status": "ok",
-        "catalogue_scope": "every public card in the vehicle-and-accessories category",
-        "declared": first.total,
-        "visited": len(rows),
-        "normalized_rows": len(rows),
-        "page_size": page_size,
-        "pages": expected_pages,
-        "first_page_rechecked": True,
-        "stable_ids_unique": True,
-        "publication_ready": False,
-    }
-    return {
-        "schema_version": 1,
-        "lane": "official_auction_watch",
-        "generated_at_utc": observed_at,
-        "research_only": True,
-        "publication_status": "review_required",
-        "row_count": len(rows),
-        "rows": rows,
-        "source_reports": {SOURCE_KEY: report},
-    }
+        report = {
+            "status": "ok",
+            "connector_status": "ok",
+            "catalogue_scope": "every public card in the passenger-car category",
+            "declared": first.total,
+            "visited": len(rows),
+            "normalized_rows": len(rows),
+            "page_size": len(first.rows),
+            "pages": first.page_count,
+            "first_page_rechecked": True,
+            "stable_ids_unique": True,
+            "snapshot_attempts": snapshot_attempt,
+            "publication_ready": False,
+        }
+        return {
+            "schema_version": 1,
+            "lane": "official_auction_watch",
+            "generated_at_utc": observed_at,
+            "research_only": True,
+            "publication_status": "review_required",
+            "row_count": len(rows),
+            "rows": rows,
+            "source_reports": {SOURCE_KEY: report},
+        }
+    finally:
+        if session is None:
+            root_session.close()
 
 
 def atomic_write_json(path: Path, payload: dict[str, Any]) -> None:

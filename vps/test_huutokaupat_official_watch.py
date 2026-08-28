@@ -63,6 +63,17 @@ class Session:
         return Response(self.responses[url])
 
 
+class SequencedSession:
+    def __init__(self, responses: dict[str, list[str]]) -> None:
+        self.responses = {url: list(bodies) for url, bodies in responses.items()}
+
+    def get(self, url: str, **_: object) -> Response:
+        bodies = self.responses[url]
+        if not bodies:
+            raise AssertionError(f"unexpected extra request for {url}")
+        return Response(bodies.pop(0))
+
+
 class HuutokaupatWatchTest(unittest.TestCase):
     def responses(self, first: str = PAGE_1) -> dict[str, str]:
         return {
@@ -83,10 +94,27 @@ class HuutokaupatWatchTest(unittest.TestCase):
         self.assertEqual(rows["huutokaupat:11"]["fuel"], "petrol")
         self.assertEqual(rows["huutokaupat:12"]["fuel"], "hybrid")
         self.assertEqual(rows["huutokaupat:13"]["fuel"], "diesel")
+        self.assertTrue(watch.SOURCE_URL.endswith("/osasto/henkiloautot"))
+        self.assertTrue(all(row["category"] == "car" for row in rows.values()))
+        self.assertEqual(rows["huutokaupat:11"]["category_raw"], "Henkilöautot")
         self.assertEqual(rows["huutokaupat:11"]["price_eur"], 450)
         self.assertEqual(rows["huutokaupat:11"]["bid_count"], 5)
         self.assertEqual(rows["huutokaupat:13"]["auction_status"], "ended")
         self.assertTrue(all(row["adapter_authorized"] for row in rows.values()))
+
+    def test_retries_when_a_live_page_moves_between_snapshot_attempts(self) -> None:
+        changed_page = PAGE_2.replace("3 ilmoitusta, sivu 2", "4 ilmoitusta, sivu 2")
+        session = SequencedSession({
+            watch.SOURCE_URL: [PAGE_1, PAGE_1, PAGE_1],
+            watch.page_url(2): [changed_page, PAGE_2],
+        })
+        payload = watch.build_watch(
+            session=session,
+            now=dt.datetime(2026, 8, 27, 20, 0, tzinfo=UTC),
+            workers=1,
+        )
+        self.assertEqual(payload["row_count"], 3)
+        self.assertEqual(payload["source_reports"]["huutokaupat"]["snapshot_attempts"], 2)
 
     def test_mismatched_page_count_fails_closed(self) -> None:
         invalid = PAGE_1.replace('aria-label="Sivu 1/2"', 'aria-label="Sivu 1/3"')
