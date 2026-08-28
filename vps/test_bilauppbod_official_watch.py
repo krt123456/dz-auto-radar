@@ -174,7 +174,12 @@ class BilauppbodWatchTest(unittest.TestCase):
 
     def test_zero_current_bid_stays_visible_without_claiming_a_price(self) -> None:
         vehicle = watch.Card("100", "https://www.bilauppbod.is/auction/view/100", "MAZDA 6", "0 kr.", 0, dt.datetime(2026, 8, 30, 20, tzinfo=UTC), "19.05.2017", 123, "", None)
-        row = watch.normalize_card(vehicle, watch.Detail("100", "Mazda", "4", "Bensín", 123, ""), observed_at="2026-08-28T20:00:00+00:00")
+        row = watch.normalize_card(
+            vehicle,
+            watch.Detail("100", "Mazda", "4", "Bensín", 123, ""),
+            observed_at="2026-08-28T20:00:00+00:00",
+            mileage_km=123,
+        )
         self.assertEqual(row["price_amount"], 0)
         self.assertEqual(row["price_kind"], "unknown")
 
