@@ -54,6 +54,8 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertIn('python3 /opt/sonardeals-radar/klaravik_official_watch.py', content)
         self.assertIn('AUTOAUCTION24_WATCH="$STATE/runtime/autoauction24_official_auction_watch.json"', content)
         self.assertIn('run_official_watch "autoauction24-ch"', content)
+        self.assertIn('AUCTION24_CZ_WATCH="$STATE/runtime/auction24_cz_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "auction24-cz"', content)
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
@@ -75,6 +77,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
             "KLARAVIK_WATCH",
             "VEACOM_WATCH",
             "AUTOAUCTION24_WATCH",
+            "AUCTION24_CZ_WATCH",
             "PVP_WATCH",
             "SCHENGEN_WIDE_WATCH",
             "RETRADE_WATCH",
