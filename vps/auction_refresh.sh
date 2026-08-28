@@ -264,7 +264,11 @@ run_official_watch "klaravik-se,klaravik-dk" \
   --out "$KLARAVIK_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 
-run_official_watch "veacom-cz"   python3 /opt/sonardeals-radar/veacom_fetcher.py   --out "$VEACOM_WATCH" &
+run_official_watch "veacom" \
+  python3 /opt/sonardeals-radar/veacom_official_watch.py \
+  --out "$VEACOM_WATCH" \
+  --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" \
+  --workers "${RADAR_VEACOM_WORKERS:-4}" &
 OFFICIAL_WATCH_PIDS+=("$!")
 
 run_official_watch "pvp-giustizia"   python3 /opt/sonardeals-radar/pvp_official_auction_watch.py   --out "$PVP_WATCH" --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-30}" &
