@@ -2,24 +2,27 @@
 """Enumerate every public Schengen automobile auction at Ritchie Bros.
 
 The official automobile catalogue is server-rendered and embeds a Next.js
-``data.results`` payload.  It declares an exact total and exposes finite
-``?from=`` pages of sixty cards.  This connector walks every page twice and
-requires the complete public item-ID set to remain stable before writing a
-snapshot.  It keeps only Schengen-located lots with an explicit auction
-format; fixed-price and make-offer cards are counted but never labelled as an
-auction.
+``data.results`` payload.  Its unsorted offset pages can move while they are
+being read, so page results are used only to discover candidate item numbers.
+Once the bounded discovery union reaches the declared total, every candidate
+is fetched twice through the catalogue's exact ``itemNumbers`` filter.  The
+connector publishes only when both exact snapshots, stable public identities,
+and the catalogue total agree.  It keeps only Schengen-located lots with an
+explicit auction format; fixed-price and make-offer cards are counted but
+never labelled as an auction.
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import math
 import os
 import re
 import time
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -33,7 +36,13 @@ UTC = dt.timezone.utc
 SOURCE_KEY = "rbauction-eu"
 SOURCE_NAME = "Ritchie Bros. Europe"
 CATALOGUE_URL = "https://www.rbauction.com/cp/automobile"
-PAGE_SIZE = 60
+# The public endpoint currently caps a page at 120 even when a larger size is
+# requested.  Keep the value explicit so page-length checks fail closed if the
+# contract changes.
+PAGE_SIZE = 120
+ITEM_FILTER_BATCH_SIZE = 50
+MAX_DISCOVERY_SWEEPS = 8
+EXACT_VALIDATION_ROUNDS = 2
 # Public catalogue growth must not be silently capped below the scale target.
 # This remains an operational guard against a malformed counter, not a 200k
 # publication ceiling; the broad-watch architecture will shard before a single
@@ -95,17 +104,44 @@ class RitchieBrosWatchError(RuntimeError):
     """The public Ritchie Bros automobile catalogue could not be reconciled."""
 
 
+class RitchieBrosSnapshotChanged(RitchieBrosWatchError):
+    """A mutable catalogue boundary made one enumeration incomplete."""
+
+
 @dataclass(frozen=True)
 class CataloguePass:
     total: int
     pages: int
     all_ids: tuple[str, ...]
+    identity_sha256: str
+    publication_sha256: str
     rows: tuple[dict[str, Any], ...]
     rejected_counts: dict[str, int]
+    discovery_sweeps: int
+    discovery_page_fetches: int
+    discovery_incomplete_sweeps: int
+    discovery_duplicate_records: int
+    validation_batches: int
 
     @property
-    def fingerprint(self) -> tuple[int, tuple[str, ...], tuple[str, ...]]:
-        return self.total, self.all_ids, tuple(str(row["id"]) for row in self.rows)
+    def fingerprint(self) -> tuple[int, tuple[str, ...], str, str]:
+        return (
+            self.total,
+            self.all_ids,
+            self.identity_sha256,
+            self.publication_sha256,
+        )
+
+
+@dataclass(frozen=True)
+class DiscoveryResult:
+    total: int
+    pages: int
+    identities: dict[str, tuple[str, str, str]]
+    sweeps: int
+    page_fetches: int
+    incomplete_sweeps: int
+    duplicate_records: int
 
 
 def clean(value: Any) -> str:
@@ -231,15 +267,15 @@ def parse_catalogue_results(markup: str) -> tuple[int, list[dict[str, Any]]]:
     return total, records
 
 
-def fetch_page(
+def fetch_catalogue(
     session: requests.Session,
     *,
-    offset: int,
+    params: dict[str, int | str],
     timeout: int,
 ) -> tuple[int, list[dict[str, Any]]]:
     response = session.get(
         CATALOGUE_URL,
-        params={"from": offset},
+        params=params,
         headers=HEADERS,
         timeout=timeout,
     )
@@ -248,9 +284,23 @@ def fetch_page(
         total, records = parse_catalogue_results(response.text)
     finally:
         response.close()
+    return total, records
+
+
+def fetch_page(
+    session: requests.Session,
+    *,
+    offset: int,
+    timeout: int,
+) -> tuple[int, list[dict[str, Any]]]:
+    total, records = fetch_catalogue(
+        session,
+        params={"from": offset, "size": PAGE_SIZE},
+        timeout=timeout,
+    )
     expected = max(0, min(PAGE_SIZE, total - offset))
     if len(records) != expected:
-        raise RitchieBrosWatchError(
+        raise RitchieBrosSnapshotChanged(
             f"Ritchie Bros page {offset} declared total {total} but returned "
             f"{len(records)}, expected {expected}"
         )
@@ -262,6 +312,18 @@ def record_id(record: dict[str, Any]) -> str:
     if not native_id.isdigit():
         raise RitchieBrosWatchError("Ritchie Bros catalogue card has no stable item number")
     return native_id
+
+
+def record_identity(record: dict[str, Any]) -> tuple[str, str, str]:
+    """Return the stable public identity needed to validate a candidate."""
+    native_id = record_id(record)
+    asset_guid = clean(record.get("assetGUID"))
+    listing_id = clean(record.get("listingId"))
+    if not asset_guid or not listing_id:
+        raise RitchieBrosWatchError(
+            f"Ritchie Bros item {native_id} has no stable asset/listing identity"
+        )
+    return native_id, asset_guid, listing_id
 
 
 def row_from_record(
@@ -353,6 +415,256 @@ def row_from_record(
     }, None
 
 
+def digest_lines(lines: list[str]) -> str:
+    digest = hashlib.sha256()
+    for line in lines:
+        digest.update(line.encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def bounded_id_preview(values: set[str]) -> str:
+    ordered = sorted(values)
+    preview = ",".join(ordered[:5])
+    return preview + (",..." if len(ordered) > 5 else "")
+
+
+def discover_candidates(
+    session: requests.Session,
+    *,
+    timeout: int,
+) -> DiscoveryResult:
+    """Build a bounded union from mutable offset pages without publishing it."""
+    baseline_total: int | None = None
+    candidates: dict[str, tuple[str, str, str]] = {}
+    page_fetches = 0
+    incomplete_sweeps = 0
+    duplicate_records = 0
+
+    for sweep in range(1, MAX_DISCOVERY_SWEEPS + 1):
+        total, first_records = fetch_page(session, offset=0, timeout=timeout)
+        page_fetches += 1
+        if baseline_total is None:
+            baseline_total = total
+        elif total != baseline_total:
+            raise RitchieBrosSnapshotChanged(
+                "Ritchie Bros catalogue total changed during candidate discovery: "
+                f"baseline={baseline_total} observed={total} sweep={sweep} offset=0"
+            )
+
+        assert baseline_total is not None
+        sweep_ids: set[str] = set()
+
+        def consume(records: list[dict[str, Any]], *, offset: int) -> None:
+            nonlocal duplicate_records
+            for record in records:
+                identity = record_identity(record)
+                native_id = identity[0]
+                prior = candidates.get(native_id)
+                if prior is not None and prior != identity:
+                    raise RitchieBrosSnapshotChanged(
+                        "Ritchie Bros stable identity changed during candidate discovery: "
+                        f"item={native_id} sweep={sweep} offset={offset}"
+                    )
+                candidates.setdefault(native_id, identity)
+                if native_id in sweep_ids:
+                    duplicate_records += 1
+                else:
+                    sweep_ids.add(native_id)
+
+        consume(first_records, offset=0)
+        for offset in range(PAGE_SIZE, baseline_total, PAGE_SIZE):
+            page_total, records = fetch_page(session, offset=offset, timeout=timeout)
+            page_fetches += 1
+            if page_total != baseline_total:
+                raise RitchieBrosSnapshotChanged(
+                    "Ritchie Bros catalogue total changed during candidate discovery: "
+                    f"baseline={baseline_total} observed={page_total} "
+                    f"sweep={sweep} offset={offset}"
+                )
+            consume(records, offset=offset)
+
+        if len(sweep_ids) > baseline_total or len(candidates) > baseline_total:
+            raise RitchieBrosSnapshotChanged(
+                "Ritchie Bros candidate discovery exceeded the declared total: "
+                f"declared={baseline_total} sweep_unique={len(sweep_ids)} "
+                f"candidate_union={len(candidates)}"
+            )
+        if len(sweep_ids) != baseline_total:
+            incomplete_sweeps += 1
+        if len(candidates) == baseline_total:
+            return DiscoveryResult(
+                total=baseline_total,
+                pages=(baseline_total + PAGE_SIZE - 1) // PAGE_SIZE,
+                identities=candidates,
+                sweeps=sweep,
+                page_fetches=page_fetches,
+                incomplete_sweeps=incomplete_sweeps,
+                duplicate_records=duplicate_records,
+            )
+
+    assert baseline_total is not None
+    raise RitchieBrosWatchError(
+        "Ritchie Bros bounded candidate discovery exhausted: "
+        f"sweeps={MAX_DISCOVERY_SWEEPS} declared={baseline_total} "
+        f"candidate_union={len(candidates)} incomplete_sweeps={incomplete_sweeps} "
+        f"duplicate_records={duplicate_records}"
+    )
+
+
+def fetch_exact_batch(
+    session: requests.Session,
+    *,
+    item_numbers: tuple[str, ...],
+    expected_identities: dict[str, tuple[str, str, str]],
+    timeout: int,
+) -> dict[str, dict[str, Any]]:
+    if not item_numbers or len(item_numbers) > ITEM_FILTER_BATCH_SIZE:
+        raise RitchieBrosWatchError("Ritchie Bros exact-validation batch is invalid")
+    requested = set(item_numbers)
+    total, records = fetch_catalogue(
+        session,
+        params={
+            "itemNumbers": ",".join(item_numbers),
+            "size": PAGE_SIZE,
+        },
+        timeout=timeout,
+    )
+    if total != len(item_numbers) or len(records) != len(item_numbers):
+        raise RitchieBrosSnapshotChanged(
+            "Ritchie Bros exact item filter returned an incomplete batch: "
+            f"requested={len(item_numbers)} declared={total} returned={len(records)}"
+        )
+
+    records_by_id: dict[str, dict[str, Any]] = {}
+    for record in records:
+        identity = record_identity(record)
+        native_id = identity[0]
+        if native_id in records_by_id:
+            raise RitchieBrosSnapshotChanged(
+                f"Ritchie Bros exact item filter repeated item {native_id}"
+            )
+        if native_id not in requested:
+            raise RitchieBrosSnapshotChanged(
+                f"Ritchie Bros exact item filter returned unrequested item {native_id}"
+            )
+        if expected_identities[native_id] != identity:
+            raise RitchieBrosSnapshotChanged(
+                f"Ritchie Bros exact item identity changed for item {native_id}"
+            )
+        records_by_id[native_id] = record
+
+    returned_ids = set(records_by_id)
+    if returned_ids != requested:
+        missing = bounded_id_preview(requested - returned_ids)
+        extra = bounded_id_preview(returned_ids - requested)
+        raise RitchieBrosSnapshotChanged(
+            "Ritchie Bros exact item filter ID set mismatch: "
+            f"missing={missing or '-'} extra={extra or '-'}"
+        )
+    return records_by_id
+
+
+def validate_candidates(
+    session: requests.Session,
+    *,
+    discovery: DiscoveryResult,
+    timeout: int,
+) -> tuple[dict[str, dict[str, Any]], int]:
+    all_ids = tuple(sorted(discovery.identities))
+    records_by_id: dict[str, dict[str, Any]] = {}
+    batches = 0
+    for start in range(0, len(all_ids), ITEM_FILTER_BATCH_SIZE):
+        item_numbers = all_ids[start:start + ITEM_FILTER_BATCH_SIZE]
+        batch = fetch_exact_batch(
+            session,
+            item_numbers=item_numbers,
+            expected_identities=discovery.identities,
+            timeout=timeout,
+        )
+        overlap = set(records_by_id).intersection(batch)
+        if overlap:
+            raise RitchieBrosSnapshotChanged(
+                "Ritchie Bros exact validation repeated IDs across batches: "
+                f"{bounded_id_preview(overlap)}"
+            )
+        records_by_id.update(batch)
+        batches += 1
+    if set(records_by_id) != set(all_ids):
+        raise RitchieBrosSnapshotChanged(
+            "Ritchie Bros exact validation did not return the full candidate set"
+        )
+    return records_by_id, batches
+
+
+def require_unchanged_total(
+    session: requests.Session,
+    *,
+    expected_total: int,
+    phase: str,
+    timeout: int,
+) -> None:
+    observed_total, _ = fetch_page(session, offset=0, timeout=timeout)
+    if observed_total != expected_total:
+        raise RitchieBrosSnapshotChanged(
+            "Ritchie Bros catalogue total changed around exact validation: "
+            f"phase={phase} expected={expected_total} observed={observed_total}"
+        )
+
+
+def materialize_validated_snapshot(
+    records_by_id: dict[str, dict[str, Any]],
+    *,
+    discovery: DiscoveryResult,
+    observed_at: str,
+    now: dt.datetime,
+) -> CataloguePass:
+    all_ids = tuple(sorted(discovery.identities))
+    if set(records_by_id) != set(all_ids):
+        raise RitchieBrosSnapshotChanged(
+            "Ritchie Bros validated record set no longer matches discovery"
+        )
+
+    identity_lines: list[str] = []
+    publication_lines: list[str] = []
+    rows: list[dict[str, Any]] = []
+    rejected: dict[str, int] = {}
+    for native_id in all_ids:
+        identity = record_identity(records_by_id[native_id])
+        identity_lines.append(json.dumps(identity, ensure_ascii=False, separators=(",", ":")))
+        row, reason = row_from_record(
+            records_by_id[native_id], observed_at=observed_at, now=now
+        )
+        if row is not None:
+            rows.append(row)
+            outcome: list[Any] = [native_id, "row", row]
+        elif reason:
+            rejected[reason] = rejected.get(reason, 0) + 1
+            outcome = [native_id, "rejected", reason]
+        else:
+            raise RitchieBrosWatchError(
+                f"Ritchie Bros item {native_id} produced no publication outcome"
+            )
+        publication_lines.append(
+            json.dumps(outcome, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        )
+
+    return CataloguePass(
+        total=discovery.total,
+        pages=discovery.pages,
+        all_ids=all_ids,
+        identity_sha256=digest_lines(identity_lines),
+        publication_sha256=digest_lines(publication_lines),
+        rows=tuple(sorted(rows, key=lambda row: str(row["id"]))),
+        rejected_counts=dict(sorted(rejected.items())),
+        discovery_sweeps=discovery.sweeps,
+        discovery_page_fetches=discovery.page_fetches,
+        discovery_incomplete_sweeps=discovery.incomplete_sweeps,
+        discovery_duplicate_records=discovery.duplicate_records,
+        validation_batches=0,
+    )
+
+
 def catalogue_pass(
     session: requests.Session,
     *,
@@ -360,43 +672,46 @@ def catalogue_pass(
     observed_at: str,
     now: dt.datetime,
 ) -> CataloguePass:
-    total, first_records = fetch_page(session, offset=0, timeout=timeout)
-    all_ids: set[str] = set()
-    rows: list[dict[str, Any]] = []
-    rejected: dict[str, int] = {}
-    pages = 0
-
-    def consume(records: list[dict[str, Any]]) -> None:
-        nonlocal pages
-        pages += 1
-        for record in records:
-            native_id = record_id(record)
-            if native_id in all_ids:
-                raise RitchieBrosWatchError("Ritchie Bros catalogue repeats a stable item number")
-            all_ids.add(native_id)
-            row, reason = row_from_record(record, observed_at=observed_at, now=now)
-            if row is not None:
-                rows.append(row)
-            elif reason:
-                rejected[reason] = rejected.get(reason, 0) + 1
-
-    consume(first_records)
-    for offset in range(PAGE_SIZE, total, PAGE_SIZE):
-        page_total, records = fetch_page(session, offset=offset, timeout=timeout)
-        if page_total != total:
-            raise RitchieBrosWatchError("Ritchie Bros catalogue total changed during enumeration")
-        consume(records)
-    if len(all_ids) != total:
-        raise RitchieBrosWatchError(
-            f"Ritchie Bros catalogue ID reconciliation failed: declared={total} unique={len(all_ids)}"
-        )
-    return CataloguePass(
-        total=total,
-        pages=pages,
-        all_ids=tuple(sorted(all_ids)),
-        rows=tuple(sorted(rows, key=lambda row: str(row["id"]))),
-        rejected_counts=dict(sorted(rejected.items())),
+    discovery = discover_candidates(session, timeout=timeout)
+    require_unchanged_total(
+        session,
+        expected_total=discovery.total,
+        phase="before",
+        timeout=timeout,
     )
+
+    snapshots: list[CataloguePass] = []
+    validation_batches = 0
+    for round_number in range(1, EXACT_VALIDATION_ROUNDS + 1):
+        records_by_id, batches = validate_candidates(
+            session,
+            discovery=discovery,
+            timeout=timeout,
+        )
+        validation_batches += batches
+        snapshots.append(
+            materialize_validated_snapshot(
+                records_by_id,
+                discovery=discovery,
+                observed_at=observed_at,
+                now=now,
+            )
+        )
+        require_unchanged_total(
+            session,
+            expected_total=discovery.total,
+            phase="between" if round_number < EXACT_VALIDATION_ROUNDS else "after",
+            timeout=timeout,
+        )
+
+    if len(snapshots) != EXACT_VALIDATION_ROUNDS:
+        raise RitchieBrosWatchError("Ritchie Bros exact validation round count is invalid")
+    first_fingerprint = snapshots[0].fingerprint
+    if any(snapshot.fingerprint != first_fingerprint for snapshot in snapshots[1:]):
+        raise RitchieBrosSnapshotChanged(
+            "Ritchie Bros exact validation rounds disagree on the public snapshot"
+        )
+    return replace(snapshots[-1], validation_batches=validation_batches)
 
 
 def build_watch(
@@ -415,27 +730,40 @@ def build_watch(
     owned_session = session is None
     active_session = session or configured_session()
     try:
-        first = catalogue_pass(
-            active_session, timeout=timeout, observed_at=observed_at, now=now
-        )
-        second = catalogue_pass(
-            active_session, timeout=timeout, observed_at=observed_at, now=now
+        stable = catalogue_pass(
+            active_session,
+            timeout=timeout,
+            observed_at=observed_at,
+            now=now,
         )
     finally:
         if owned_session:
             active_session.close()
-    if first.fingerprint != second.fingerprint:
-        raise RitchieBrosWatchError("Ritchie Bros final reconciliation changed")
     report = {
         "status": "ok",
         "connector_status": "ok",
         "catalogue_scope": "every public automobile card reachable from the Ritchie Bros catalogue",
-        "catalogue_total": first.total,
-        "listing_pages": first.pages,
+        "catalogue_total": stable.total,
+        "listing_pages": stable.pages,
+        "pagination_window_rows": PAGE_SIZE,
+        "pagination_step_rows": PAGE_SIZE,
+        "pagination_overlap_rows": 0,
+        "overlap_records_observed": stable.discovery_duplicate_records,
         "stable_ids_unique": True,
         "full_catalogue_rechecked": True,
-        "schengen_auction_rows": len(first.rows),
-        "rejected_counts": first.rejected_counts,
+        "reconciliation_attempts": stable.discovery_sweeps,
+        "transient_snapshot_retries": stable.discovery_incomplete_sweeps,
+        "candidate_discovery_sweeps": stable.discovery_sweeps,
+        "candidate_discovery_page_fetches": stable.discovery_page_fetches,
+        "candidate_discovery_incomplete_sweeps": stable.discovery_incomplete_sweeps,
+        "candidate_discovery_duplicate_records": stable.discovery_duplicate_records,
+        "exact_item_filter_batch_size": ITEM_FILTER_BATCH_SIZE,
+        "exact_validation_rounds": EXACT_VALIDATION_ROUNDS,
+        "exact_validation_batches": stable.validation_batches,
+        "validated_identity_sha256": stable.identity_sha256,
+        "validated_publication_sha256": stable.publication_sha256,
+        "schengen_auction_rows": len(stable.rows),
+        "rejected_counts": stable.rejected_counts,
         "publication_ready": False,
     }
     return {
@@ -444,8 +772,8 @@ def build_watch(
         "generated_at_utc": observed_at,
         "research_only": True,
         "publication_status": "review_required",
-        "row_count": len(first.rows),
-        "rows": list(first.rows),
+        "row_count": len(stable.rows),
+        "rows": list(stable.rows),
         "source_reports": {SOURCE_KEY: report},
     }
 

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Enumerate every public VPauto PRO vehicle card as one reconciled snapshot.
 
-VPauto's public PRO landing page exposes a live "Search (N vehicles)" total
-and finite sale routes. Some sale routes paginate through
-"/pro/vehicle/list?sale=...&page=..." while others fit on their root sale
-page. This connector walks both forms, deduplicates stable public vehicle
-IDs, and retains every unique stable public card. The landing-page counter is
-recorded for diagnostics: a card deficit fails the snapshot, while an excess
-is retained because the counter can lag the public sale cards.
+VPauto's public PRO landing page exposes a live "Search (N vehicles)" total.
+After that page seeds the catalogue session, finite global pages at
+"/pro/vehicle/list?page=..." enumerate every public offer card. Sale-filtered
+pages are cookie-scoped and are therefore not used as a coverage boundary.
+A physical vehicle can have several legitimate offers; stable offer identity
+combines the physical vehicle ID with the canonical URL's offer token.
 
 Only data exposed by the anonymous catalogue and public vehicle pages is
 requested. Prices are deliberately left unknown when the public page does
@@ -42,10 +41,12 @@ SOURCE_KEY = "vpauto"
 SOURCE_NAME = "VPauto"
 BASE_URL = "https://vpauto.eu"
 CATALOGUE_URL = f"{BASE_URL}/pro"
+GLOBAL_LISTING_URL = f"{BASE_URL}/pro/vehicle/list?page=1"
 DEFAULT_TIMEOUT = 30
 DEFAULT_WORKERS = 8
 MAX_LISTING_PAGES = 1_000
 MAX_DECLARED_VEHICLES = 100_000
+MAX_RECONCILIATION_ATTEMPTS = 6
 
 HEADERS = {
     "User-Agent": "SonarDeals-Auction-Monitor/1.0",
@@ -56,6 +57,7 @@ TOTAL_RE = re.compile(
     re.I,
 )
 SALE_ROOT_RE = re.compile(r"^/search/sale/([A-Za-z0-9]+)$")
+OFFER_TOKEN_RE = re.compile(r"^[A-Za-z0-9]{1,64}$")
 YEAR_RE = re.compile(r"\b(19[7-9]\d|20[0-2]\d)\b")
 MILEAGE_RE = re.compile(r"\b([0-9][0-9\s,.\u00a0]*)\s*km\b", re.I)
 DETAIL_ID_RE = re.compile(r"""["']viewItem["']\s*:\s*["']?(\d+)""", re.I)
@@ -72,6 +74,10 @@ class VPAutoWatchError(RuntimeError):
     """The public VPauto catalogue could not be reconciled atomically."""
 
 
+class VPAutoSnapshotChanged(VPAutoWatchError):
+    """One global catalogue pass moved while its pages were enumerated."""
+
+
 @dataclass(frozen=True)
 class SaleSeed:
     sale_id: str
@@ -84,6 +90,26 @@ class ListingPage:
     sale_id: str
     rows: list[dict[str, Any]]
     next_urls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GlobalListingPage:
+    rows: tuple[dict[str, Any], ...]
+    linked_pages: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class CataloguePass:
+    pages: int
+    rows: tuple[dict[str, Any], ...]
+    physical_vehicle_ids: int
+
+    @property
+    def fingerprint(self) -> tuple[int, tuple[str, ...]]:
+        return self.pages, tuple(
+            json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            for row in self.rows
+        )
 
 
 def clean(value: Any) -> str:
@@ -199,6 +225,53 @@ def normalized_vehicle_url(href: str) -> str:
     return f"{BASE_URL}{parsed.path}"
 
 
+def offer_token_from_url(url: str) -> str:
+    parsed = urlsplit(url)
+    parts = [part for part in parsed.path.split("/") if part]
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname != "vpauto.eu"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+        or len(parts) != 3
+        or parts[0] != "vehicle"
+        or not OFFER_TOKEN_RE.fullmatch(parts[1])
+        or not parts[2]
+    ):
+        raise VPAutoWatchError("VPauto vehicle URL has no stable public offer token")
+    return parts[1]
+
+
+def global_listing_url(page: int) -> str:
+    if page < 1 or page > MAX_LISTING_PAGES:
+        raise VPAutoWatchError("VPauto global page exceeds the safety limit")
+    return f"{BASE_URL}/pro/vehicle/list?page={page}"
+
+
+def global_page_number(href: str) -> int:
+    parsed = urlsplit(urljoin(BASE_URL, clean(href)))
+    values = parse_qs(parsed.query, keep_blank_values=True)
+    page_values = values.get("page") or []
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in {"vpauto.eu", "www.vpauto.eu"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path != "/pro/vehicle/list"
+        or parsed.fragment
+        or set(values) != {"page"}
+        or len(page_values) != 1
+        or not clean(page_values[0]).isdigit()
+    ):
+        raise VPAutoWatchError("VPauto global pagination link is malformed")
+    page = int(clean(page_values[0]))
+    if page < 1 or page > MAX_LISTING_PAGES:
+        raise VPAutoWatchError("VPauto global pagination page exceeds the safety limit")
+    return page
+
+
 def parse_declared_total(markup: str) -> int:
     match = TOTAL_RE.search(markup)
     if not match:
@@ -259,6 +332,7 @@ def parse_card(
     if link is None:
         raise VPAutoWatchError(f"VPauto vehicle {vehicle_id} has no canonical card link")
     url = normalized_vehicle_url(clean(link.get("href")))
+    offer_token = offer_token_from_url(url)
     title, model = title_from_card(card)
     card_text = clean(card.get_text(" ", strip=True))
     year_match = YEAR_RE.search(card_text)
@@ -267,10 +341,12 @@ def parse_card(
     location = clean(location_node.get_text(" ", strip=True) if location_node else "")
     location = re.sub(r"^LOC\s*:\s*", "", location, flags=re.I).strip()
     return {
-        "id": f"{SOURCE_KEY}:{vehicle_id}",
+        "id": f"{SOURCE_KEY}:{vehicle_id}:{offer_token}",
         "source": SOURCE_KEY,
         "source_key": SOURCE_KEY,
         "source_name": SOURCE_NAME,
+        "source_vehicle_id": vehicle_id,
+        "source_offer_id": offer_token,
         "url": url,
         "title": title,
         "model": model,
@@ -305,7 +381,7 @@ def parse_card(
         "access_sale_note": "VPauto bidding and detailed buyer access may require a professional account.",
         "auction_status": "listed",
         "adapter_authorized": True,
-        "raw_evidence_ref": f"{SOURCE_KEY}:public-catalogue:{sale.sale_id}",
+        "raw_evidence_ref": f"{SOURCE_KEY}:public-catalogue:{vehicle_id}:{offer_token}",
         "evidence": "Public VPauto PRO sale listing card.",
     }
 
@@ -335,6 +411,77 @@ def parse_listing_page(
             raise VPAutoWatchError("VPauto pagination crossed into another sale")
         next_urls.add(url)
     return ListingPage(sale.sale_id, rows, tuple(sorted(next_urls)))
+
+
+def parse_global_listing_page(
+    markup: str,
+    *,
+    observed_at: str,
+) -> GlobalListingPage:
+    soup = BeautifulSoup(markup, "html.parser")
+    cards = soup.select("article.element[data-vehicle-etincelle-id]")
+    if not cards:
+        raise VPAutoSnapshotChanged("VPauto global catalogue page has no offer cards")
+    catalogue = SaleSeed("", GLOBAL_LISTING_URL, "VPauto public catalogue")
+    rows = [parse_card(card, sale=catalogue, observed_at=observed_at) for card in cards]
+    offer_tokens = [str(row["source_offer_id"]) for row in rows]
+    if len(offer_tokens) != len(set(offer_tokens)):
+        raise VPAutoSnapshotChanged("VPauto global page repeats a stable offer token")
+    linked_pages = {
+        global_page_number(clean(anchor.get("href")))
+        for anchor in soup.select("nav.pagination a[href]")
+    }
+    return GlobalListingPage(tuple(rows), tuple(sorted(linked_pages)))
+
+
+def global_catalogue_pass(
+    session: requests.Session,
+    *,
+    declared: int,
+    observed_at: str,
+    timeout: int,
+) -> CataloguePass:
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    token_identity: dict[str, tuple[str, str]] = {}
+    pending_pages = {1}
+    visited_pages: set[int] = set()
+    while pending_pages:
+        page = min(pending_pages)
+        pending_pages.remove(page)
+        if page in visited_pages:
+            raise VPAutoSnapshotChanged("VPauto global page was scheduled twice")
+        if len(visited_pages) >= MAX_LISTING_PAGES:
+            raise VPAutoSnapshotChanged("VPauto global pagination exceeds the safety limit")
+        markup = fetch_markup(session, global_listing_url(page), timeout=timeout)
+        page_data = parse_global_listing_page(markup, observed_at=observed_at)
+        visited_pages.add(page)
+        pending_pages.update(
+            linked_page
+            for linked_page in page_data.linked_pages
+            if linked_page not in visited_pages
+        )
+        if len(visited_pages | pending_pages) > MAX_LISTING_PAGES:
+            raise VPAutoSnapshotChanged("VPauto global pagination exceeds the safety limit")
+        for row in page_data.rows:
+            row_id = str(row["id"])
+            offer_token = str(row["source_offer_id"])
+            identity = (str(row["source_vehicle_id"]), str(row["url"]))
+            if offer_token in token_identity or row_id in rows_by_id:
+                raise VPAutoSnapshotChanged("VPauto global pages repeat a stable offer")
+            token_identity[offer_token] = identity
+            rows_by_id[row_id] = row
+            if len(rows_by_id) > MAX_DECLARED_VEHICLES:
+                raise VPAutoSnapshotChanged("VPauto global catalogue exceeds the safety limit")
+    expected_pages = set(range(1, max(visited_pages) + 1))
+    if visited_pages != expected_pages:
+        raise VPAutoSnapshotChanged("VPauto global pagination graph has a page gap")
+    if len(rows_by_id) < declared:
+        raise VPAutoSnapshotChanged(
+            f"VPauto total/offer reconciliation failed: declared={declared} unique={len(rows_by_id)}"
+        )
+    rows = tuple(rows_by_id[row_id] for row_id in sorted(rows_by_id))
+    physical_ids = len({str(row["source_vehicle_id"]) for row in rows})
+    return CataloguePass(len(visited_pages), rows, physical_ids)
 
 
 def parse_detail(markup: str, *, expected_vehicle_id: str) -> tuple[str, str | None]:
@@ -368,9 +515,8 @@ def build_watch(
     supplied_session = session
     root_session = session or configured_session()
     def fetch_worker_markup(url: str) -> str:
-        # VPauto carries the last search in a session cookie. Reusing a worker
-        # session across different sales can therefore return a different
-        # result page, so every concurrent catalogue request is isolated.
+        # Detail pages are canonical URLs and do not depend on catalogue state.
+        # Isolate concurrent detail requests from the global crawl's cookie.
         if supplied_session is not None:
             return fetch_markup(supplied_session, url, timeout=timeout)
         local = configured_session()
@@ -383,73 +529,46 @@ def build_watch(
     declared, sales = parse_home(first_home)
     if not declared:
         raise VPAutoWatchError("VPauto declared zero vehicles")
-
-    pending: dict[str, SaleSeed] = {
-        seed.listing_url: seed for seed in sales.values()
-    }
-    visited: set[str] = set()
-    scheduled_sale_ids: dict[str, str] = {
-        seed.listing_url: seed.sale_id for seed in sales.values()
-    }
-    vehicle_rows: dict[str, dict[str, Any]] = {}
-    vehicle_urls: dict[str, str] = {}
-
-    def fetch_listing(url: str, sale: SaleSeed) -> tuple[str, ListingPage]:
-        markup = fetch_worker_markup(url)
-        return url, parse_listing_page(markup, sale=sale, observed_at=observed_at)
-
-    while pending:
-        if len(scheduled_sale_ids) > MAX_LISTING_PAGES:
-            raise VPAutoWatchError("VPauto listing pagination exceeds the safety limit")
-        batch = sorted(pending.items())
-        pending = {}
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = {
-                executor.submit(fetch_listing, url, sale): (url, sale)
-                for url, sale in batch
-            }
-            for future in concurrent.futures.as_completed(futures):
-                url, page = future.result()
-                if url in visited:
-                    raise VPAutoWatchError("VPauto listing page was fetched twice")
-                visited.add(url)
-                for row in page.rows:
-                    row_id = row["id"]
-                    prior = vehicle_rows.get(row_id)
-                    if prior is None:
-                        vehicle_rows[row_id] = row
-                        vehicle_urls[row_id] = row["url"]
-                    elif vehicle_urls[row_id] != row["url"]:
-                        raise VPAutoWatchError("VPauto stable vehicle ID maps to multiple URLs")
-                sale = sales.get(page.sale_id)
-                if sale is None:
-                    raise VPAutoWatchError("VPauto pagination references an unknown sale")
-                for next_url in page.next_urls:
-                    prior_sale_id = scheduled_sale_ids.get(next_url)
-                    if prior_sale_id is not None and prior_sale_id != sale.sale_id:
-                        raise VPAutoWatchError("VPauto listing URL maps to multiple sales")
-                    if prior_sale_id is None:
-                        scheduled_sale_ids[next_url] = sale.sale_id
-                        pending[next_url] = sale
-
-    catalogue_count_delta = len(vehicle_rows) - declared
-    # The landing-page counter and sale cards are served by distinct public
-    # endpoints. The counter can lag the cards, but fewer recovered stable
-    # IDs than its declared count means that the catalogue traversal is
-    # incomplete. Every surplus card remains an explicit public offer and is
-    # retained rather than silently discarded.
-    if catalogue_count_delta < 0:
+    previous: CataloguePass | None = None
+    stable: CataloguePass | None = None
+    transient_retries = 0
+    attempts_used = 0
+    last_problem = "complete global catalogue fingerprints kept changing"
+    for attempts_used in range(1, MAX_RECONCILIATION_ATTEMPTS + 1):
+        try:
+            current = global_catalogue_pass(
+                root_session,
+                declared=declared,
+                observed_at=observed_at,
+                timeout=timeout,
+            )
+        except VPAutoSnapshotChanged as exc:
+            transient_retries += 1
+            last_problem = str(exc)
+            previous = None
+            continue
+        if previous is not None and previous.fingerprint == current.fingerprint:
+            stable = current
+            break
+        previous = current
+    if stable is None:
         raise VPAutoWatchError(
-            f"VPauto total/ID reconciliation failed: declared={declared} unique={len(vehicle_rows)}"
+            f"VPauto global catalogue did not stabilize after "
+            f"{MAX_RECONCILIATION_ATTEMPTS} attempts: {last_problem}"
         )
 
-    rows = [vehicle_rows[row_id] for row_id in sorted(vehicle_rows)]
+    rows = list(stable.rows)
+    vehicle_rows = {str(row["id"]): row for row in rows}
+    catalogue_count_delta = len(rows) - declared
+    count_reconciliation = (
+        "exact" if catalogue_count_delta == 0 else "landing_total_lags_unique_cards"
+    )
     detail_ok = 0
     detail_errors = 0
     if fetch_details:
         def fetch_detail(row: dict[str, Any]) -> tuple[str, str, str | None]:
             markup = fetch_worker_markup(row["url"])
-            vehicle_id = row["id"].split(":", 1)[1]
+            vehicle_id = str(row["source_vehicle_id"])
             fuel, sale_end = parse_detail(markup, expected_vehicle_id=vehicle_id)
             return row["id"], fuel, sale_end
 
@@ -477,26 +596,29 @@ def build_watch(
 
     final_home = fetch_markup(root_session, CATALOGUE_URL, timeout=timeout)
     final_declared, final_sales = parse_home(final_home)
-    if set(final_sales) != set(sales):
-        raise VPAutoWatchError("VPauto catalogue sale routes changed before the final check")
 
     report = {
         "status": "ok",
         "connector_status": "ok",
-        "catalogue_scope": "every public vehicle card reachable from the VPauto PRO catalogue",
+        "catalogue_scope": "every public offer card on the seeded VPauto PRO global catalogue",
         "declared": declared,
         "declared_rechecked": final_declared,
         "declared_total_changed_during_scan": final_declared != declared,
         "catalogue_count_delta": catalogue_count_delta,
-        "count_reconciliation": (
-            "exact"
-            if catalogue_count_delta == 0
-            else "landing_total_lags_unique_cards"
-        ),
-        "visited_listing_pages": len(visited),
-        "sales": len(sales),
+        "count_reconciliation": count_reconciliation,
+        "visited_listing_pages": stable.pages,
+        "sale_routes_at_start": len(sales),
+        "sale_routes_rechecked": len(final_sales),
         "normalized_rows": len(rows),
         "stable_ids_unique": True,
+        "offer_identity": "vehicle_id+canonical_offer_token",
+        "identity_schema_version": 2,
+        "identity_migration": "physical_vehicle_id_to_vehicle_id_plus_offer_token",
+        "physical_vehicle_ids": stable.physical_vehicle_ids,
+        "cross_listed_offer_rows": len(rows) - stable.physical_vehicle_ids,
+        "full_catalogue_rechecked": True,
+        "reconciliation_attempts": attempts_used,
+        "transient_snapshot_retries": transient_retries,
         "home_rechecked": True,
         "detail_pages_ok": detail_ok,
         "detail_pages_unavailable": detail_errors,
@@ -548,7 +670,7 @@ def main() -> int:
     print(json.dumps({
         "result": "VPAUTO_WATCH_PASS",
         "row_count": payload["row_count"],
-        "sales": payload["source_reports"][SOURCE_KEY]["sales"],
+        "sale_routes": payload["source_reports"][SOURCE_KEY]["sale_routes_at_start"],
         "pages": payload["source_reports"][SOURCE_KEY]["visited_listing_pages"],
         "detail_pages_ok": payload["source_reports"][SOURCE_KEY]["detail_pages_ok"],
         "seconds": round(time.monotonic() - started, 1),
