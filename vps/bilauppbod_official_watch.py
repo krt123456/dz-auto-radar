@@ -74,8 +74,11 @@ class Card:
     image_url: str | None
 
     @property
-    def fingerprint(self) -> tuple[str, str, str, str, str, int | None]:
-        return (self.listing_id, self.url, self.title, self.end_utc.isoformat(), self.registration_date, self.mileage_km)
+    def fingerprint(self) -> tuple[str, str, str, str, str]:
+        # Mileage is optional evidence, not listing identity or lifecycle. The
+        # official index is served from replicas that can alternate between a
+        # numeric value and "Ekki skráð" for the same unchanged listing.
+        return (self.listing_id, self.url, self.title, self.end_utc.isoformat(), self.registration_date)
 
 
 @dataclass(frozen=True)
@@ -269,14 +272,26 @@ def passenger_exclusion_reason(card: Card, detail: Detail) -> str:
     return ""
 
 
-def normalize_card(card: Card, detail: Detail, *, observed_at: str) -> dict[str, Any]:
-    mileage = detail.mileage_km if detail.mileage_km is not None else card.mileage_km
+def resolve_mileage(
+    first_index: int | None,
+    second_index: int | None,
+    detail: int | None,
+) -> tuple[int | None, str]:
+    """Return mileage only when all three official observations agree."""
+    if first_index != second_index:
+        return None, "index_disagreement"
+    if second_index != detail:
+        return None, "index_detail_disagreement"
+    return second_index, ""
+
+
+def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: int | None) -> dict[str, Any]:
     year_match = YEAR_RE.search(card.registration_date) or YEAR_RE.search(card.title)
     return {
         "id": f"{SOURCE_KEY}:{card.listing_id}", "source": SOURCE_KEY, "source_key": SOURCE_KEY, "source_name": SOURCE_NAME,
         "url": card.url, "title": card.title, "model": card.title, "country": "IS", "asset_country": "IS", "category": "car",
         "category_raw": "Bilauppboð public current vehicle-auction index; passenger-car detail evidence",
-        "year": int(year_match.group(1)) if year_match else None, "mileage": mileage, "mileage_km": mileage, "fuel": normalize_fuel(detail.fuel_raw),
+        "year": int(year_match.group(1)) if year_match else None, "mileage": mileage_km, "mileage_km": mileage_km, "fuel": normalize_fuel(detail.fuel_raw),
         "seller": detail.seller or card.seller or SOURCE_NAME, "image_url": card.image_url,
         "price_amount": card.price_amount, "price_currency": "ISK" if card.price_amount is not None else "", "price_eur": None,
         "price_kind": "current_bid" if card.price_amount is not None else "unknown", "price_label": card.price_label,
@@ -320,6 +335,7 @@ def build_watch(*, session: requests.Session | None = None, now: dt.datetime | N
         if supplied is None:
             active.close()
     exclusions: Counter[str] = Counter()
+    mileage_disagreements: dict[str, str] = {}
     rows: list[dict[str, Any]] = []
     for card in second_cards:
         detail = details[card.listing_id]
@@ -327,12 +343,24 @@ def build_watch(*, session: requests.Session | None = None, now: dt.datetime | N
         if reason:
             exclusions[reason] += 1
         else:
-            rows.append(normalize_card(card, detail, observed_at=observed_at))
+            mileage_km, mileage_reason = resolve_mileage(
+                first_by_id[card.listing_id].mileage_km,
+                card.mileage_km,
+                detail.mileage_km,
+            )
+            if mileage_reason:
+                mileage_disagreements[card.listing_id] = mileage_reason
+            rows.append(normalize_card(card, detail, observed_at=observed_at, mileage_km=mileage_km))
+    mileage_reasons = Counter(mileage_disagreements.values())
     report = {
         "status": "ok", "connector_status": "ok",
         "catalogue_scope": "every card across Bilauppboð public current-auction pages; only detail-confirmed passenger cars emitted",
         "declared": len(second_cards), "visited": len(second_cards), "detail_visited": len(details), "normalized_rows": len(rows), "passenger_cars": len(rows),
         "source_excluded": dict(sorted(exclusions.items())), "pages": second_pages, "two_pass_verified": True, "snapshot_attempt": snapshot_attempt, "stable_ids_unique": True, "publication_ready": False,
+        "index_mileage_disagreements": mileage_reasons["index_disagreement"],
+        "index_detail_mileage_disagreements": mileage_reasons["index_detail_disagreement"],
+        "mileage_values_suppressed": len(mileage_disagreements),
+        "mileage_disagreement_ids": sorted(mileage_disagreements, key=int),
     }
     return {"schema_version": 1, "lane": "official_auction_watch", "generated_at_utc": observed_at, "research_only": True,
             "publication_status": "review_required", "row_count": len(rows), "rows": rows, "source_reports": {SOURCE_KEY: report}}
@@ -359,7 +387,7 @@ def main() -> int:
     payload = build_watch(timeout=args.timeout, workers=args.workers, snapshot_attempts=args.snapshot_attempts)
     atomic_write_json(args.out, payload)
     report = payload["source_reports"][SOURCE_KEY]
-    print(json.dumps({"result": "BILAUPPBOD_WATCH_PASS", "row_count": payload["row_count"], "declared": report["declared"], "pages": report["pages"], "snapshot_attempt": report["snapshot_attempt"], "seconds": round(time.monotonic() - started, 1)}, sort_keys=True))
+    print(json.dumps({"result": "BILAUPPBOD_WATCH_PASS", "row_count": payload["row_count"], "declared": report["declared"], "pages": report["pages"], "snapshot_attempt": report["snapshot_attempt"], "mileage_values_suppressed": report["mileage_values_suppressed"], "seconds": round(time.monotonic() - started, 1)}, sort_keys=True))
     return 0
 
 

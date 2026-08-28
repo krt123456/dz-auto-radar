@@ -63,9 +63,11 @@ class BilauppbodWatchTest(unittest.TestCase):
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["rows"][0]["id"], "bilauppbod:100")
         self.assertEqual(payload["rows"][0]["fuel"], "hybrid")
+        self.assertEqual(payload["rows"][0]["mileage_km"], 123988)
         self.assertEqual(report["declared"], 2)
         self.assertEqual(report["detail_visited"], 2)
         self.assertEqual(report["source_excluded"], {"explicit_non_passenger_title": 1})
+        self.assertEqual(report["mileage_values_suppressed"], 0)
 
     def test_card_change_between_passes_fails_closed(self) -> None:
         with self.assertRaisesRegex(watch.BilauppbodWatchError, "coherent snapshot"):
@@ -81,6 +83,86 @@ class BilauppbodWatchTest(unittest.TestCase):
         payload = watch.build_watch(session=Session(responses), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=2)
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["source_reports"][watch.SOURCE_KEY]["snapshot_attempt"], 2)
+
+    def test_index_mileage_split_brain_is_suppressed_without_retry(self) -> None:
+        first = page(card("100", "TOYOTA RAV4", mileage="Ekki skráð"))
+        second = page(card("100", "TOYOTA RAV4", mileage="41847"))
+        responses: dict[str, str | list[str]] = {
+            watch.SOURCE_URL: [first, second],
+            f"{watch.SOURCE_URL}auction/view/100": detail("Toyota", "4", mileage="41847"),
+        }
+        payload = watch.build_watch(
+            session=Session(responses),
+            now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC),
+            workers=1,
+            snapshot_attempts=1,
+        )
+        report = payload["source_reports"][watch.SOURCE_KEY]
+        self.assertEqual(report["snapshot_attempt"], 1)
+        self.assertIsNone(payload["rows"][0]["mileage_km"])
+        self.assertIsNone(payload["rows"][0]["mileage"])
+        self.assertEqual(report["index_mileage_disagreements"], 1)
+        self.assertEqual(report["index_detail_mileage_disagreements"], 0)
+        self.assertEqual(report["mileage_values_suppressed"], 1)
+        self.assertEqual(report["mileage_disagreement_ids"], ["100"])
+
+    def test_index_detail_mileage_disagreement_is_suppressed(self) -> None:
+        stable = page(card("100", "TOYOTA RAV4", mileage="41847"))
+        responses: dict[str, str | list[str]] = {
+            watch.SOURCE_URL: [stable, stable],
+            f"{watch.SOURCE_URL}auction/view/100": detail("Toyota", "4", mileage="Ekki skráð"),
+        }
+        payload = watch.build_watch(
+            session=Session(responses),
+            now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC),
+            workers=1,
+            snapshot_attempts=1,
+        )
+        report = payload["source_reports"][watch.SOURCE_KEY]
+        self.assertIsNone(payload["rows"][0]["mileage_km"])
+        self.assertEqual(report["index_mileage_disagreements"], 0)
+        self.assertEqual(report["index_detail_mileage_disagreements"], 1)
+        self.assertEqual(report["mileage_values_suppressed"], 1)
+
+    def test_mileage_policy_requires_three_equal_observations(self) -> None:
+        cases = [
+            ((None, None, None), (None, "")),
+            ((41847, 41847, 41847), (41847, "")),
+            ((None, 41847, 41847), (None, "index_disagreement")),
+            ((41847, None, None), (None, "index_disagreement")),
+            ((41847, 41847, None), (None, "index_detail_disagreement")),
+            ((None, None, 41847), (None, "index_detail_disagreement")),
+            ((41847, 41847, 50000), (None, "index_detail_disagreement")),
+        ]
+        for evidence, expected in cases:
+            with self.subTest(evidence=evidence):
+                self.assertEqual(watch.resolve_mileage(*evidence), expected)
+
+    def test_lifecycle_instability_exhausts_every_pair_before_details(self) -> None:
+        stable = page(card("100", "MAZDA 6"))
+        changed = page(card("100", "TOYOTA RAV4"))
+        responses = {watch.SOURCE_URL: [stable, changed] * 4}
+        with self.assertRaisesRegex(watch.BilauppbodWatchError, "coherent snapshot"):
+            watch.build_watch(
+                session=Session(responses),
+                now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC),
+                workers=1,
+                snapshot_attempts=4,
+            )
+        self.assertEqual(responses[watch.SOURCE_URL], [])
+
+    def test_closing_time_instability_remains_fail_closed(self) -> None:
+        stable = page(card("100", "MAZDA 6", end_time="20:00"))
+        extended = page(card("100", "MAZDA 6", end_time="20:15"))
+        responses = {watch.SOURCE_URL: [stable, extended] * 4}
+        with self.assertRaisesRegex(watch.BilauppbodWatchError, "coherent snapshot"):
+            watch.build_watch(
+                session=Session(responses),
+                now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC),
+                workers=1,
+                snapshot_attempts=4,
+            )
+        self.assertEqual(responses[watch.SOURCE_URL], [])
 
     def test_door_count_and_recreational_title_are_excluded(self) -> None:
         vehicle = watch.Card("100", "https://www.bilauppbod.is/auction/view/100", "SUZUKI VITARA", "0 kr.", 0, dt.datetime(2026, 8, 30, 20, tzinfo=UTC), "19.05.2017", 123, "", None)
