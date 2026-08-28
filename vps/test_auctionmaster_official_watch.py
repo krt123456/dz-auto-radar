@@ -34,10 +34,18 @@ def lot(listing_id: int, *, auction_id: int = 900, bid: int = 5300) -> dict[str,
     }
 
 
-def response(page: int, total: int, items: list[dict[str, object]]) -> dict[str, object]:
+def response(
+    page: int,
+    total: int,
+    items: list[dict[str, object]],
+    *,
+    reported_total: int | None = None,
+    reported_pages: int | None = None,
+) -> dict[str, object]:
     return {
-        "totalElements": total,
-        "totalPages": max(1, (total + 99) // 100),
+        "_declared_total": total,
+        "totalElements": total if reported_total is None else reported_total,
+        "totalPages": max(1, (total + 99) // 100) if reported_pages is None else reported_pages,
         "number": page,
         "content": items,
     }
@@ -65,15 +73,23 @@ class Session:
     def get(self, url: str, *, params: dict[str, object] | None = None, **_: object) -> Response:
         snapshot_index = min(self.page_calls // 2, len(self.snapshots) - 1)
         if url == watch.CATEGORY_URL:
-            total = int(self.snapshots[snapshot_index][1]["totalElements"])
+            total = int(self.snapshots[snapshot_index][1]["_declared_total"])
             return Response({
-                "categorieen": [{"id": "1", "naam": "Cars and other transport", "aantal": str(total)}],
+                "categorieen": [{
+                    "categorieId": 10,
+                    "open": total,
+                    "categorieDetails": {
+                        "id": 10,
+                        "naam": "Passenger cars",
+                        "parent_id": "1",
+                    },
+                }],
             })
         if url != watch.LIST_URL:
             raise AssertionError(url)
         if params is None:
             raise AssertionError("listing request has no parameters")
-        if params != {"page": params["page"], "size": 100, "status": "open", "categorieIds": "1"}:
+        if params != {"page": params["page"], "size": 100, "status": "open", "categorieIds": "10"}:
             raise AssertionError(params)
         page_number = int(params["page"])
         self.page_calls += 1
@@ -88,6 +104,7 @@ class AuctionmasterWatchTest(unittest.TestCase):
         self.assertEqual(row["year"], 2021)
         self.assertEqual(row["mileage"], 12345)
         self.assertEqual(row["fuel"], "hybrid")
+        self.assertEqual(row["category"], "car")
         self.assertEqual(row["price_kind"], "current_bid")
         self.assertEqual(row["price_amount"], 5300)
         self.assertEqual(row["price_eur"], 5300)
@@ -123,6 +140,29 @@ class AuctionmasterWatchTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(watch.AuctionmasterWatchError, "final reconciliation"):
             watch.build_watch(session=Session([first, changed]), now=NOW, timeout=5)
+
+    def test_inconsistent_listing_metadata_does_not_override_category_total(self) -> None:
+        lots = [lot(index) for index in range(1, 102)]
+        snapshot = {
+            1: response(1, 101, lots[:100], reported_total=200, reported_pages=2),
+            2: response(2, 101, lots[100:], reported_total=201, reported_pages=3),
+        }
+        payload = watch.build_watch(session=Session([snapshot]), now=NOW, timeout=5)
+        report = payload["source_reports"]["auctionmaster"]
+        self.assertEqual(payload["row_count"], 101)
+        self.assertEqual(report["declared"], 101)
+        self.assertEqual(report["page_metadata_mismatch_pages"], [1, 2])
+        self.assertTrue(report["page_metadata_is_not_authoritative"])
+
+    def test_non_passenger_category_is_rejected_at_source(self) -> None:
+        commercial = lot(10)
+        commercial["categorie"] = {
+            "id": 11,
+            "naam": "Company cars",
+            "parentTrackingKey": "Cars and other transport",
+        }
+        with self.assertRaisesRegex(watch.AuctionmasterWatchError, "passenger-car"):
+            watch.row_from_lot(commercial, observed_at=NOW.isoformat(), now=NOW)
 
 
 if __name__ == "__main__":

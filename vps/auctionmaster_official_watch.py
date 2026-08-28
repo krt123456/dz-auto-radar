@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Reconcile every open Cars and other transport lot at Auctionmaster.nl.
+"""Reconcile every open Auctionmaster passenger-car lot.
 
-Auctionmaster's public category page is backed by a finite, paginated endpoint
-that declares ``totalElements`` and ``totalPages``.  This collector enumerates
-every page of category 1 (Cars and other transport) twice, checks the server's
-count and page boundaries, and publishes the first snapshot only if its stable
-lot identities agree with the final pass.
+Auctionmaster exposes a dedicated public ``Passenger cars`` category (ID 10),
+whose category endpoint declares the current open-card count.  The listing
+endpoint itself has inconsistent ``totalElements`` values on later pages, so
+the collector treats the dedicated category count as authoritative, walks each
+normal public page, and rechecks the complete snapshot before publication.
 """
 from __future__ import annotations
 
@@ -31,8 +31,9 @@ SOURCE_KEY = "auctionmaster"
 SOURCE_NAME = "Auctionmaster"
 ROOT_URL = "https://auctionmaster.com"
 LIST_URL = f"{ROOT_URL}/rest/en/v2/kavels"
-CATEGORY_URL = f"{ROOT_URL}/rest/en/categorieen"
-VEHICLE_CATEGORY_ID = "1"
+CATEGORY_URL = f"{ROOT_URL}/rest/en/categorieen/10"
+PASSENGER_CAR_CATEGORY_ID = "10"
+PASSENGER_CAR_CATEGORY_NAME = "Passenger cars"
 PAGE_SIZE = 100
 DEFAULT_TIMEOUT = 35
 
@@ -137,7 +138,7 @@ def list_params(page: int) -> dict[str, str | int]:
         "page": page,
         "size": PAGE_SIZE,
         "status": "open",
-        "categorieIds": VEHICLE_CATEGORY_ID,
+        "categorieIds": PASSENGER_CAR_CATEGORY_ID,
     }
 
 
@@ -161,15 +162,25 @@ def fetch_declared_total(session: requests.Session, *, timeout: int) -> int:
     if not isinstance(payload, dict) or not isinstance(payload.get("categorieen"), list):
         raise AuctionmasterWatchError("Auctionmaster public category counter is invalid")
     for category in payload["categorieen"]:
-        if not isinstance(category, dict) or clean(category.get("id")) != VEHICLE_CATEGORY_ID:
+        if not isinstance(category, dict) or clean(category.get("categorieId")) != PASSENGER_CAR_CATEGORY_ID:
             continue
-        if clean(category.get("naam")) != "Cars and other transport":
-            raise AuctionmasterWatchError("Auctionmaster category 1 is no longer the vehicle category")
-        total = nonnegative_integer(category.get("aantal"))
+        details = category.get("categorieDetails")
+        if (
+            not isinstance(details, dict)
+            or clean(details.get("id")) != PASSENGER_CAR_CATEGORY_ID
+            or clean(details.get("naam")) != PASSENGER_CAR_CATEGORY_NAME
+            or clean(details.get("parent_id")) != "1"
+        ):
+            raise AuctionmasterWatchError(
+                "Auctionmaster category 10 is no longer the passenger-car category"
+            )
+        total = nonnegative_integer(category.get("open"))
         if total is None:
-            raise AuctionmasterWatchError("Auctionmaster vehicle category has an invalid declared count")
+            raise AuctionmasterWatchError(
+                "Auctionmaster passenger-car category has an invalid declared count"
+            )
         return total
-    raise AuctionmasterWatchError("Auctionmaster public vehicle category is absent")
+    raise AuctionmasterWatchError("Auctionmaster public passenger-car category is absent")
 
 
 def row_from_lot(lot: Any, *, observed_at: str, now: dt.datetime) -> dict[str, Any]:
@@ -184,8 +195,15 @@ def row_from_lot(lot: Any, *, observed_at: str, now: dt.datetime) -> dict[str, A
     lot_number = clean(lot.get("volgNummer"))
     if not isinstance(auction_id, int) or auction_id <= 0 or not lot_number:
         raise AuctionmasterWatchError(f"Auctionmaster lot {listing_id} has no public auction route")
-    if not isinstance(category, dict) or clean(category.get("parentTrackingKey")) != "Cars and other transport":
-        raise AuctionmasterWatchError(f"Auctionmaster lot {listing_id} is outside the requested vehicle category")
+    if (
+        not isinstance(category, dict)
+        or clean(category.get("id")) != PASSENGER_CAR_CATEGORY_ID
+        or clean(category.get("naam")) != PASSENGER_CAR_CATEGORY_NAME
+        or clean(category.get("parentTrackingKey")) != "Cars and other transport"
+    ):
+        raise AuctionmasterWatchError(
+            f"Auctionmaster lot {listing_id} is outside the passenger-car category"
+        )
     country = clean(auction.get("land")).upper()
     if country != "NL":
         raise AuctionmasterWatchError(
@@ -235,8 +253,8 @@ def row_from_lot(lot: Any, *, observed_at: str, now: dt.datetime) -> dict[str, A
         "model": title,
         "country": "NL",
         "asset_country": "NL",
-        "category": "vehicle",
-        "category_raw": clean(category.get("naam")) or "Cars and other transport",
+        "category": "car",
+        "category_raw": "Auctionmaster Passenger cars category 10",
         "year": year,
         "mileage": mileage,
         "mileage_km": mileage,
@@ -247,7 +265,7 @@ def row_from_lot(lot: Any, *, observed_at: str, now: dt.datetime) -> dict[str, A
         "price_eur": price_amount,
         "price_kind": price_kind,
         "price_label": price_label,
-        "bid_visibility": "public Auctionmaster vehicle-category listing",
+        "bid_visibility": "public Auctionmaster passenger-car category listing",
         "bid_count": bid_count,
         "reserve_met": None,
         "no_reserve": None,
@@ -266,7 +284,7 @@ def row_from_lot(lot: Any, *, observed_at: str, now: dt.datetime) -> dict[str, A
         "access_sale_note": "Open the official Auctionmaster lot to inspect all bidding and pickup terms.",
         "adapter_authorized": True,
         "raw_evidence_ref": f"{SOURCE_KEY}:public-category:{auction_id}:{listing_id}",
-        "evidence": "Official Auctionmaster public Cars and other transport category listing.",
+        "evidence": "Official Auctionmaster public Passenger cars category listing.",
     }
 
 
@@ -367,7 +385,7 @@ def build_watch(
         report = {
             "status": "ok",
             "connector_status": "ok",
-            "catalogue_scope": "every public open Auctionmaster Cars and other transport lot",
+            "catalogue_scope": "every public open Auctionmaster Passenger cars category lot",
             "declared": first.total,
             "publicly_listed": len(first.rows),
             "visited": len(first.rows),
@@ -375,6 +393,7 @@ def build_watch(
             "pages": first.total_pages,
             "page_size": PAGE_SIZE,
             "page_metadata_mismatch_pages": list(first.metadata_mismatch_pages),
+            "page_metadata_is_not_authoritative": True,
             "full_catalogue_rechecked": True,
             "stable_ids_unique": True,
             "publication_ready": False,
