@@ -35,10 +35,10 @@ def item(
             "language": "fr",
             "name": title,
             "description": (
-                f"<h3>Type de v?hicule</h3><p>{vehicle_type}</p>"
+                f"<h3>Type de v\u00e9hicule</h3><p>{vehicle_type}</p>"
                 f"<h3>Date de mise en circulation</h3><p>{registration}</p>"
-                f"<h3>Kilom?trage</h3><p>{mileage}</p>"
-                f"<h3>?nergie</h3><p>{fuel}</p>"
+                f"<h3>Kilom\u00e9trage</h3><p>{mileage}</p>"
+                f"<h3>\u00c9nergie</h3><p>{fuel}</p>"
             ),
         }],
         "categories": [{
@@ -115,7 +115,7 @@ class AgorastoreWatchTest(unittest.TestCase):
 
     def test_explicit_non_passenger_vehicle_is_not_emitted(self) -> None:
         pickup = item("agora-pickup", title="PICKUP MITSUBISHI L200", vehicle_type="PICK-UP")
-        commercial = item("agora-commercial", title="CITROEN C3 V?hicule Commercial 2 places")
+        commercial = item("agora-commercial", title="CITROEN C3 V\u00e9hicule Commercial 2 places")
         self.assertIsNone(watch.row_from_item(pickup, observed_at=NOW.isoformat(), now=NOW))
         self.assertIsNone(watch.row_from_item(commercial, observed_at=NOW.isoformat(), now=NOW))
 

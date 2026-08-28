@@ -41,7 +41,7 @@ HEADERS = {
 
 YEAR_RE = re.compile(r"\b(19\d{2}|20\d{2})\b")
 REGISTRATION_DATE_RE = re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](19\d{2}|20\d{2})\b")
-MILEAGE_RE = re.compile(r"\b([0-9][0-9 .\u00a0]{2,})\s*(?:km|kms|kilom(?:e|??)tres?)\b", re.I)
+MILEAGE_RE = re.compile(r"\b([0-9][0-9 .\u00a0]{2,})\s*(?:km|kms|kilom(?:e|\u00e8)tres?)\b", re.I)
 NON_PASSENGER_TYPE_RE = re.compile(
     r"\b(?:pick[ -]?up|fourgon(?:nette)?|camionnette|minibus|autocar|autobus|"
     r"camion|truck|tracteur|tractor)\b",
@@ -49,8 +49,8 @@ NON_PASSENGER_TYPE_RE = re.compile(
 )
 NON_PASSENGER_TITLE_RE = re.compile(
     r"\b(?:pick[ -]?up|fourgon(?:nette)?|camionnette|minibus|autocar|autobus|"
-    r"camion|truck|tracteur|tractor|utilitaire|v[?e]hicule(?:s)?\s+commercial(?:e)?|"
-    r"v[?e]hicule\s+de\s+services|soci[?e]t[?e]|affaire)\b",
+    r"camion|truck|tracteur|tractor|utilitaire|v[\u00e9e]hicule(?:s)?\s+commercial(?:e)?|"
+    r"v[\u00e9e]hicule\s+de\s+services|soci[\u00e9e]t[\u00e9e]|affaire)\b",
     re.I,
 )
 
@@ -227,7 +227,7 @@ def row_from_item(item: dict[str, Any], *, observed_at: str, now: dt.datetime) -
     translation = pick_translation(item)
     title = clean(translation.get("name"))
     description = str(translation.get("description") or "")
-    vehicle_type = field_value(description, "Type de v?hicule", "Type de vehicule", "Vehicle Type")
+    vehicle_type = field_value(description, "Type de v\u00e9hicule", "Type de vehicule", "Vehicle Type")
     if is_explicit_non_passenger(title, vehicle_type):
         return None
 
@@ -264,15 +264,15 @@ def row_from_item(item: dict[str, Any], *, observed_at: str, now: dt.datetime) -
     )
     year, registration_date = parse_registration_date(registration_text)
     if year is None:
-        year_text = field_value(description, "Ann?e", "Annee", "Year")
+        year_text = field_value(description, "Ann\u00e9e", "Annee", "Year")
         year, _ = parse_registration_date(year_text or title)
-    mileage_text = field_value(description, "Kilom?trage", "Kilometrage", "Mileage", "Odometer")
+    mileage_text = field_value(description, "Kilom\u00e9trage", "Kilometrage", "Mileage", "Odometer")
     if mileage_text:
         mileage = parse_mileage(mileage_text)
     else:
         mileage_match = MILEAGE_RE.search(text_without_markup(description)) or MILEAGE_RE.search(title)
         mileage = parse_mileage(mileage_match.group(1)) if mileage_match else None
-    fuel_text = field_value(description, "?nergie", "Energie", "Energy", "Fuel")
+    fuel_text = field_value(description, "\u00c9nergie", "Energie", "Energy", "Fuel")
     seller = item.get("seller") if isinstance(item.get("seller"), dict) else {}
     localities = item.get("localities") if isinstance(item.get("localities"), list) else []
     has_reserve = sale_information.get("hasReservePrice")
