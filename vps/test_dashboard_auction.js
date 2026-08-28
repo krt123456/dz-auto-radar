@@ -436,6 +436,36 @@ try {
       access_sale_note: "Registration with the sale manager applies.", evidence: "official-pvp",
     },
     {
+      id: "residential-property", source: "pvp-giustizia", source_key: "pvp-giustizia",
+      registry_key: "pvp-giustizia", registry_priority: 6,
+      url: "https://pvp.giustizia.it/pvp/it/dettaglio_annuncio.page?id=residential-property",
+      title: "Villa with garden", model: "", country: "IT", year: null,
+      mileage: null, fuel: "", seller: "court sale manager", location: "Milan",
+      category: "property", category_raw: "residential property", property_type: "residential",
+      price_amount: 120000, price_currency: "EUR", price_eur: 120000,
+      price_kind: "starting_bid", price_label: "Starting bid",
+      bid_visibility: "public", registration_date: "",
+      canonical_end_utc: futureIso, last_seen_at: nowIso,
+      eligibility_status: "review_required",
+      eligibility_reason: "Property auction requirements require review.",
+      access_sale_note: "Registration with the sale manager applies.", evidence: "official-pvp",
+    },
+    {
+      id: "building-land", source: "pvp-giustizia", source_key: "pvp-giustizia",
+      registry_key: "pvp-giustizia", registry_priority: 6,
+      url: "https://pvp.giustizia.it/pvp/it/dettaglio_annuncio.page?id=building-land",
+      title: "Building land parcel", model: "", country: "IT", year: null,
+      mileage: null, fuel: "", seller: "court sale manager", location: "Rome",
+      category: "land", category_raw: "building land", property_type: "land",
+      price_amount: 50000, price_currency: "EUR", price_eur: 50000,
+      price_kind: "starting_bid", price_label: "Starting bid",
+      bid_visibility: "public", registration_date: "",
+      canonical_end_utc: futureIso, last_seen_at: nowIso,
+      eligibility_status: "review_required",
+      eligibility_reason: "Land auction requirements require review.",
+      access_sale_note: "Registration with the sale manager applies.", evidence: "official-pvp",
+    },
+    {
       id: "auto1-adapter", source: "auto1", source_key: "auto1",
       registry_key: "auto1", registry_priority: 13,
       url: "https://www.auto1.com/offer/adapter-lot", title: "Configured AUTO1 feed",
@@ -479,7 +509,21 @@ try {
   const gamingCard = evaluate(broad, "auctionCard(VIEW[0])");
   check(gamingCard.includes("Gaming console bundle") && gamingCard.includes("gaming equipment") && !gamingCard.includes("⛽"),
     "generic auction cards must display their own metadata rather than car fuel fields");
+  broad.document.getElementById("fcat").value = "property";
+  broad.document.getElementById("fProperty").value = "residential";
+  evaluate(broad, "apply();");
+  check(evaluate(broad, "VIEW.map(row=>row.id).join(',')") === "residential-property",
+    "the residential-property filter must not be affected by the car fuel policy");
+  const propertyCard = evaluate(broad, "auctionCard(VIEW[0])");
+  check(propertyCard.includes("Villa with garden") && propertyCard.includes("residential property") && !propertyCard.includes("⛽"),
+    "property cards must show property metadata rather than car fuel fields");
+  broad.document.getElementById("fcat").value = "land";
+  broad.document.getElementById("fProperty").value = "land";
+  evaluate(broad, "apply();");
+  check(evaluate(broad, "VIEW.map(row=>row.id).join(',')") === "building-land",
+    "the land filter must isolate land listings");
   broad.document.getElementById("fcat").value = "vehicles";
+  broad.document.getElementById("fProperty").value = "";
   evaluate(broad, "apply();");
 
   // A broad public watch may be newer than data.enc.  It must remain usable

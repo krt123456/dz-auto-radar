@@ -142,6 +142,14 @@ def category_context(item: dict[str, Any]) -> str:
 
 def category_for_item(item: dict[str, Any]) -> str:
     text = category_context(item)
+    # A residential building advertised together with a plot is still a
+    # property, whereas an empty plot is classified as land below.
+    if re.search(r"\b(?:villa|bostad(?:er)?|fritidshus|sommarhus|summer house|lejlighed|lagenhet|hus(?!vagn)\b)\b", text):
+        return "property"
+    if re.search(r"\b(?:tomt(?:er|en)?|grund(?:e|en|er)?|mark(?:omrade|areal|parcel)?|jordbruksmark|skogsmark|building plot|land parcel|byggeklar)\b", text):
+        return "land"
+    if re.search(r"\b(?:fastighet(?:er|en)?|ejendom(?:me)?|bostad(?:er)?|villa|fritidshus|sommarhus|summer house|lejlighed|lagenhet|commercial property|erhvervsejendom|warehouse property|hus(?!vagn)\b)\b", text):
+        return "property"
     if re.search(r"\b(?:vandscooter[a-z]*|jet[- ]?ski[a-z]*|sea[- ]?doo|waverunner|personal watercraft)\b", text):
         return "jetski"
     if re.search(r"\b(?:playstation|xbox|nintendo|gaming|spilkonsol|game console|videogame)\b", text):
@@ -169,6 +177,19 @@ def category_for_item(item: dict[str, Any]) -> str:
     if re.search(r"\b(?:entreprenad|lantbruk|landbrug|skogsbruk|construction|tractor|traktor|gr[a-z]*vmaskin|excavator|lift)\b", text):
         return "equipment"
     return "other"
+
+
+def property_type_for_item(item: dict[str, Any], category: str) -> str:
+    if category == "land":
+        return "land"
+    if category != "property":
+        return ""
+    text = category_context(item)
+    if re.search(r"\b(?:erhverv|commercial|warehouse|industri|office|kontor|butik)\b", text):
+        return "commercial"
+    if re.search(r"\b(?:villa|bostad|fritidshus|sommarhus|lejlighed|lagenhet|hus(?!vagn)\b)\b", text):
+        return "residential"
+    return "property"
 
 
 def fuel_for_item(item: dict[str, Any]) -> str:
@@ -227,6 +248,7 @@ def normalize_item(item: dict[str, Any], source: SourceSpec, *, observed_at: str
         clean(item.get("categoryNameLevel3")),
     )))
     category = category_for_item(item)
+    property_type = property_type_for_item(item, category)
     fuel = fuel_for_item(item)
     current_bid = positive_number(item.get("currentBid"))
     starting_bid = positive_number(item.get("startingPrice"))
@@ -255,6 +277,7 @@ def normalize_item(item: dict[str, Any], source: SourceSpec, *, observed_at: str
         "asset_country": source.country,
         "category": category,
         "category_raw": category_raw or "public Klaravik catalogue",
+        "property_type": property_type,
         "year": parsed_year(item, now=now),
         "mileage_km": parsed_mileage(item),
         "fuel": fuel,

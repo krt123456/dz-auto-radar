@@ -89,6 +89,10 @@ class KlaravikWatchTest(unittest.TestCase):
             ],
             2: [
                 item(3, "Gaming PC with console bundle", "Elektronik", "Gaming", bid=4200),
+                item(4, "Villa med tomt", "Fastigheter", "Bostad", bid=900000),
+            ],
+            3: [
+                item(5, "Byggklar grund", "Fastigheter", "Tomter", bid=240000),
             ],
         }
         original_page_size = watch.PAGE_SIZE
@@ -103,13 +107,17 @@ class KlaravikWatchTest(unittest.TestCase):
         finally:
             watch.PAGE_SIZE = original_page_size
         rows = {row["id"]: row for row in payload["rows"]}
-        self.assertEqual(payload["row_count"], 3)
+        self.assertEqual(payload["row_count"], 5)
         self.assertEqual(rows["klaravik:se:1"]["category"], "car")
         self.assertEqual(rows["klaravik:se:1"]["fuel"], "petrol")
         self.assertEqual(rows["klaravik:se:2"]["category"], "jetski")
         self.assertEqual(rows["klaravik:se:3"]["category"], "gaming")
+        self.assertEqual(rows["klaravik:se:4"]["category"], "property")
+        self.assertEqual(rows["klaravik:se:4"]["property_type"], "residential")
+        self.assertEqual(rows["klaravik:se:5"]["category"], "land")
+        self.assertEqual(rows["klaravik:se:5"]["property_type"], "land")
         self.assertEqual(rows["klaravik:se:2"]["country"], "SE")
-        self.assertEqual(payload["source_reports"]["klaravik-se"]["declared"], 3)
+        self.assertEqual(payload["source_reports"]["klaravik-se"]["declared"], 5)
         self.assertTrue(payload["source_reports"]["klaravik-se"]["full_catalogue_rechecked"])
 
     def test_changed_second_pass_fails_closed(self) -> None:

@@ -336,6 +336,11 @@ check("base_price normalized without claiming current bid",
       normalized["price_kind"] == "starting_bid" and normalized["price_eur"] == 13800)
 check("conditional eligibility remains review-required",
       normalized["eligibility_status"] == "review_required")
+property_raw = dict(pvp_raw, id="pvp-giustizia:property", category="property", property_type="residential")
+property_normalized, property_reason = bab._normalize_monitored_row(property_raw, generated_at=watch_now)
+check("broad watch preserves a declared property subtype",
+      property_normalized is not None and property_reason == "" and
+      property_normalized["property_type"] == "residential")
 check("broad watch preserves connector evidence fields",
       normalized["mileage"] == 12000 and normalized["registration_date"] == "2024-03-12" and
       normalized["bid_visibility"] == "hidden_on_pvp" and normalized["price_label"] == "Prezzo base")

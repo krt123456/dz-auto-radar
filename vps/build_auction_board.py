@@ -508,6 +508,7 @@ def _normalize_monitored_row(
         "asset_country": country,
         "category": " ".join(str(value.get("category") or "unknown").split()).lower(),
         "category_raw": " ".join(str(value.get("category_raw") or "").split()).lower(),
+        "property_type": " ".join(str(value.get("property_type") or "").split()).lower(),
         "year": optional_int("year"),
         "mileage": optional_int("mileage") if value.get("mileage") not in (None, "") else optional_int("mileage_km"),
         "fuel": " ".join(str(value.get("fuel") or "").split()),

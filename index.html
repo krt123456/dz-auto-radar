@@ -194,8 +194,8 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
 @keyframes heartPop{0%{transform:scale(1)}50%{transform:scale(1.3)}100%{transform:scale(1)}}
 .card.is-favorite{border:2px solid #e74c3c}
 .card .top{position:relative}
-#auctionDaysWrap,#auctionCategoryWrap,#auctionBidWrap,#auctionTermsWrap{display:inline-block}
-#auctionDaysWrap[hidden],#auctionCategoryWrap[hidden],#auctionBidWrap[hidden],#auctionTermsWrap[hidden]{display:none}
+#auctionDaysWrap,#auctionCategoryWrap,#auctionPropertyWrap,#auctionBidWrap,#auctionTermsWrap{display:inline-block}
+#auctionDaysWrap[hidden],#auctionCategoryWrap[hidden],#auctionPropertyWrap[hidden],#auctionBidWrap[hidden],#auctionTermsWrap[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -288,10 +288,21 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
           <option value="computer">حواسيب</option>
           <option value="electronics">إلكترونيات</option>
           <option value="gaming">أجهزة وألعاب</option>
+          <option value="property">منازل وعقارات</option>
+          <option value="land">أراضٍ وقطع</option>
           <option value="mixed">لوت مختلط</option>
           <option value="other">فئات أخرى</option>
           <option value="unknown">مركبات غير مفصلة الفئة</option>
           <option value="">كل الفئات</option>
+        </select>
+      </div>
+      <div id="auctionPropertyWrap" hidden>
+        <select class="f" id="fProperty" aria-label="نوع المنزل أو الأرض">
+          <option value="">كل المنازل والأراضي</option>
+          <option value="residential">منازل وسكن</option>
+          <option value="commercial">عقارات تجارية</option>
+          <option value="property">عقارات غير مفصلة</option>
+          <option value="land">أراضٍ وقطع</option>
         </select>
       </div>
       <div id="auctionBidWrap" hidden>
@@ -680,7 +691,7 @@ let DATA_GENERATED_AT_MS=null,DATA_FRESH=false,DATA_AGE_HOURS=null;
 const DATA_MAX_AGE_MS=8*60*60*1000;
 const KNOWN_KEY="dzr-known-offers-v1",NEW_KEY="dzr-new-offers-v1",VISITED_KEY="dzr-visited-offers-v1",FAVORITES_KEY="dzr-favorites-v1";
 const NAV_KEY="dzr-navigation-v2";
-const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms","fs"];
+const NAV_VALUE_IDS=["q","fc","fsrc","ff","fy","fy2","fp","fcat","fProperty","fBid","fTerms","fs"];
 const NAV_CHECK_IDS=["flive","fnew","funseen","fauction","fav"];
 const HISTORY_LIMIT=50000;
 let AUCTION_LANE=null,AUCTION_MONITORED_LANE=null,AUCTION_WATCH_STATE="missing",AUCTION_SCOPE="all";
@@ -1009,7 +1020,8 @@ function restoreNavigationState(state){
 }
 
 const activeAuctionRows=()=>AUCTION_SCOPE==="eligible"?(AUCTION_LANE||[]):(AUCTION_MONITORED_LANE||AUCTION_LANE||[]);
-const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",jetski:"جت سكي",computer:"حواسيب",electronics:"إلكترونيات",gaming:"أجهزة وألعاب",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة"};
+const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",jetski:"جت سكي",computer:"حواسيب",electronics:"إلكترونيات",gaming:"أجهزة وألعاب",property:"منزل أو عقار",land:"أرض أو قطعة",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة"};
+const AUCTION_PROPERTY_LABELS={residential:"منزل أو سكن",commercial:"عقار تجاري",property:"عقار غير مفصل",land:"أرض أو قطعة"};
 const AUCTION_ROAD_VEHICLE_CATEGORIES=new Set(["car","van","truck","vehicle","commercial_vehicle","unknown"]);
 // The petrol/hybrid rule is a car-collection policy.  Generic lots retain
 // their own categories so a computer, console, motorcycle, or jet ski cannot
@@ -1579,13 +1591,13 @@ function boot(payload,monitoredRows=null){
     `<div class="stat">بناء اللوحة<b>${fmtTime(boardTimestamp)}</b></div>`;
   updateHistoryStats();
   populateFilterOptions(false);
-  ["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
+  ["q","fc","fsrc","ff","fy","fy2","fp","fcat","fProperty","fBid","fTerms","fs"].forEach(id=>$(id).addEventListener("input",()=>{page=1;apply();saveNavigationState();}));
   ["flive","fnew","funseen","fav","fDays"].forEach(id=>{if($(id))$(id).addEventListener("change",()=>{page=1;apply();saveNavigationState();});});
   const auctionWrap=$("auctionToggleWrap");
   const regularModeBtn=$("regularModeBtn"),auctionModeBtn=$("auctionModeBtn");
   const auctionScopeControls=$("auctionScopeControls");
   const eligibleAuctionsBtn=$("eligibleAuctionsBtn"),allAuctionsBtn=$("allAuctionsBtn");
-  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms"].forEach(id=>$(id).value="");
+  const clearSectionFilters=()=>["q","fc","fsrc","ff","fy","fy2","fp","fcat","fProperty","fBid","fTerms"].forEach(id=>$(id).value="");
   const paintModeTabs=auctionMode=>{
     regularModeBtn.classList.toggle("active",!auctionMode);
     auctionModeBtn.classList.toggle("active",auctionMode);
@@ -1611,7 +1623,7 @@ function boot(payload,monitoredRows=null){
     $("fauction").addEventListener("change",()=>{
       clearSectionFilters();
       paintModeTabs($("fauction").checked);
-      ["auctionDaysWrap","auctionCategoryWrap","auctionBidWrap","auctionTermsWrap"].forEach(id=>{
+      ["auctionDaysWrap","auctionCategoryWrap","auctionPropertyWrap","auctionBidWrap","auctionTermsWrap"].forEach(id=>{
         if($(id))$(id).hidden=!$("fauction").checked;
       });
       if($("fauction").checked){
@@ -1633,6 +1645,7 @@ function boot(payload,monitoredRows=null){
         populateFilterOptions(false);
         if($("fDays"))$("fDays").value="";
         if($("fcat"))$("fcat").value="";
+        if($("fProperty"))$("fProperty").value="";
         if($("fBid"))$("fBid").value="";
         if($("fTerms"))$("fTerms").value="";
       }
@@ -1657,7 +1670,7 @@ function boot(payload,monitoredRows=null){
   }else{
     $("fs").value=normalizeSortMode($("fs").value);
   }
-  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp","fcat","fBid","fTerms"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";AUCTION_SCOPE="all";paintAuctionScope();if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
+  $("reset").onclick=()=>{["q","fc","fsrc","ff","fy","fy2","fp","fcat","fProperty","fBid","fTerms"].forEach(id=>$(id).value="");$("fs").value="ranked";$("flive").checked=true;$("fnew").checked=false;$("funseen").checked=false;if($("fav"))$("fav").checked=false;if($("fDays"))$("fDays").value="";AUCTION_SCOPE="all";paintAuctionScope();if($("fauction")){$("fauction").checked=false;if(typeof $("fauction").dispatchEvent==="function"){$("fauction").dispatchEvent(new Event("change"));}}page=1;sessionStorage.removeItem(NAV_KEY);apply();saveNavigationState();};
   $("prev").onclick=()=>{page--;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("next").onclick=()=>{page++;render();saveNavigationState();scrollTo({top:0,behavior:"smooth"});};
   $("grid").onclick=event=>{
@@ -1723,6 +1736,7 @@ function applyAuction(){
          f=$("ff").value,yFrom=$("fy").value,yTo=$("fy2").value,p=$("fp").value,
          daysMax=$("fDays")?Number($("fDays").value)||0:0,
          categoryMode=$("fcat")?$("fcat").value:"vehicles",
+         propertyMode=$("fProperty")?$("fProperty").value:"",
          bidMode=$("fBid")?$("fBid").value:"",
          termsMode=$("fTerms")?$("fTerms").value:"",
         favOnly=$("fav")&&$("fav").checked;
@@ -1740,6 +1754,8 @@ function applyAuction(){
     const category=auctionCategory(row);
     if(categoryMode==="vehicles"&&!AUCTION_ROAD_VEHICLE_CATEGORIES.has(category))return false;
     if(categoryMode&&categoryMode!=="vehicles"&&category!==categoryMode)return false;
+    const propertyType=String(row.property_type||((category==="property"||category==="land")?category:"")).trim().toLowerCase();
+    if(propertyMode&&propertyType!==propertyMode)return false;
     if(AUCTION_CAR_FUEL_CATEGORIES.has(category)){
       const fuelGroup=auctionFuelGroup(row.fuel);
       const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
@@ -1792,13 +1808,14 @@ function auctionCard(row){
   const eligibilityLabel=AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required;
   const endText=endMs!==null?fmtTime(endMs):"غير معلنة";
   const mileage=Number(row.mileage??row.mileage_km);
+  const propertyType=String(row.property_type||((category==="property"||category==="land")?category:"")).trim().toLowerCase();
   const vehicleMeta=AUCTION_CAR_FUEL_CATEGORIES.has(category)||["motorcycle","bicycle","boat","jetski"].includes(category);
   const meta=vehicleMeta?
     `<div>🗓️ <b>${row.year||"—"}</b></div>
       <div>🛣️ <b>${Number.isFinite(mileage)&&mileage>=0?nf.format(mileage)+" كم":"—"}</b></div>
       <div>⛽ <b>${FUEL_AR(auctionFuelGroup(row.fuel))}</b></div>
       <div>📍 <b>${esc(row.location||countryName)}</b></div>`:
-    `<div>📦 <b>${esc(AUCTION_CATEGORY_LABELS[category])}</b></div>
+    `<div>📦 <b>${esc(AUCTION_PROPERTY_LABELS[propertyType]||AUCTION_CATEGORY_LABELS[category])}</b></div>
       <div>🏷️ <b>${esc(row.category_raw||"—")}</b></div>
       <div>👤 <b>${esc(row.seller||"—")}</b></div>
       <div>📍 <b>${esc(row.location||countryName)}</b></div>`;
