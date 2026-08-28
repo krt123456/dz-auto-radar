@@ -284,6 +284,10 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
           <option value="bicycle">دراجات</option>
           <option value="equipment">معدات</option>
           <option value="boat">قوارب</option>
+          <option value="jetski">جت سكي ومركبات مائية شخصية</option>
+          <option value="computer">حواسيب</option>
+          <option value="electronics">إلكترونيات</option>
+          <option value="gaming">أجهزة وألعاب</option>
           <option value="mixed">لوت مختلط</option>
           <option value="other">فئات أخرى</option>
           <option value="unknown">مركبات غير مفصلة الفئة</option>
@@ -632,8 +636,12 @@ function validateOfficialAuctionWatch(value,lane){
   if(value===undefined||value===null)return null;
   if(typeof value!=="object"||Array.isArray(value)||value.schema_version!==1||
      value.lane!=="official_auction_watch"||typeof value.registry_digest!=="string"||
-     !lane||value.registry_digest!==lane.registry_digest||!Array.isArray(value.rows)||
+     !Array.isArray(value.rows)||
      value.row_count!==value.rows.length||typeof value.source_reports!=="object"||value.source_reports===null)throw contractFailure();
+  // The broad public watch is deliberately publishable independently of the
+  // encrypted regular-offer board.  Validate its self-contained registry and
+  // every row instead of hiding all auctions merely because data.enc belongs
+  // to an older dashboard generation.
   const sourceRegistry=parseAuctionRegistryDigest(value.registry_digest);
   const generated=timestampMs(value.generated_at_utc),age=Date.now()-generated;
   if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
@@ -1001,8 +1009,12 @@ function restoreNavigationState(state){
 }
 
 const activeAuctionRows=()=>AUCTION_SCOPE==="eligible"?(AUCTION_LANE||[]):(AUCTION_MONITORED_LANE||AUCTION_LANE||[]);
-const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة"};
+const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",jetski:"جت سكي",computer:"حواسيب",electronics:"إلكترونيات",gaming:"أجهزة وألعاب",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة"};
 const AUCTION_ROAD_VEHICLE_CATEGORIES=new Set(["car","van","truck","vehicle","commercial_vehicle","unknown"]);
+// The petrol/hybrid rule is a car-collection policy.  Generic lots retain
+// their own categories so a computer, console, motorcycle, or jet ski cannot
+// disappear merely because it has no car fuel field.
+const AUCTION_CAR_FUEL_CATEGORIES=AUCTION_ROAD_VEHICLE_CATEGORIES;
 const auctionCategory=row=>{
   const value=String(row&&row.category||"unknown").trim().toLowerCase();
   return Object.prototype.hasOwnProperty.call(AUCTION_CATEGORY_LABELS,value)?value:"unknown";
@@ -1323,7 +1335,7 @@ function populateFilterOptions(auctionMode){
   setOptions("fsrc","كل المصادر",sources,s=>esc(auctionMode?auctionSourceLabel(s):s));
   if(auctionMode){
     const fuels=["petrol_or_hybrid","petrol","hybrid"];
-    const labels={petrol_or_hybrid:"بنزين أو هجين",petrol:"بنزين فقط",hybrid:"هجين فقط"};
+    const labels={petrol_or_hybrid:"بنزين أو هجين أو غير معلن",petrol:"بنزين فقط",hybrid:"هجين فقط"};
     const select=$("ff"),previous=select.value;
     select.innerHTML=fuels.map(f=>`<option value="${f}">${labels[f]}</option>`).join("");
     select.value=fuels.includes(previous)?previous:"petrol_or_hybrid";
@@ -1498,7 +1510,9 @@ if(typeof DecompressionStream==="undefined"){
 function boot(payload,monitoredRows=null){
   const validated=validatePayload(payload);
   const offers=validated.offers;
-  AUCTION_LANE=validated.lane;
+  // Keep the auction section available when the independently published
+  // official watch is newer than (or absent from) the encrypted board.
+  AUCTION_LANE=validated.lane||(Array.isArray(monitoredRows)?[]:null);
   AUCTION_SCOPE="all";
   if(AUCTION_LANE&&monitoredRows===null){
     try{
@@ -1726,9 +1740,17 @@ function applyAuction(){
     const category=auctionCategory(row);
     if(categoryMode==="vehicles"&&!AUCTION_ROAD_VEHICLE_CATEGORIES.has(category))return false;
     if(categoryMode&&categoryMode!=="vehicles"&&category!==categoryMode)return false;
-    const fuelGroup=auctionFuelGroup(row.fuel);
-    const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
-    if(!["petrol","hybrid"].includes(fuelGroup)||(requestedFuel!=="petrol_or_hybrid"&&fuelGroup!==requestedFuel))return false;
+    if(AUCTION_CAR_FUEL_CATEGORIES.has(category)){
+      const fuelGroup=auctionFuelGroup(row.fuel);
+      const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
+      // A missing public fuel field is not proof of an unacceptable fuel.
+      // Keep it in the default broad car view as explicitly unverified, but
+      // require a declared matching fuel when the user asks for petrol-only
+      // or hybrid-only results.
+      if(fuelGroup==="unknown"){
+        if(requestedFuel!=="petrol_or_hybrid")return false;
+      }else if(!["petrol","hybrid"].includes(fuelGroup)||(requestedFuel!=="petrol_or_hybrid"&&fuelGroup!==requestedFuel))return false;
+    }
     if(bidMode==="current_bid"&&(row.price_kind||"current_bid")!=="current_bid")return false;
     if(termsMode==="no_reserve"&&row.no_reserve!==true)return false;
     if(yFrom||yTo){
@@ -1770,6 +1792,16 @@ function auctionCard(row){
   const eligibilityLabel=AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required;
   const endText=endMs!==null?fmtTime(endMs):"غير معلنة";
   const mileage=Number(row.mileage??row.mileage_km);
+  const vehicleMeta=AUCTION_CAR_FUEL_CATEGORIES.has(category)||["motorcycle","bicycle","boat","jetski"].includes(category);
+  const meta=vehicleMeta?
+    `<div>🗓️ <b>${row.year||"—"}</b></div>
+      <div>🛣️ <b>${Number.isFinite(mileage)&&mileage>=0?nf.format(mileage)+" كم":"—"}</b></div>
+      <div>⛽ <b>${FUEL_AR(auctionFuelGroup(row.fuel))}</b></div>
+      <div>📍 <b>${esc(row.location||countryName)}</b></div>`:
+    `<div>📦 <b>${esc(AUCTION_CATEGORY_LABELS[category])}</b></div>
+      <div>🏷️ <b>${esc(row.category_raw||"—")}</b></div>
+      <div>👤 <b>${esc(row.seller||"—")}</b></div>
+      <div>📍 <b>${esc(row.location||countryName)}</b></div>`;
   const isFav=FAVORITES_IDS.has(id);
   const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">فتح المزاد ↗</a>`:
     '<span class="open unavailable" aria-disabled="true">الرابط غير متاح</span>';
@@ -1787,12 +1819,7 @@ function auctionCard(row){
       <strong>${auctionPriceText(row)}</strong>
       <span>${esc(AUCTION_PRICE_KIND_LABELS[priceKind]||"السعر المنشور في المصدر")}</span>
     </div>
-    <div class="meta">
-      <div>🗓️ <b>${row.year||"—"}</b></div>
-      <div>🛣️ <b>${Number.isFinite(mileage)&&mileage>=0?nf.format(mileage)+" كم":"—"}</b></div>
-      <div>⛽ <b>${FUEL_AR(auctionFuelGroup(row.fuel))}</b></div>
-      <div>📍 <b>${esc(row.location||countryName)}</b></div>
-    </div>
+    <div class="meta">${meta}</div>
     <div class="recency">
       ⏰ نهاية المزاد: <b>${endText}</b>
       ${endMs!==null?` · <b>${countdownText(endMs)}</b>`:""}
