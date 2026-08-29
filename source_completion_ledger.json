@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-08-28T10:59:09.115338Z",
+  "generated_at_utc": "2026-08-24T18:17:07.391098+00:00",
   "contract": {
     "document_entries": 129,
     "canonical_identities": 118,
@@ -36,12 +36,12 @@
       12
     ],
     "verified_complete": 1,
-    "technical_complete_research_only": 14,
-    "blocked": 99,
+    "technical_complete_research_only": 13,
+    "blocked": 100,
     "incomplete": 4,
     "resolved_without_silent_omission": 114,
-    "enumeration_complete": 23,
-    "classification_complete": 23,
+    "enumeration_complete": 22,
+    "classification_complete": 22,
     "production_publishable": 1
   },
   "batch_summary": {
@@ -70,9 +70,9 @@
       "verified_complete": 0
     },
     "5": {
-      "blocked": 9,
+      "blocked": 10,
       "incomplete": 0,
-      "technical_complete_research_only": 1,
+      "technical_complete_research_only": 0,
       "verified_complete": 0
     },
     "6": {
@@ -3196,9 +3196,9 @@
       ],
       "catalogue": {
         "status": "verified",
-        "url": "https://huutokaupat.com/osasto/henkiloautot",
+        "url": "https://huutokaupat.com/osasto/ajoneuvot-ja-tarvikkeet",
         "evidence_urls": [
-          "https://huutokaupat.com/osasto/henkiloautot",
+          "https://huutokaupat.com/osasto/ajoneuvot-ja-tarvikkeet",
           "https://huutokaupat.com/ehdot/kayttoehdot",
           "https://huutokaupat.com/ehdot/kayttoehdot-2018"
         ]
@@ -3212,29 +3212,27 @@
         ]
       },
       "connector": {
-        "status": "implemented",
-        "kind": "source_specific",
-        "path": "huutokaupat_official_watch.py"
+        "status": "not_implemented",
+        "kind": "none",
+        "path": ""
       },
       "enumeration": {
-        "status": "complete",
-        "method": "Enumerate every normal ?sivu=N page in the official Henkilöautot passenger-car category, reconcile the public declared total with stable lot IDs and URLs, then recheck page 1. A changed live snapshot is retried; mixed snapshots are never emitted.",
-        "discovered_count": 1336,
-        "visited_count": 1336,
-        "proof": "2026-08-28 live connector validation: official Henkilöautot declared 1,336 notices across 34 pages; the connector visited 1,336 unique stable IDs and URLs and passed its first-page recheck on attempt 1."
+        "status": "partial",
+        "method": "official_category_total_metadata_only_no_traversal",
+        "discovered_count": 1213,
+        "visited_count": 0,
+        "proof": "The official category reported 1,213 notices, page 1 of 31. No pages or lots were traversed, no source-specific connector exists, and reuse authority is absent; the displayed total is discovery metadata, not a completed crawl."
       },
       "classification": {
-        "status": "complete",
-        "classifiable_count": 1336,
-        "classified_count": 1336,
-        "counts": {
-          "review_required": 1336
-        }
+        "status": "not_started",
+        "classifiable_count": 1213,
+        "classified_count": 0,
+        "counts": {}
       },
       "integration": {
-        "status": "path_defined",
-        "path": "huutokaupat_official_watch.py output -> auction_refresh.sh run_official_watch -> build_auction_board.py --monitored-input -> official_auction_watch.json",
-        "test": "test_huutokaupat_official_watch.py passed 3 tests, including the coherent-snapshot retry. Live Henkilöautot validation reconciled 1,336 rows."
+        "status": "not_started",
+        "path": "",
+        "test": "No source-specific connector or integration path exists."
       },
       "publication": {
         "status": "blocked",
@@ -3243,7 +3241,7 @@
           "https://huutokaupat.com/ehdot/kayttoehdot-2018"
         ]
       },
-      "overall_status": "technical_complete_research_only"
+      "overall_status": "blocked"
     },
     {
       "canonical_identity": "kiertonet.fi",
