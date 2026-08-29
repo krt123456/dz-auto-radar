@@ -70,9 +70,12 @@ class BrowserWorker(threading.Thread):
             args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
         )
         while True:
-            url, result_slot = self.queue.get()
+            job, result_slot = self.queue.get()
             try:
-                result_slot["result"] = self._fetch(url)
+                if job[0] == "render":
+                    result_slot["result"] = self._render(job[1])
+                else:
+                    result_slot["result"] = self._fetch(job[1])
             except Exception as error:  # surfaced to the HTTP handler
                 result_slot["error"] = f"{type(error).__name__}: {error}"
             finally:
@@ -114,6 +117,20 @@ class BrowserWorker(threading.Thread):
                 return
             time.sleep(1.5)
 
+    def _render(self, url: str) -> tuple[int, str, str]:
+        """Navigate a real browser page to url and return rendered HTML."""
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme != "https" or not parts.hostname:
+            raise ValueError(f"only https URLs are accepted: {url!r}")
+        origin = f"{parts.scheme}://{parts.netloc}"
+        context, page = self._session_for(origin)
+        self._solve(page, origin)
+        response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
+        time.sleep(3.0)
+        content = page.content()[:MAX_RESPONSE_BYTES]
+        status = response.status if response is not None else 200
+        return status, content, page.url
+
     def _fetch(self, url: str) -> tuple[int, str, str]:
         parts = urllib.parse.urlsplit(url)
         if parts.scheme != "https" or not parts.hostname:
@@ -150,9 +167,19 @@ def sync_playwright_start():
 
 def submit_fetch(worker: BrowserWorker, url: str, timeout: float) -> tuple[int, str, str]:
     result_slot: dict = {"done": threading.Event()}
-    worker.queue.put((url, result_slot))
+    worker.queue.put((("fetch", url), result_slot))
     if not result_slot["done"].wait(timeout=timeout):
         raise RuntimeError(f"browser fetch timed out after {timeout:.0f}s for {url}")
+    if "error" in result_slot:
+        raise RuntimeError(result_slot["error"])
+    return result_slot["result"]
+
+
+def submit_render(worker: BrowserWorker, url: str, timeout: float) -> tuple[int, str, str]:
+    result_slot: dict = {"done": threading.Event()}
+    worker.queue.put((("render", url), result_slot))
+    if not result_slot["done"].wait(timeout=timeout):
+        raise RuntimeError(f"browser render timed out after {timeout:.0f}s for {url}")
     if "error" in result_slot:
         raise RuntimeError(result_slot["error"])
     return result_slot["result"]
@@ -177,6 +204,21 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlsplit(self.path)
         if parsed.path == "/healthz":
             self._send_json({"ok": True})
+            return
+        if parsed.path == "/render":
+            target = urllib.parse.parse_qs(parsed.query).get("url", [""])[0]
+            if not target:
+                self._send_json({"error": "missing url"}, status=400)
+                return
+            try:
+                status, body, final_url = submit_render(self.worker, target, self.fetch_timeout)
+            except ValueError as error:
+                self._send_json({"error": str(error)}, status=400)
+                return
+            except Exception as error:
+                self._send_json({"error": f"{type(error).__name__}: {error}"}, status=502)
+                return
+            self._send_json({"status": status, "body": body, "url": final_url})
             return
         if parsed.path != "/fetch":
             self._send_json({"error": "unknown endpoint"}, status=404)
