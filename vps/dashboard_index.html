@@ -274,36 +274,11 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       </div>
       <div id="auctionCategoryWrap" hidden>
         <select class="f" id="fcat" aria-label="فئة أصل المزاد">
-          <option value="vehicles">المركبات فقط</option>
-          <option value="car">سيارات ركوب</option>
-          <option value="van">مركبات نفعية خفيفة</option>
-          <option value="truck">شاحنات</option>
-          <option value="commercial_vehicle">مركبات تجارية غير مفصلة</option>
-          <option value="part">قطع ومكونات</option>
-          <option value="motorcycle">دراجات نارية</option>
-          <option value="bicycle">دراجات</option>
-          <option value="equipment">معدات</option>
-          <option value="boat">قوارب</option>
-          <option value="jetski">جت سكي ومركبات مائية شخصية</option>
-          <option value="computer">حواسيب</option>
-          <option value="electronics">إلكترونيات</option>
-          <option value="gaming">أجهزة وألعاب</option>
-          <option value="property">منازل وعقارات</option>
-          <option value="land">أراضٍ وقطع</option>
-          <option value="mixed">لوت مختلط</option>
-          <option value="other">فئات أخرى</option>
-          <option value="unknown">مركبات غير مفصلة الفئة</option>
-          <option value="">كل الفئات</option>
+          <option value="car">سيارات ركوب فقط</option>
         </select>
       </div>
       <div id="auctionPropertyWrap" hidden>
-        <select class="f" id="fProperty" aria-label="نوع المنزل أو الأرض">
-          <option value="">كل المنازل والأراضي</option>
-          <option value="residential">منازل وسكن</option>
-          <option value="commercial">عقارات تجارية</option>
-          <option value="property">عقارات غير مفصلة</option>
-          <option value="land">أراضٍ وقطع</option>
-        </select>
+        <input id="fProperty" type="hidden" value="">
       </div>
       <div id="auctionBidWrap" hidden>
         <select class="f" id="fBid" aria-label="حالة سعر المزاد">
@@ -665,6 +640,60 @@ function validateOfficialAuctionWatch(value,lane){
   AUCTION_RUNTIME_SOURCE_REGISTRY=sourceRegistry;
   return rows;
 }
+const OFFICIAL_WATCH_PART_PATH=/^official_auction_watch_parts\/part-(\d{6})\.json$/;
+function validateOfficialAuctionWatchManifest(value){
+  if(typeof value!=="object"||value===null||Array.isArray(value)||
+     value.schema_version!==2||value.lane!=="official_auction_watch"||
+     typeof value.registry_digest!=="string"||!Number.isInteger(value.row_count)||value.row_count<0||
+     typeof value.source_reports!=="object"||value.source_reports===null||
+     typeof value.storage!=="object"||value.storage===null||value.storage.format!=="json-row-shards"||
+     !Array.isArray(value.parts)||(value.row_count===0&&value.parts.length!==0)||
+     (value.row_count>0&&value.parts.length===0))throw contractFailure();
+  const seenPaths=new Set();let total=0;
+  for(let index=0;index<value.parts.length;index++){
+    const part=value.parts[index],expected=`official_auction_watch_parts/part-${String(index).padStart(6,"0")}.json`;
+    if(typeof part!=="object"||part===null||Array.isArray(part)||
+       part.path!==expected||!OFFICIAL_WATCH_PART_PATH.test(part.path)||seenPaths.has(part.path)||
+       part.part_index!==index||!Number.isInteger(part.row_count)||part.row_count<1||
+       typeof part.sha256!=="string"||!/^[0-9a-f]{64}$/.test(part.sha256))throw contractFailure();
+    seenPaths.add(part.path);total+=part.row_count;
+  }
+  if(total!==value.row_count)throw contractFailure();
+  const generated=timestampMs(value.generated_at_utc),age=Date.now()-generated;
+  if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
+  return value;
+}
+async function sha256Hex(buffer){
+  const digest=await crypto.subtle.digest("SHA-256",buffer);
+  return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
+}
+async function loadOfficialAuctionWatchParts(manifest,lane){
+  const result=new Array(manifest.parts.length);let cursor=0;
+  async function worker(){
+    while(true){
+      const index=cursor++;if(index>=manifest.parts.length)return;
+      const descriptor=manifest.parts[index];
+      const response=await fetch(`${descriptor.path}?v=${Date.now()}`,{cache:"no-store"});
+      if(!response.ok)throw contractFailure();
+      const raw=await response.arrayBuffer();
+      if(await sha256Hex(raw)!==descriptor.sha256)throw contractFailure();
+      let part;
+      try{part=JSON.parse(new TextDecoder().decode(raw));}catch(error){throw contractFailure();}
+      if(typeof part!=="object"||part===null||Array.isArray(part)||
+         part.schema_version!==1||part.lane!=="official_auction_watch_part"||
+         part.part_index!==index||part.row_count!==descriptor.row_count||
+         !Array.isArray(part.rows)||part.rows.length!==descriptor.row_count)throw contractFailure();
+      result[index]=part.rows;
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(6,manifest.parts.length)},()=>worker()));
+  return validateOfficialAuctionWatch({
+    schema_version:1,lane:"official_auction_watch",registry_digest:manifest.registry_digest,
+    generated_at_utc:manifest.generated_at_utc,row_count:manifest.row_count,
+    source_reports:manifest.source_reports,rejected_counts:manifest.rejected_counts||{},
+    rows:result.flat(),
+  },lane);
+}
 function strictAsMonitored(row){
   return {...row,price_eur:row.current_bid_eur,price_kind:"current_bid",
     eligibility_status:"eligible",eligibility_reason:"اجتاز بوابات المصدر والسعر الحالي والعمر والوقود؛ يبقى التحقق النهائي من شروط المزايدة والملف."};
@@ -1020,13 +1049,10 @@ function restoreNavigationState(state){
 }
 
 const activeAuctionRows=()=>AUCTION_SCOPE==="eligible"?(AUCTION_LANE||[]):(AUCTION_MONITORED_LANE||AUCTION_LANE||[]);
-const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",jetski:"جت سكي",computer:"حواسيب",electronics:"إلكترونيات",gaming:"أجهزة وألعاب",property:"منزل أو عقار",land:"أرض أو قطعة",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة"};
-const AUCTION_PROPERTY_LABELS={residential:"منزل أو سكن",commercial:"عقار تجاري",property:"عقار غير مفصل",land:"أرض أو قطعة"};
-const AUCTION_ROAD_VEHICLE_CATEGORIES=new Set(["car","van","truck","vehicle","commercial_vehicle","unknown"]);
-// The petrol/hybrid rule is a car-collection policy.  Generic lots retain
-// their own categories so a computer, console, motorcycle, or jet ski cannot
-// disappear merely because it has no car fuel field.
-const AUCTION_CAR_FUEL_CATEGORIES=AUCTION_ROAD_VEHICLE_CATEGORIES;
+const AUCTION_CATEGORY_LABELS={car:"سيارة ركوب",estate:"سيارة عائلية",saloon:"سيارة سيدان",compact:"سيارة مدمجة","small car":"سيارة صغيرة","sports car / coupé":"سيارة رياضية أو كوبيه","convertible / roadster":"سيارة مكشوفة",van:"مركبة نفعية خفيفة",truck:"شاحنة",vehicle:"مركبة",commercial_vehicle:"مركبة تجارية غير مفصلة",part:"قطعة أو مكوّن",motorcycle:"دراجة نارية",bicycle:"دراجة",equipment:"معدات",boat:"قارب",jetski:"جت سكي",computer:"حواسيب",electronics:"إلكترونيات",gaming:"أجهزة وألعاب",property:"منزل أو عقار",land:"أرض أو قطعة",mixed:"لوت مختلط",other:"فئة أخرى",unknown:"مركبة غير مفصلة الفئة","all-terrain vehicle":"مركبة طرق وعرة","vehicle_related":"ملحق مركبة",pickup:"بيك أب",bus:"حافلة",motorhome:"منزل متنقل","public service vehicle":"مركبة خدمات عامة","high-roof panel transporter":"فان مرتفع السقف","light duty truck":"شاحنة خفيفة",flatbed:"شاحنة مسطحة",box:"شاحنة صندوقية","car transporter":"ناقلة سيارات"};
+const AUCTION_PASSENGER_CAR_CATEGORIES=new Set(["car","estate","saloon","compact","small car","sports car / coupé","convertible / roadster"]);
+const AUCTION_NON_PASSENGER_CAR_CATEGORIES=new Set(["van","truck","commercial_vehicle","part","motorcycle","bicycle","equipment","boat","jetski","computer","electronics","gaming","property","land","mixed","other","all-terrain vehicle","vehicle_related","pickup","bus","motorhome","public service vehicle","high-roof panel transporter","light duty truck","flatbed","box","car transporter"]);
+const AUCTION_CAR_ONLY_SOURCE_KEYS=new Set(["autorola-eu","exleasingcar","vpauto","kvdcars","caraukce","bilweb","rbauction-eu","vavato"]);
 const auctionCategory=row=>{
   const value=String(row&&row.category||"unknown").trim().toLowerCase();
   return Object.prototype.hasOwnProperty.call(AUCTION_CATEGORY_LABELS,value)?value:"unknown";
@@ -1093,6 +1119,16 @@ function auctionVehicleIdentities(value){
   if(!tokens.length)return [];
   const base=`${canonicalMake}:${tokens[0]}`;
   return tokens.length>1?[`${base}:${tokens[1]}`,base]:[base];
+}
+function isPassengerCarAuction(row){
+  const category=auctionCategory(row);
+  if(AUCTION_PASSENGER_CAR_CATEGORIES.has(category))return true;
+  if(AUCTION_NON_PASSENGER_CAR_CATEGORIES.has(category))return false;
+  const text=normalizeAuctionVehicleText(`${row&&row.title||""} ${row&&row.model||""} ${row&&row.category_raw||""}`);
+  if(/(?:^| )(?:motorcycle|motorbike|motorrad|motocycle|motocicleta|motociclette|scooter|quad|atv|utv|jetski|jet ski|boat|yacht|trailer|caravan|camper|tractor|excavator|forklift|truck|lorry|lkw|van|bus|computer|laptop|console|gaming|property|house|immobilien|wohnung)(?: |$)/.test(text))return false;
+  if(auctionVehicleIdentities(text).length)return true;
+  return AUCTION_CAR_ONLY_SOURCE_KEYS.has(String(row&&row.source_key||row&&row.source||""))&&
+    (category==="vehicle"||category==="unknown");
 }
 const auctionPeerKey=(identity,year,fuel,mileage)=>{
   const normalizedModel=String(identity||"").trim().toLowerCase();
@@ -1465,7 +1501,10 @@ async function loadOfficialAuctionWatch(payload){
   try{
     const response=await fetch(`official_auction_watch.json?v=${Date.now()}`,{cache:"no-store"});
     if(!response.ok){AUCTION_WATCH_STATE="missing";return null;}
-    const rows=validateOfficialAuctionWatch(await response.json(),payload&&payload.auction_lane);
+    const document=await response.json();
+    const rows=document&&document.schema_version===2
+      ?await loadOfficialAuctionWatchParts(validateOfficialAuctionWatchManifest(document),payload&&payload.auction_lane)
+      :validateOfficialAuctionWatch(document,payload&&payload.auction_lane);
     AUCTION_WATCH_ERROR="";AUCTION_WATCH_STATE="ready";return rows;
   }catch(error){AUCTION_WATCH_ERROR=String(error&&error.stack||error||"unknown").slice(0,2000);AUCTION_WATCH_STATE="invalid";return null;}
 }
@@ -1623,9 +1662,10 @@ function boot(payload,monitoredRows=null){
     $("fauction").addEventListener("change",()=>{
       clearSectionFilters();
       paintModeTabs($("fauction").checked);
-      ["auctionDaysWrap","auctionCategoryWrap","auctionPropertyWrap","auctionBidWrap","auctionTermsWrap"].forEach(id=>{
+      ["auctionDaysWrap","auctionCategoryWrap","auctionBidWrap","auctionTermsWrap"].forEach(id=>{
         if($(id))$(id).hidden=!$("fauction").checked;
       });
+      if($("auctionPropertyWrap"))$("auctionPropertyWrap").hidden=true;
       if($("fauction").checked){
         const saved=$("fs").value;
         $("fs").dataset.regularSort=saved;
@@ -1633,7 +1673,7 @@ function boot(payload,monitoredRows=null){
           '<option value="auction_bid">💶 أقل سعر مزاد معلن باليورو</option>'+
           '<option value="auction_vetted">🛡️ أحدث مصدر موثق</option>';
         $("fs").value="auction_soon";
-        $("fcat").value="vehicles";
+        $("fcat").value="car";
         populateFilterOptions(true);
       }else{
         $("fs").innerHTML='<option value="ranked">✨ أفضل قيمة مرصودة ضمن روابط متحقق منها</option>'+
@@ -1735,8 +1775,6 @@ function applyAuction(){
   const q=normalizeSearchText($("q").value),c=$("fc").value,src=$("fsrc").value,
          f=$("ff").value,yFrom=$("fy").value,yTo=$("fy2").value,p=$("fp").value,
          daysMax=$("fDays")?Number($("fDays").value)||0:0,
-         categoryMode=$("fcat")?$("fcat").value:"vehicles",
-         propertyMode=$("fProperty")?$("fProperty").value:"",
          bidMode=$("fBid")?$("fBid").value:"",
          termsMode=$("fTerms")?$("fTerms").value:"",
         favOnly=$("fav")&&$("fav").checked;
@@ -1751,22 +1789,15 @@ function applyAuction(){
     if(end!==null&&end<=nowMs)return false;
     if(c&&row.country!==c)return false;
     if(src&&String(row.source_key||row.source)!==src)return false;
-    const category=auctionCategory(row);
-    if(categoryMode==="vehicles"&&!AUCTION_ROAD_VEHICLE_CATEGORIES.has(category))return false;
-    if(categoryMode&&categoryMode!=="vehicles"&&category!==categoryMode)return false;
-    const propertyType=String(row.property_type||((category==="property"||category==="land")?category:"")).trim().toLowerCase();
-    if(propertyMode&&propertyType!==propertyMode)return false;
-    if(AUCTION_CAR_FUEL_CATEGORIES.has(category)){
-      const fuelGroup=auctionFuelGroup(row.fuel);
-      const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
-      // A missing public fuel field is not proof of an unacceptable fuel.
-      // Keep it in the default broad car view as explicitly unverified, but
-      // require a declared matching fuel when the user asks for petrol-only
-      // or hybrid-only results.
-      if(fuelGroup==="unknown"){
-        if(requestedFuel!=="petrol_or_hybrid")return false;
-      }else if(!["petrol","hybrid"].includes(fuelGroup)||(requestedFuel!=="petrol_or_hybrid"&&fuelGroup!==requestedFuel))return false;
-    }
+    if(!isPassengerCarAuction(row))return false;
+    const category=auctionCategory(row),fuelGroup=auctionFuelGroup(row.fuel);
+    const requestedFuel=["petrol","hybrid"].includes(f)?f:"petrol_or_hybrid";
+    // A missing public fuel field is not proof of an unacceptable fuel. Keep
+    // it visibly unverified, while excluding explicitly declared diesel or EV
+    // offers from the default petrol/hybrid car view.
+    if(fuelGroup==="unknown"){
+      if(requestedFuel!=="petrol_or_hybrid")return false;
+    }else if(!["petrol","hybrid"].includes(fuelGroup)||(requestedFuel!=="petrol_or_hybrid"&&fuelGroup!==requestedFuel))return false;
     if(bidMode==="current_bid"&&(row.price_kind||"current_bid")!=="current_bid")return false;
     if(termsMode==="no_reserve"&&row.no_reserve!==true)return false;
     if(yFrom||yTo){
@@ -1808,16 +1839,9 @@ function auctionCard(row){
   const eligibilityLabel=AUCTION_ELIGIBILITY_LABELS[eligibility]||AUCTION_ELIGIBILITY_LABELS.review_required;
   const endText=endMs!==null?fmtTime(endMs):"غير معلنة";
   const mileage=Number(row.mileage??row.mileage_km);
-  const propertyType=String(row.property_type||((category==="property"||category==="land")?category:"")).trim().toLowerCase();
-  const vehicleMeta=AUCTION_CAR_FUEL_CATEGORIES.has(category)||["motorcycle","bicycle","boat","jetski"].includes(category);
-  const meta=vehicleMeta?
-    `<div>🗓️ <b>${row.year||"—"}</b></div>
+  const meta=`<div>🗓️ <b>${row.year||"—"}</b></div>
       <div>🛣️ <b>${Number.isFinite(mileage)&&mileage>=0?nf.format(mileage)+" كم":"—"}</b></div>
       <div>⛽ <b>${FUEL_AR(auctionFuelGroup(row.fuel))}</b></div>
-      <div>📍 <b>${esc(row.location||countryName)}</b></div>`:
-    `<div>📦 <b>${esc(AUCTION_PROPERTY_LABELS[propertyType]||AUCTION_CATEGORY_LABELS[category])}</b></div>
-      <div>🏷️ <b>${esc(row.category_raw||"—")}</b></div>
-      <div>👤 <b>${esc(row.seller||"—")}</b></div>
       <div>📍 <b>${esc(row.location||countryName)}</b></div>`;
   const isFav=FAVORITES_IDS.has(id);
   const link=href!=="#"?`<a class="open" data-offer-id="${esc(id)}" href="${esc(href)}" target="_blank" rel="noopener noreferrer">فتح المزاد ↗</a>`:
@@ -1826,7 +1850,7 @@ function auctionCard(row){
     <div class="top">
       <span class="flag">${FLAGS[row.country]||"🌍"}</span>
       <span class="chip">${esc(auctionSourceLabel(row.source_key||row.source))}</span>
-      <span class="chip">${esc(AUCTION_CATEGORY_LABELS[category])}</span>
+      <span class="chip">${esc(AUCTION_PASSENGER_CAR_CATEGORIES.has(category)?AUCTION_CATEGORY_LABELS[category]:"سيارة ركوب")}</span>
       ${row.no_reserve===true?'<span class="chip">No Reserve</span>':""}
       <span class="badge ${eligibilityClass}">${esc(eligibilityLabel)}</span>
       <button class="heart-btn${isFav?" active":""}" data-fav-id="${esc(id)}" aria-label="مفضلة">${isFav?"❤️":"🤍"}</button>
