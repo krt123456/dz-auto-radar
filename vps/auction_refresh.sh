@@ -30,7 +30,7 @@ AUCTION24_CZ_WATCH="$STATE/runtime/auction24_cz_official_auction_watch.json"
 PVP_WATCH="$STATE/runtime/pvp_official_auction_watch.json"
 SCHENGEN_WIDE_WATCH="$STATE/runtime/schengen_wide_official_auction_watch.json"
 RETRADE_WATCH="$STATE/runtime/retrade_official_auction_watch.json"
-TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_watch.json"
+TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_official_auction_watch.json"
 AUKSJONEN_WATCH="$STATE/runtime/auksjonen_watch.json"
 AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"
 EXLEASINGCAR_WATCH="$STATE/runtime/exleasingcar_official_auction_watch.json"
@@ -258,8 +258,6 @@ run_official_watch "agorastore" \
   --out "$AGORASTORE_WATCH" \
   --timeout "${RADAR_OFFICIAL_WATCH_TIMEOUT_SEC:-35}" &
 OFFICIAL_WATCH_PIDS+=("$!")
-run_official_watch "troostwijk"   python3 /opt/sonardeals-radar/troostwijk_fetcher.py   --out "$TROOSTWIJK_WATCH" &
-OFFICIAL_WATCH_PIDS+=("$!")
 run_official_watch "aste-giudiziarie"   python3 /opt/sonardeals-radar/aste_fetcher.py   --out "$ASTE_WATCH" &
 OFFICIAL_WATCH_PIDS+=("$!")
 
@@ -314,6 +312,17 @@ run_official_watch "automotive-auctions-nl" \
   --out "$AUTOMOTIVE_AUCTIONS_NL_WATCH" \
   --timeout "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_TIMEOUT_SEC:-40}" \
   --workers "${RADAR_AUTOMOTIVE_AUCTIONS_NL_WATCH_WORKERS:-2}"
+
+# Troostwijk publishes a finite Next.js passenger-car catalogue (Cars,
+# Oldtimers, Classic cars >15 subcategories) whose two-pass coherence proof
+# needs a quiesced network, so it also runs after the parallel batch.  The
+# legacy homepage fetcher is fully replaced by this reconciled collector.
+run_official_watch "troostwijk" \
+  python3 /opt/sonardeals-radar/troostwijk_official_watch.py \
+  --out "$TROOSTWIJK_WATCH" \
+  --timeout "${RADAR_TROOSTWIJK_WATCH_TIMEOUT_SEC:-40}" \
+  --workers "${RADAR_TROOSTWIJK_WATCH_WORKERS:-6}" \
+  --snapshot-attempts "${RADAR_TROOSTWIJK_SNAPSHOT_ATTEMPTS:-3}"
 
 # Bilauppboð exposes a small, finite public catalogue.  Read it after the
 # broad parallel batch has quiesced so its two-pass coherence proof is not

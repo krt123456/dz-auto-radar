@@ -399,6 +399,24 @@ agorastore_cross_border, agorastore_cross_border_reason = bab._normalize_monitor
 check("Agorastore retains its official Belgian car asset country",
       agorastore_cross_border is not None and agorastore_cross_border_reason == "" and
       agorastore_cross_border["country"] == "BE")
+troostwijk_cross_border_raw = dict(
+    pvp_raw,
+    id="troostwijk:8b13abe5-70c0-434a-811e-03881e56d5a6",
+    source="troostwijk",
+    source_key="troostwijk",
+    url="https://www.troostwijkauctions.com/en/l/2004-bmw-serie-645ci-s-passenger-car-A1-39129-39",
+    title="2004 BMW serie 645Ci S Passenger car",
+    model="2004 BMW serie 645Ci S Passenger car",
+    country="BE",
+    category="car",
+    adapter_authorized=True,
+)
+troostwijk_cross_border, troostwijk_cross_border_reason = bab._normalize_monitored_row(
+    troostwijk_cross_border_raw, generated_at=watch_now
+)
+check("Troostwijk retains its official Belgian car asset country",
+      troostwijk_cross_border is not None and troostwijk_cross_border_reason == "" and
+      troostwijk_cross_border["country"] == "BE")
 exleasingcar_business_edition = dict(
     exleasingcar_normalized,
     id="exleasingcar:business-edition",

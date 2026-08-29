@@ -96,6 +96,9 @@ SOURCE_COUNTRY_OVERRIDES = {
     # Belgian and other Schengen assets; retain the asset country from each
     # public API card rather than relabelling every lot as France.
     "agorastore": SCHENGEN_COUNTRIES,
+    # Troostwijk's public Cars subcategories list each lot's official asset
+    # location (NL, BE, AT, SI, FR observed); retain the per-lot country.
+    "troostwijk": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }
