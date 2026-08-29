@@ -23,6 +23,7 @@ import datetime as dt
 import json
 import math
 import os
+import random
 import re
 import time
 import unicodedata
@@ -46,10 +47,14 @@ SOURCE_BASE = "https://www.troostwijkauctions.com"
 SOURCE_HOST = "www.troostwijkauctions.com"
 CARS_ROOT_PATH = "/en/c/transport-logistics/cars/5196727d-c14f-48dc-a2f0-e75f50094a52"
 DEFAULT_TIMEOUT = 40
-DEFAULT_WORKERS = 6
+DEFAULT_WORKERS = 4
 MAX_WORKERS = 8
 DEFAULT_ATTEMPTS = 3
 MAX_ATTEMPTS = 6
+# Polite pacing between page requests per worker.  The marketplace rate-limits
+# sustained high-bandwidth crawls (observed HTTP 403 mid-walk at ~4 req/s from
+# a datacenter IP), so every page fetch sleeps a jittered delay first.
+PAGE_DELAY_SECONDS = 1.0
 MAX_PAGES_PER_SUBCATEGORY = 200
 MAX_PAGE_LOTS = 100
 MAX_TOTAL_LOTS = 20_000
@@ -240,12 +245,12 @@ def lot_detail_url(lot: Lot) -> str:
 def configured_session(*, workers: int = DEFAULT_WORKERS) -> requests.Session:
     session = requests.Session()
     retry = Retry(
-        total=3,
+        total=4,
         connect=3,
         read=3,
-        status=3,
-        backoff_factor=1.0,
-        status_forcelist=(429, 500, 502, 503, 504),
+        status=4,
+        backoff_factor=2.0,
+        status_forcelist=(403, 429, 500, 502, 503, 504),
         allowed_methods=frozenset({"GET"}),
     )
     session.mount("https://", HTTPAdapter(max_retries=retry, pool_connections=workers, pool_maxsize=workers))
@@ -253,6 +258,8 @@ def configured_session(*, workers: int = DEFAULT_WORKERS) -> requests.Session:
 
 
 def fetch_markup(session: requests.Session, url: str, *, timeout: int) -> str:
+    if PAGE_DELAY_SECONDS > 0:
+        time.sleep(PAGE_DELAY_SECONDS * (0.5 + random.random()))
     response = session.get(url, headers=HEADERS, timeout=timeout)
     response.raise_for_status()
     return response.text

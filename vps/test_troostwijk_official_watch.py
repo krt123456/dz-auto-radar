@@ -7,6 +7,9 @@ import unittest
 
 import troostwijk_official_watch as watch
 
+# Unit tests must not sleep for the live polite-pacing delay.
+watch.PAGE_DELAY_SECONDS = 0.0
+
 
 UTC = dt.timezone.utc
 
