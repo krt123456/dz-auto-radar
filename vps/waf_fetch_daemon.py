@@ -32,6 +32,7 @@ SOLVE_ATTEMPTS = 3
 POLITE_DELAY_SECONDS = 0.4
 RENDER_EXTRA_WAIT_SECONDS = 3
 XHR_CAPTURE_WAIT_SECONDS = 8
+RENDER_ATTEMPTS = 3
 CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "un instant", "cf-chl")
 CONSENT_SELECTORS = (
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
@@ -139,14 +140,15 @@ class BrowserWorker(threading.Thread):
                 return
             time.sleep(1.5)
 
-    def _render(self, url: str, *, capture_json: bool = False) -> tuple[int, str, str, list]:
+    def _render(self, url: str, *, capture_json: bool = False) -> tuple:
         """Navigate a real browser page to url and return rendered HTML.
 
         Waits out JS WAF interstitials: polls until the document grows past a
         shell-sized threshold and challenge titles clear, bounded by a wait
         budget (default 3s extra, up to 30s via &wait=).  With capture_json a
         list of JSON XHR/fetch payloads observed during the render is returned
-        as the fourth element.
+        as the fourth element.  Retries the whole navigation when the result
+        is still a challenge shell.
         """
         wait_budget = RENDER_EXTRA_WAIT_SECONDS
         parts = urllib.parse.urlsplit(url)
@@ -174,25 +176,35 @@ class BrowserWorker(threading.Thread):
 
         page.on("response", on_response)
         try:
-            response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
-            deadline = time.time() + max(wait_budget, XHR_CAPTURE_WAIT_SECONDS if capture_json else 0)
-            while time.time() < deadline:
-                title = (page.title() or "").lower()
-                try:
-                    content_length = len(page.content())
-                except Exception:
-                    content_length = 0
-                if (
-                    "just a moment" not in title
-                    and "un instant" not in title
-                    and content_length > 100_000
-                ):
-                    if not (capture_json and len(captured) == 0):
-                        break
-                time.sleep(1.5)
-            content = page.content()[:MAX_RESPONSE_BYTES]
-            status = response.status if response is not None else 200
-            return status, content, page.url, captured
+            status = 0
+            content = ""
+            final_url = url
+            for attempt in range(RENDER_ATTEMPTS):
+                captured.clear()
+                self._solve(page, origin)
+                response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
+                deadline = time.time() + max(wait_budget, XHR_CAPTURE_WAIT_SECONDS if capture_json else 0)
+                while time.time() < deadline:
+                    title = (page.title() or "").lower()
+                    try:
+                        content_length = len(page.content())
+                    except Exception:
+                        content_length = 0
+                    if (
+                        "just a moment" not in title
+                        and "un instant" not in title
+                        and content_length > 100_000
+                    ):
+                        if not (capture_json and len(captured) == 0):
+                            break
+                    time.sleep(1.5)
+                content = page.content()[:MAX_RESPONSE_BYTES]
+                status = response.status if response is not None else 200
+                final_url = page.url
+                if len(content) > 100_000:
+                    break
+                time.sleep(2 * (attempt + 1))
+            return status, content, final_url, captured
         finally:
             page.remove_listener("response", on_response)
 
