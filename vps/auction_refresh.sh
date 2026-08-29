@@ -416,6 +416,13 @@ published_watch, published_root = load_published_official_auction_watch(
     __import__("pathlib").Path(sys.argv[3])
 )
 
+# The Ouedkniss reference summary is enrichment evidence written next to the
+# built watch after the monitored artifact is generated; the sharded public
+# publisher intentionally does not carry it.  Compare the watch modulo that
+# auxiliary block so a matched enrichment does not fail the publication proof.
+source.pop("ouedkniss_reference_summary", None)
+published_watch.pop("ouedkniss_reference_summary", None)
+
 source_rows = source.get("rows")
 source_count = len(source_rows) if isinstance(source_rows, list) else -1
 published_count = manifest.get("official_auction_watch_count")
