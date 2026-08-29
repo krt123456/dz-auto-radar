@@ -70,6 +70,12 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
         self.assertNotIn('troostwijk_fetcher.py', content)
         self.assertGreater(content.index('run_official_watch "troostwijk"'), content.index('for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do'))
         self.assertLess(content.index('run_official_watch "troostwijk"'), content.index("MONITORED_INPUT_ARGS=()"))
+        self.assertIn('PSAUCTION_WATCH="$STATE/runtime/psauction_se_official_auction_watch.json"', content)
+        self.assertIn('run_official_watch "psauction-se"', content)
+        self.assertIn('psauction_official_watch.py', content)
+        self.assertIn('127.0.0.1:8977', content)
+        self.assertGreater(content.index('run_official_watch "psauction-se"'), content.index('for watch_pid in "${OFFICIAL_WATCH_PIDS[@]}"; do'))
+        self.assertLess(content.index('run_official_watch "psauction-se"'), content.index("MONITORED_INPUT_ARGS=()"))
         for variable in (
             "AUTOBID_WATCH",
             "EXLEASINGCAR_WATCH",
@@ -98,6 +104,7 @@ class AuctionRefreshWatchSourcesTest(unittest.TestCase):
             "SCHENGEN_WIDE_WATCH",
             "RETRADE_WATCH",
             "TROOSTWIJK_WATCH",
+            "PSAUCTION_WATCH",
         ):
             self.assertIn(f'"${variable}"', monitored_inputs)
 

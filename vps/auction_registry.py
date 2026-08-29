@@ -543,7 +543,7 @@ _AUCTION_SOURCES: List[AuctionSource] = [
                   ("klaravik.se",), 57,
                   "Schengen_Trusted_Online_Car_Auctions_2026: Scandinavian auction platform Swedish arm"),
     AuctionSource("psauction-se", "PS Auction Sweden", "se",
-                  ("psauction.com",), 57,
+                  ("psauction.se", "psauction.com"), 57,
                   "Schengen_Trusted_Online_Car_Auctions_2026: Swedish auction house since 1958"),
     AuctionSource("blinto", "Blinto", "se",
                   ("blinto.se",), 57,
