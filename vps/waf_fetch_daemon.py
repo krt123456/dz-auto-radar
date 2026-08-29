@@ -98,6 +98,8 @@ class BrowserWorker(threading.Thread):
                     result_slot["result"] = self._render(job[1])
                 elif job[0] == "renderx":
                     result_slot["result"] = self._render(job[1], capture_json=True)
+                elif job[0] == "renderraw":
+                    result_slot["result"] = self._render(job[1], raw=True)
                 else:
                     result_slot["result"] = self._fetch(job[1])
             except Exception as error:  # surfaced to the HTTP handler
@@ -149,7 +151,7 @@ class BrowserWorker(threading.Thread):
         # A minimal page may be legitimately small; accept after the wait.
         self.solved_at[origin] = time.time()
 
-    def _render(self, url: str, *, capture_json: bool = False) -> tuple:
+    def _render(self, url: str, *, capture_json: bool = False, raw: bool = False) -> tuple:
         """Navigate a real browser page to url and return rendered HTML.
 
         Waits out JS WAF interstitials: polls until the document grows past a
@@ -261,9 +263,9 @@ def submit_fetch(worker: BrowserWorker, url: str, timeout: float) -> tuple[int, 
     return result_slot["result"]
 
 
-def submit_render(worker: BrowserWorker, url: str, timeout: float, *, capture_json: bool = False) -> tuple:
+def submit_render(worker: BrowserWorker, url: str, timeout: float, *, capture_json: bool = False, raw: bool = False) -> tuple:
     result_slot: dict = {"done": threading.Event()}
-    kind = "renderx" if capture_json else "render"
+    kind = "renderx" if capture_json else ("renderraw" if raw else "render")
     worker.queue.put(((kind, url), result_slot))
     if not result_slot["done"].wait(timeout=timeout):
         raise RuntimeError(f"browser render timed out after {timeout:.0f}s for {url}")
@@ -297,10 +299,12 @@ class Handler(BaseHTTPRequestHandler):
             if not target:
                 self._send_json({"error": "missing url"}, status=400)
                 return
-            capture_json = urllib.parse.parse_qs(parsed.query).get("capture", [""])[0] == "1"
+            params = urllib.parse.parse_qs(parsed.query)
+            capture_json = params.get("capture", [""])[0] == "1"
+            raw = params.get("raw", [""])[0] == "1"
             try:
                 status, body, final_url, xhrs = submit_render(
-                    self.worker, target, self.fetch_timeout, capture_json=capture_json
+                    self.worker, target, self.fetch_timeout, capture_json=capture_json, raw=raw
                 )
             except ValueError as error:
                 self._send_json({"error": str(error)}, status=400)
