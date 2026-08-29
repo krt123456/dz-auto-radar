@@ -60,6 +60,7 @@ class BrowserWorker(threading.Thread):
         self.queue: "queue.Queue[tuple[str, dict]]" = queue.Queue()
         self.playwright = None
         self.browser = None
+        self.contexts: dict[str, Any] = {}
         self.pages: dict[str, Any] = {}
 
     def run(self) -> None:
@@ -77,16 +78,19 @@ class BrowserWorker(threading.Thread):
             finally:
                 result_slot["done"].set()
 
-    def _page_for(self, origin: str):
-        page = self.pages.get(origin)
-        if page is None:
-            page = self.browser.new_page(
+    def _session_for(self, origin: str):
+        """Return (context, page) for an origin, creating and solving it."""
+        context = self.contexts.get(origin)
+        if context is None:
+            context = self.browser.new_context(
                 user_agent=USER_AGENT,
                 locale="en-GB",
                 viewport={"width": 1366, "height": 900},
             )
+            self.contexts[origin] = context
+            page = context.new_page()
             self.pages[origin] = page
-        return page
+        return context, self.pages[origin]
 
     def _solve(self, page, origin: str) -> None:
         page.goto(origin + "/", timeout=60_000, wait_until="domcontentloaded")
@@ -115,30 +119,25 @@ class BrowserWorker(threading.Thread):
         if parts.scheme != "https" or not parts.hostname:
             raise ValueError(f"only https URLs are accepted: {url!r}")
         origin = f"{parts.scheme}://{parts.netloc}"
-        page = self._page_for(origin)
+        context, page = self._session_for(origin)
         for attempt in range(SOLVE_ATTEMPTS):
             self._solve(page, origin)
             try:
-                result = page.evaluate(
-                    """async (u) => {
-                        const r = await fetch(u, {headers: {'Accept': 'application/json, text/html'}, credentials: 'include'});
-                        const t = await r.text();
-                        return {status: r.status, body: t, url: r.url};
-                    }""",
-                    url,
-                )
+                # context.request carries the solved WAF cookies, follows
+                # redirects (www/zone redirects included), and is CORS-free.
+                response = context.request.get(url, headers={"Accept": "application/json, text/html"}, timeout=45_000)
+                status = response.status
+                body = response.text()
             except Exception:
                 self._solve(page, origin)
                 time.sleep(2 * (attempt + 1))
                 continue
-            status = int(result.get("status", 0))
-            body = str(result.get("body", ""))[:MAX_RESPONSE_BYTES]
             if looks_like_challenge(status, body):
                 self._solve(page, origin)
                 time.sleep(2 * (attempt + 1))
                 continue
             time.sleep(POLITE_DELAY_SECONDS)
-            return status, body, str(result.get("url", url))
+            return status, body, response.url or url
         raise RuntimeError(f"fetch failed after {SOLVE_ATTEMPTS} attempts for {url}")
 
 
