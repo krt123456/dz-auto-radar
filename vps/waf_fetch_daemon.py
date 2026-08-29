@@ -118,14 +118,13 @@ class BrowserWorker(threading.Thread):
                 return
             time.sleep(1.5)
 
-    def _render(self, job: tuple[str, str]) -> tuple[int, str, str]:
+    def _render(self, url: str) -> tuple[int, str, str]:
         """Navigate a real browser page to url and return rendered HTML.
 
         Waits out JS WAF interstitials: polls until the document grows past a
         shell-sized threshold and challenge titles clear, bounded by a wait
         budget (default 3s extra, up to 30s via &wait=).
         """
-        url = job[1]
         wait_budget = RENDER_EXTRA_WAIT_SECONDS
         parts = urllib.parse.urlsplit(url)
         if parts.scheme != "https" or not parts.hostname:
