@@ -209,7 +209,10 @@ class BrowserWorker(threading.Thread):
                         if not (capture_json and len(captured) == 0):
                             break
                     time.sleep(1.5)
-                content = page.content()[:MAX_RESPONSE_BYTES]
+                if raw:
+                    content = page.evaluate("document.body.innerText")[:MAX_RESPONSE_BYTES]
+                else:
+                    content = page.content()[:MAX_RESPONSE_BYTES]
                 status = response.status if response is not None else 200
                 final_url = page.url
                 if len(content) > 100_000:
