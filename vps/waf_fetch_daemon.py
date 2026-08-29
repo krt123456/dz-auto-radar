@@ -32,6 +32,7 @@ SOLVE_ATTEMPTS = 3
 POLITE_DELAY_SECONDS = 0.4
 RENDER_EXTRA_WAIT_SECONDS = 3
 XHR_CAPTURE_WAIT_SECONDS = 8
+SESSION_REUSE_SECONDS = 1_800
 RENDER_ATTEMPTS = 3
 CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "un instant", "cf-chl")
 CONSENT_SELECTORS = (
@@ -82,6 +83,7 @@ class BrowserWorker(threading.Thread):
         self.browser = None
         self.contexts: dict[str, Any] = {}
         self.pages: dict[str, Any] = {}
+        self.solved_at: dict[str, float] = {}
 
     def run(self) -> None:
         self.playwright = sync_playwright_start()
@@ -116,9 +118,13 @@ class BrowserWorker(threading.Thread):
             self.contexts[origin] = context
             page = context.new_page()
             self.pages[origin] = page
+            self.solved_at.pop(origin, None)
         return context, self.pages[origin]
 
     def _solve(self, page, origin: str) -> None:
+        recent = time.time() - self.solved_at.get(origin, 0) < SESSION_REUSE_SECONDS
+        if recent:
+            return
         page.goto(origin + "/", timeout=60_000, wait_until="domcontentloaded")
         deadline = time.time() + SOLVE_WAIT_SECONDS
         clicked = False
@@ -137,8 +143,11 @@ class BrowserWorker(threading.Thread):
             except Exception:
                 content_length = 0
             if "just a moment" not in title and "un instant" not in title and content_length > 150_000:
+                self.solved_at[origin] = time.time()
                 return
             time.sleep(1.5)
+        # A minimal page may be legitimately small; accept after the wait.
+        self.solved_at[origin] = time.time()
 
     def _render(self, url: str, *, capture_json: bool = False) -> tuple:
         """Navigate a real browser page to url and return rendered HTML.
@@ -219,7 +228,7 @@ class BrowserWorker(threading.Thread):
             try:
                 # context.request carries the solved WAF cookies, follows
                 # redirects (www/zone redirects included), and is CORS-free.
-                response = context.request.get(url, headers={"Accept": "application/json, text/html"}, timeout=45_000)
+                response = context.request.get(url, headers={"Accept": "application/json, text/html"}, timeout=25_000)
                 status = response.status
                 body = response.text()
             except Exception:
@@ -265,7 +274,7 @@ def submit_render(worker: BrowserWorker, url: str, timeout: float, *, capture_js
 
 class Handler(BaseHTTPRequestHandler):
     worker: BrowserWorker | None = None
-    fetch_timeout: float = 90.0
+    fetch_timeout: float = 150.0
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
         sys.stderr.write("[waf-fetch] " + format % args + "\n")
@@ -322,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> int:
     parser = argparse.ArgumentParser(description="Loopback WAF-solving browser fetch daemon")
     parser.add_argument("--port", type=int, default=8977)
-    parser.add_argument("--fetch-timeout", type=float, default=90.0)
+    parser.add_argument("--fetch-timeout", type=float, default=150.0)
     args = parser.parse_args()
     Handler.worker = BrowserWorker()
     Handler.worker.start()
