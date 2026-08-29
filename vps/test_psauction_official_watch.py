@@ -130,9 +130,9 @@ class PsauctionWatchTest(unittest.TestCase):
         with self.assertRaisesRegex(watch.PsauctionWatchError, "non-SEK"):
             watch.parse_lot(payload, context="t")
 
-    def test_slug_without_number_fails_closed(self) -> None:
+    def test_unsafe_slug_fails_closed(self) -> None:
         with self.assertRaisesRegex(watch.PsauctionWatchError, "slug"):
-            watch.parse_lot(lot_payload(slug="totally-different"), context="t")
+            watch.parse_lot(lot_payload(slug="bad|slug with spaces"), context="t")
 
     def test_bad_end_time_fails_closed(self) -> None:
         with self.assertRaisesRegex(watch.PsauctionWatchError, "end time"):

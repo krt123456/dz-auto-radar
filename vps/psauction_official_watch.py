@@ -198,8 +198,8 @@ def parse_lot(raw: Any, *, context: str) -> Lot:
     title = clean(raw.get("name") or raw.get("altText"))
     if not number or not slug or not title:
         raise PsauctionWatchError(f"PS Auction lot {item_id} is missing identity fields")
-    if number not in slug:
-        raise PsauctionWatchError(f"PS Auction lot {item_id} slug does not carry its item number")
+    if re.search(r"\s|[\"'<>\\^`{}|]", slug):
+        raise PsauctionWatchError(f"PS Auction lot {item_id} has an invalid public slug")
     end_utc = parse_stockholm_end(raw.get("endtime"), error=f"PS Auction lot {item_id} end time")
     active = raw.get("active") is True
     cancelled = raw.get("cancelled") is True or raw.get("aicancelled") is True
