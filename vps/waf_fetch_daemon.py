@@ -93,7 +93,7 @@ class BrowserWorker(threading.Thread):
             job, result_slot = self.queue.get()
             try:
                 if job[0] == "render":
-                    result_slot["result"] = self._render(job[1])[:3]
+                    result_slot["result"] = self._render(job[1])
                 elif job[0] == "renderx":
                     result_slot["result"] = self._render(job[1], capture_json=True)
                 else:
