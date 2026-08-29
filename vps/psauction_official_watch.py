@@ -163,7 +163,7 @@ def fetch_ecb_sek_per_eur() -> tuple[float, str]:
         raise PsauctionWatchError("ECB SEK/EUR reference rate response is empty")
     header = lines[0].split(",")
     try:
-        value_index = header.index("value")
+        value_index = header.index("OBS_VALUE") if "OBS_VALUE" in header else header.index("value")
         date_index = header.index("TIME_PERIOD")
     except ValueError as error:
         raise PsauctionWatchError("ECB SEK/EUR reference rate CSV is malformed") from error
