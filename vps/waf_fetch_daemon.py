@@ -30,6 +30,7 @@ MAX_RESPONSE_BYTES = 40_000_000
 SOLVE_WAIT_SECONDS = 12
 SOLVE_ATTEMPTS = 3
 POLITE_DELAY_SECONDS = 0.4
+RENDER_EXTRA_WAIT_SECONDS = 3
 CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "cf-chl")
 CONSENT_SELECTORS = (
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
@@ -117,16 +118,35 @@ class BrowserWorker(threading.Thread):
                 return
             time.sleep(1.5)
 
-    def _render(self, url: str) -> tuple[int, str, str]:
-        """Navigate a real browser page to url and return rendered HTML."""
+    def _render(self, job: tuple[str, str]) -> tuple[int, str, str]:
+        """Navigate a real browser page to url and return rendered HTML.
+
+        Waits out JS WAF interstitials: polls until the document grows past a
+        shell-sized threshold and challenge titles clear, bounded by a wait
+        budget (default 3s extra, up to 30s via &wait=).
+        """
+        url = job[1]
+        wait_budget = RENDER_EXTRA_WAIT_SECONDS
         parts = urllib.parse.urlsplit(url)
         if parts.scheme != "https" or not parts.hostname:
             raise ValueError(f"only https URLs are accepted: {url!r}")
+        query_wait = urllib.parse.parse_qs(parts.query).get("wait", [""])[0]
+        if query_wait.isdigit():
+            wait_budget = min(max(int(query_wait), 0), 30)
         origin = f"{parts.scheme}://{parts.netloc}"
         context, page = self._session_for(origin)
         self._solve(page, origin)
         response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
-        time.sleep(3.0)
+        deadline = time.time() + wait_budget
+        while time.time() < deadline:
+            title = (page.title() or "").lower()
+            try:
+                content_length = len(page.content())
+            except Exception:
+                content_length = 0
+            if "just a moment" not in title and content_length > 100_000:
+                break
+            time.sleep(1.5)
         content = page.content()[:MAX_RESPONSE_BYTES]
         status = response.status if response is not None else 200
         return status, content, page.url
