@@ -17,6 +17,7 @@ import math
 import os
 import re
 import unicodedata
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -248,12 +249,53 @@ def parse_declared_total(markup: str) -> int:
     return int(match.group(1))
 
 
+ECB_FX_URL_TEMPLATE = (
+    "https://data-api.ecb.europa.eu/service/data/EXR/D.{currency}.EUR.SP00.A"
+    "?format=csvdata&lastNObservations=1"
+)
+
+
+def fetch_ecb_units_per_eur(currency: str) -> tuple[float, str]:
+    """Return (currency units per 1 EUR, observation date) from the ECB data API.
+
+    The founder requires every public offer to be displayed in EUR; Klaravik
+    Sweden publishes SEK bids and Klaravik Denmark publishes DKK bids, so each
+    run converts at the ECB daily reference rate and records it in the source
+    report for auditability.
+    """
+    url = ECB_FX_URL_TEMPLATE.format(currency=currency)
+    try:
+        response = urllib.request.urlopen(url, timeout=30)
+        text = response.read().decode("utf-8", "replace")
+    except Exception as error:
+        raise KlaravikWatchError(f"ECB {currency}/EUR reference rate unavailable: {error}") from error
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) < 2:
+        raise KlaravikWatchError(f"ECB {currency}/EUR reference rate response is empty")
+    header = lines[0].split(",")
+    try:
+        value_index = header.index("OBS_VALUE") if "OBS_VALUE" in header else header.index("value")
+        date_index = header.index("TIME_PERIOD")
+    except ValueError as error:
+        raise KlaravikWatchError(f"ECB {currency}/EUR reference rate CSV is malformed") from error
+    fields = lines[1].split(",")
+    try:
+        rate = float(fields[value_index])
+    except (ValueError, IndexError) as error:
+        raise KlaravikWatchError(f"ECB {currency}/EUR reference rate value is invalid") from error
+    if not math.isfinite(rate) or rate <= 0:
+        raise KlaravikWatchError(f"ECB {currency}/EUR reference rate value is out of range")
+    observation_date = fields[date_index] if date_index < len(fields) else ""
+    return rate, observation_date
+
+
 def parse_card(
     card: Tag,
     source: SourceSpec,
     *,
     observed_at: str,
     now: dt.datetime,
+    fx_rate: float | None = None,
 ) -> tuple[str, dict[str, Any] | None]:
     id_match = CARD_ID_RE.fullmatch(clean(card.get("id")))
     if id_match is None:
@@ -284,6 +326,18 @@ def parse_card(
     reserve_met = False if "product_card--reserve-not-reached" in reserve_classes else (
         True if card.select_one(".product_card__reserve-reached-tag") is not None else None
     )
+    if price is not None and source.currency == "EUR":
+        emitted_amount, emitted_currency, price_eur = price, "EUR", price
+        price_label = f"public current bid {price} EUR"
+    elif price is not None and fx_rate is not None and fx_rate > 0:
+        emitted_amount = round(price / fx_rate, 2)
+        if emitted_amount.is_integer():
+            emitted_amount = int(emitted_amount)
+        emitted_currency, price_eur = "EUR", emitted_amount
+        price_label = f"public current bid {price} {source.currency} (≈ EUR {emitted_amount})"
+    else:
+        emitted_amount, emitted_currency, price_eur = price, source.currency, None
+        price_label = "public current bid" if price is not None else "price not shown in public catalogue card"
     return "car", {
         "id": f"klaravik:{source.country.casefold()}:{item_id}",
         "source": source.key,
@@ -301,11 +355,11 @@ def parse_card(
         "fuel": normalize_fuel(title),
         "seller": "Klaravik public auction seller",
         "location": clean(location_node.get_text(" ", strip=True) if location_node else ""),
-        "price_amount": price,
-        "price_currency": source.currency,
-        "price_eur": price if source.currency == "EUR" else None,
+        "price_amount": emitted_amount,
+        "price_currency": emitted_currency,
+        "price_eur": price_eur,
         "price_kind": "current_bid" if price is not None else "unknown",
-        "price_label": "public current bid" if price is not None else "price not shown in public catalogue card",
+        "price_label": price_label,
         "bid_visibility": "public passenger-car catalogue summary",
         "bid_count": int(bid_value) if isinstance(bid_value, int) else None,
         "reserve_met": reserve_met,
@@ -331,6 +385,7 @@ def parse_page(
     page: int,
     observed_at: str,
     now: dt.datetime,
+    fx_rate: float | None = None,
 ) -> ParsedPage:
     total = parse_declared_total(markup)
     pages = max(1, math.ceil(total / PAGE_SIZE))
@@ -351,7 +406,7 @@ def parse_page(
         if id_match is None:
             raise KlaravikWatchError(f"{source.key} category card has no stable numeric ID")
         listed_ids.append(id_match.group(1))
-        result, row = parse_card(card, source, observed_at=observed_at, now=now)
+        result, row = parse_card(card, source, observed_at=observed_at, now=now, fx_rate=fx_rate)
         if result == "not_passenger_car":
             non_passenger_excluded += 1
         elif result == "ended":
@@ -383,10 +438,11 @@ def fetch_page(
     observed_at: str,
     now: dt.datetime,
     timeout: int,
+    fx_rate: float | None = None,
 ) -> ParsedPage:
     response = session.get(page_url(source, page), headers=HEADERS, timeout=timeout)
     response.raise_for_status()
-    return parse_page(response.text, source, page=page, observed_at=observed_at, now=now)
+    return parse_page(response.text, source, page=page, observed_at=observed_at, now=now, fx_rate=fx_rate)
 
 
 def _collect_coherent_snapshot(
@@ -396,11 +452,12 @@ def _collect_coherent_snapshot(
     observed_at: str,
     now: dt.datetime,
     timeout: int,
+    fx_rate: float | None = None,
 ) -> Catalogue:
-    first = fetch_page(session, source, page=1, observed_at=observed_at, now=now, timeout=timeout)
+    first = fetch_page(session, source, page=1, observed_at=observed_at, now=now, timeout=timeout, fx_rate=fx_rate)
     pages: dict[int, ParsedPage] = {1: first}
     for page in range(2, first.page_count + 1):
-        parsed = fetch_page(session, source, page=page, observed_at=observed_at, now=now, timeout=timeout)
+        parsed = fetch_page(session, source, page=page, observed_at=observed_at, now=now, timeout=timeout, fx_rate=fx_rate)
         if parsed.total != first.total or parsed.page_count != first.page_count:
             raise KlaravikSnapshotChanged(f"{source.key} Personbiler category changed during pagination")
         pages[page] = parsed
@@ -428,6 +485,7 @@ def build_watch(
     now: dt.datetime | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     source_specs: Iterable[SourceSpec] = SOURCES,
+    fx_rates: dict[str, float] | None = None,
 ) -> dict[str, Any]:
     if timeout < 5:
         raise ValueError("invalid Klaravik timeout")
@@ -437,14 +495,22 @@ def build_watch(
     now = now.astimezone(UTC)
     observed_at = now.isoformat()
     root_session = session or configured_session()
+    currencies = sorted({source.currency for source in source_specs if source.currency != "EUR"})
+    resolved_rates: dict[str, tuple[float, str]] = {}
+    for currency in currencies:
+        explicit = (fx_rates or {}).get(currency)
+        resolved_rates[currency] = (
+            (float(explicit), "explicitly provided") if explicit else fetch_ecb_units_per_eur(currency)
+        )
     catalogues: list[Catalogue] = []
     try:
         for source in source_specs:
+            fx_rate, fx_date = resolved_rates.get(source.currency, (None, "n/a"))
             last_change: KlaravikSnapshotChanged | None = None
             for attempt in range(1, SNAPSHOT_ATTEMPTS + 1):
                 try:
                     captured = _collect_coherent_snapshot(
-                        root_session, source, observed_at=observed_at, now=now, timeout=timeout,
+                        root_session, source, observed_at=observed_at, now=now, timeout=timeout, fx_rate=fx_rate,
                     )
                 except KlaravikSnapshotChanged as exc:
                     last_change = exc
@@ -478,6 +544,17 @@ def build_watch(
             "stable_ids_unique": True,
             "snapshot_attempts": catalogue.snapshot_attempts,
             "category_counts": {"car": len(catalogue.rows)},
+            "fx": (
+                {
+                    "base_currency": resolved_rates[catalogue.source.currency][1] and catalogue.source.currency,
+                    "display_currency": "EUR",
+                    "units_per_eur": resolved_rates[catalogue.source.currency][0],
+                    "observation_date": resolved_rates[catalogue.source.currency][1],
+                    "source": "ECB daily reference rate",
+                }
+                if catalogue.source.currency != "EUR" and catalogue.source.currency in resolved_rates
+                else {"base_currency": catalogue.source.currency, "display_currency": "EUR", "units_per_eur": 1.0}
+            ),
             "publication_ready": False,
         }
         for catalogue in catalogues

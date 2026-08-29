@@ -88,6 +88,7 @@ class KlaravikWatchTest(unittest.TestCase):
             watch.PAGE_SIZE = 2
             payload = watch.build_watch(
                 session=Session(self.responses()), source_specs=(SOURCE,), now=NOW, timeout=10,
+                fx_rates={"SEK": 10.0},
             )
         finally:
             watch.PAGE_SIZE = original_page_size
@@ -97,7 +98,10 @@ class KlaravikWatchTest(unittest.TestCase):
         self.assertEqual(row["id"], "klaravik:se:1")
         self.assertEqual(row["category"], "car")
         self.assertEqual(row["fuel"], "petrol")
-        self.assertEqual(row["price_amount"], 31000)
+        self.assertEqual(row["price_amount"], 3100)
+        self.assertEqual(row["price_currency"], "EUR")
+        self.assertEqual(row["price_eur"], 3100)
+        self.assertIn("31000 SEK", row["price_label"])
         self.assertEqual(row["bid_count"], 2)
         self.assertEqual(report["declared"], 3)
         self.assertEqual(report["non_passenger_excluded"], 2)
@@ -113,7 +117,7 @@ class KlaravikWatchTest(unittest.TestCase):
                 watch.page_url(SOURCE, 1): [PAGE_1, PAGE_1, PAGE_1],
                 watch.page_url(SOURCE, 2): [changed_second_page, PAGE_2],
             })
-            payload = watch.build_watch(session=session, source_specs=(SOURCE,), now=NOW, timeout=10)
+            payload = watch.build_watch(session=session, source_specs=(SOURCE,), now=NOW, timeout=10, fx_rates={"SEK": 10.0})
         finally:
             watch.PAGE_SIZE = original_page_size
         self.assertEqual(payload["row_count"], 1)
