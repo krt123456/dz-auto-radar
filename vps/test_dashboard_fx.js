@@ -211,8 +211,9 @@ function evaluate(sandbox, source) {
     const cardHtml = evaluate(validSandbox, "card(__offer)");
     check(cardHtml.includes("سعر الإعلان المرصود") && cardHtml.includes("شمول الضريبة غير مثبت"), "card must label listing price without claiming an actual purchase price");
     check(cardHtml.includes("€") && cardHtml.includes("دج"), "card must show EUR and DZD for known amounts");
-    check(cardHtml.includes("لم يُطبّق") && cardHtml.includes("لا تثبت أهلية الخصم"), "card must not invent a VAT deduction");
-    check(cardHtml.includes("ليست تكلفة فعلية"), "estimator must be explicitly non-actual");
+    const estimatorHtml = evaluate(validSandbox, "costEstimator(__offer)");
+    check(estimatorHtml.includes("لم يُطبّق") && estimatorHtml.includes("لا تثبت أهلية الخصم"), "estimator must not invent a VAT deduction");
+    check(estimatorHtml.includes("ليست تكلفة فعلية"), "estimator must be explicitly non-actual");
     check(evaluate(validSandbox, 'planningCost(10000,"1000","","500","0")') === null, "estimator must refuse an incomplete total");
     check(evaluate(validSandbox, 'planningCost(10000,"1000","750","500","0")') === 12250, "estimator must sum explicit user inputs");
     const fxNote = validSandbox.document.getElementById("fxnote").textContent;

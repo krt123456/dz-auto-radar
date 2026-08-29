@@ -23,6 +23,7 @@ function makeStorage(initial = {}) {
 }
 
 function stubElement(id) {
+  const attributes = new Map();
   return {
     value: "",
     checked: id === "flive",
@@ -39,6 +40,8 @@ function stubElement(id) {
       contains() { return false; },
     },
     addEventListener() {},
+    setAttribute(name, value) { attributes.set(name, String(value)); },
+    getAttribute(name) { return attributes.has(name) ? attributes.get(name) : null; },
   };
 }
 

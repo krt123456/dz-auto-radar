@@ -764,7 +764,7 @@ function validateOfficialAuctionWatchManifest(value){
   if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
   return value;
 }
-async function sha256Hex(buffer){
+async function sha256BytesHex(buffer){
   const digest=await crypto.subtle.digest("SHA-256",buffer);
   return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
 }
@@ -777,7 +777,7 @@ async function loadOfficialAuctionWatchParts(manifest,lane){
       const response=await fetch(`${descriptor.path}?v=${Date.now()}`,{cache:"no-store"});
       if(!response.ok)throw contractFailure();
       const raw=await response.arrayBuffer();
-      if(await sha256Hex(raw)!==descriptor.sha256)throw contractFailure();
+      if(await sha256BytesHex(raw)!==descriptor.sha256)throw contractFailure();
       let part;
       try{part=JSON.parse(new TextDecoder().decode(raw));}catch(error){throw contractFailure();}
       if(typeof part!=="object"||part===null||Array.isArray(part)||
@@ -1997,7 +1997,7 @@ function card(o){
     </div>
     <h2 class="title">${esc(o.t)}</h2>
     <div class="saving">
-      <strong>${fmtMoney(o.p)}</strong><span>سعر الإعلان</span>
+      <strong>${fmtMoney(o.p)}</strong><span>سعر الإعلان المرصود · شمول الضريبة غير مثبت</span>
     </div>
     <div class="meta">
       <div>🗓️ <b>${nf.format(o.y)}</b></div>
