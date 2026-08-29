@@ -31,7 +31,7 @@ SOLVE_WAIT_SECONDS = 12
 SOLVE_ATTEMPTS = 3
 POLITE_DELAY_SECONDS = 0.4
 RENDER_EXTRA_WAIT_SECONDS = 3
-CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "cf-chl")
+CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "un instant", "cf-chl")
 CONSENT_SELECTORS = (
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
     "#onetrust-accept-btn-handler",
@@ -39,11 +39,28 @@ CONSENT_SELECTORS = (
     "button:has-text('Accept all')",
     "button:has-text('Godkänn')",
     "button:has-text('Acceptera')",
+    "button:has-text('Tout accepter')",
+    "button:has-text('Accepter')",
 )
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
+# Cloudflare bot management flags vanilla Playwright pages (navigator.webdriver
+# among others); this init script presents a normal-browser fingerprint so the
+# managed challenge solves itself in the headless browser.
+STEALTH_INIT_SCRIPT = """
+Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+window.chrome = window.chrome || {runtime: {}};
+Object.defineProperty(navigator, 'languages', {get: () => ['en-GB', 'en']});
+Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+const origQuery = window.navigator.permissions && window.navigator.permissions.query;
+if (origQuery) {
+  window.navigator.permissions.query = (p) => p.name === 'notifications'
+    ? Promise.resolve({state: Notification.permission})
+    : origQuery(p);
+}
+"""
 
 
 def looks_like_challenge(status: int, body: str) -> bool:
@@ -91,6 +108,7 @@ class BrowserWorker(threading.Thread):
                 locale="en-GB",
                 viewport={"width": 1366, "height": 900},
             )
+            context.add_init_script(STEALTH_INIT_SCRIPT)
             self.contexts[origin] = context
             page = context.new_page()
             self.pages[origin] = page
@@ -114,7 +132,7 @@ class BrowserWorker(threading.Thread):
                 content_length = len(page.content())
             except Exception:
                 content_length = 0
-            if "just a moment" not in title and content_length > 150_000:
+            if "just a moment" not in title and "un instant" not in title and content_length > 150_000:
                 return
             time.sleep(1.5)
 
@@ -143,7 +161,11 @@ class BrowserWorker(threading.Thread):
                 content_length = len(page.content())
             except Exception:
                 content_length = 0
-            if "just a moment" not in title and content_length > 100_000:
+            if (
+                "just a moment" not in title
+                and "un instant" not in title
+                and content_length > 100_000
+            ):
                 break
             time.sleep(1.5)
         content = page.content()[:MAX_RESPONSE_BYTES]
