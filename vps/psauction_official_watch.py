@@ -46,6 +46,10 @@ MAX_ATTEMPTS = 6
 MAX_PAGES = 40
 MAX_TOTAL_ITEMS = 5_000
 MAX_PAGE_ITEMS = 60
+ECB_SEK_FX_URL = (
+    "https://data-api.ecb.europa.eu/service/data/EXR/D.SEK.EUR.SP00.A"
+    "?format=csvdata&lastNObservations=1"
+)
 YEAR_RE = re.compile(r"\b(19[7-9]\d|20[0-2]\d)\b")
 
 # Defensive title gate: the walked search type is cars by the source's own
@@ -140,6 +144,47 @@ def parse_stockholm_end(value: Any, *, error: str) -> dt.datetime:
         return dt.datetime(year, month, day, hour, minute, tzinfo=STOCKHOLM).astimezone(UTC)
     except ValueError as exc:
         raise PsauctionWatchError(f"{error}: {value!r}") from exc
+
+
+def fetch_ecb_sek_per_eur() -> tuple[float, str]:
+    """Return (SEK per EUR, observation date) from the public ECB data API.
+
+    The founder requires every public offer to be displayed in EUR; PS Auction
+    publishes SEK bids, so each run converts at the ECB daily reference rate
+    and records the rate used in the source report for auditability.
+    """
+    try:
+        response = urllib.request.urlopen(ECB_SEK_FX_URL, timeout=30)
+        text = response.read().decode("utf-8", "replace")
+    except Exception as error:
+        raise PsauctionWatchError(f"ECB SEK/EUR reference rate unavailable: {error}") from error
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) < 2:
+        raise PsauctionWatchError("ECB SEK/EUR reference rate response is empty")
+    header = lines[0].split(",")
+    try:
+        value_index = header.index("value")
+        date_index = header.index("TIME_PERIOD")
+    except ValueError as error:
+        raise PsauctionWatchError("ECB SEK/EUR reference rate CSV is malformed") from error
+    fields = lines[1].split(",")
+    try:
+        rate = float(fields[value_index])
+    except (ValueError, IndexError) as error:
+        raise PsauctionWatchError("ECB SEK/EUR reference rate value is invalid") from error
+    if not math.isfinite(rate) or rate <= 0:
+        raise PsauctionWatchError("ECB SEK/EUR reference rate value is out of range")
+    observation_date = fields[date_index] if date_index < len(fields) else ""
+    return rate, observation_date
+
+
+def to_eur(amount: int | float | None, sek_per_eur: float) -> int | float | None:
+    """Convert a public SEK amount into EUR at the given reference rate."""
+    if amount is None:
+        return None
+    converted = float(amount) / sek_per_eur
+    converted = round(converted, 2)
+    return int(converted) if converted.is_integer() else converted
 
 
 def parse_lot(raw: Any, *, context: str) -> Lot:
@@ -287,15 +332,15 @@ def infer_fuel(title: str) -> str:
     return "unknown"
 
 
-def normalize_lot(lot: Lot, *, observed_at: str) -> dict[str, Any]:
+def normalize_lot(lot: Lot, *, observed_at: str, sek_per_eur: float) -> dict[str, Any]:
     if lot.leading_bid is not None and lot.leading_bid > 0 and (lot.leading or lot.has_recent_bid):
-        price = lot.leading_bid
+        price = to_eur(lot.leading_bid, sek_per_eur)
         price_kind = "current_bid"
-        price_label = f"public leading bid {price} {lot.currency}"
+        price_label = f"public leading bid {lot.leading_bid} SEK (≈ EUR {price})"
     elif lot.leading_bid is not None and lot.leading_bid > 0:
-        price = lot.leading_bid
+        price = to_eur(lot.leading_bid, sek_per_eur)
         price_kind = "starting_bid"
-        price_label = f"public starting bid {price} {lot.currency}"
+        price_label = f"public starting bid {lot.leading_bid} SEK (≈ EUR {price})"
     else:
         price = None
         price_kind = "unknown"
@@ -321,8 +366,8 @@ def normalize_lot(lot: Lot, *, observed_at: str) -> dict[str, Any]:
         "location": lot.location,
         "image_url": lot.thumbnail,
         "price_amount": price,
-        "price_currency": lot.currency if price is not None else "",
-        "price_eur": None if lot.currency != "EUR" else price,
+        "price_currency": "EUR" if price is not None else "",
+        "price_eur": price,
         "price_kind": price_kind,
         "price_label": price_label,
         "bid_visibility": "public PS Auction search JSON",
@@ -351,6 +396,7 @@ def build_watch(
     fetch: Callable[[str], tuple[int, str]],
     now: dt.datetime | None = None,
     snapshot_attempts: int = DEFAULT_SNAPSHOT_ATTEMPTS,
+    sek_per_eur: float | None = None,
 ) -> dict[str, Any]:
     if not 1 <= snapshot_attempts <= MAX_ATTEMPTS:
         raise ValueError("invalid PS Auction snapshot-attempts")
@@ -359,6 +405,9 @@ def build_watch(
         raise ValueError("now must be timezone-aware")
     current = current.astimezone(UTC)
     observed_at = current.isoformat()
+    fx_sek_per_eur, fx_observation_date = fetch_ecb_sek_per_eur() if sek_per_eur is None else (
+        float(sek_per_eur), "explicitly provided"
+    )
     first: tuple[int, list[Lot]] | None = None
     second: tuple[int, list[Lot]] | None = None
     attempts_used = 0
@@ -389,11 +438,18 @@ def build_watch(
         if reason:
             exclusions[reason] += 1
             continue
-        rows.append(normalize_lot(lot, observed_at=observed_at))
+        rows.append(normalize_lot(lot, observed_at=observed_at, sek_per_eur=fx_sek_per_eur))
 
     report = {
         "status": "ok",
         "connector_status": "ok",
+        "fx": {
+            "base_currency": "SEK",
+            "display_currency": "EUR",
+            "sek_per_eur": fx_sek_per_eur,
+            "observation_date": fx_observation_date,
+            "source": "ECB daily reference rate" if fx_observation_date != "explicitly provided" else "explicitly provided",
+        },
         "catalogue_scope": (
             "every current public lot in the source's own Bilar (cars) search type; boats, "
             "campers, trailers, heavy vehicles, and ATVs are separate search types excluded "
@@ -437,9 +493,14 @@ def main() -> int:
     parser.add_argument("--fetch-base", default="http://127.0.0.1:8977/fetch")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--snapshot-attempts", type=int, default=DEFAULT_SNAPSHOT_ATTEMPTS)
+    parser.add_argument("--fx-rate", type=float, default=None, help="Explicit SEK per EUR rate; otherwise fetched from ECB")
     args = parser.parse_args()
     started = time.monotonic()
-    payload = build_watch(fetch=make_fetcher(args), snapshot_attempts=args.snapshot_attempts)
+    payload = build_watch(
+        fetch=make_fetcher(args),
+        snapshot_attempts=args.snapshot_attempts,
+        sek_per_eur=args.fx_rate,
+    )
     atomic_write_json(args.out, payload)
     report = payload["source_reports"][SOURCE_KEY]
     print(json.dumps({

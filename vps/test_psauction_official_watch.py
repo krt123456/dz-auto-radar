@@ -102,7 +102,7 @@ class PsauctionWatchTest(unittest.TestCase):
             title="Volvo V70 2008", end="2026-08-01 12:00",
         )
         responses = {watch.SOURCE_ORIGIN + watch.SEARCH_PATH: [catalog([car, ended])] * 2}
-        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1)
+        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0)
         report = payload["source_reports"][watch.SOURCE_KEY]
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["rows"][0]["id"], "psauction-se:1405978")
@@ -113,7 +113,7 @@ class PsauctionWatchTest(unittest.TestCase):
         unbid = lot_payload(leading=False, has_recent_bid=False)
         bid = lot_payload(item_id=9, number="1500009", slug="bmw-x5-1500009", title="BMW X5 2019", leading=True, has_recent_bid=True)
         responses = {watch.SOURCE_ORIGIN + watch.SEARCH_PATH: [catalog([unbid, bid])] * 2}
-        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1)
+        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0)
         kinds = {row["id"]: row["price_kind"] for row in payload["rows"]}
         self.assertEqual(kinds["psauction-se:1405978"], "starting_bid")
         self.assertEqual(kinds["psauction-se:1500009"], "current_bid")
@@ -121,7 +121,7 @@ class PsauctionWatchTest(unittest.TestCase):
     def test_zero_bid_is_unknown_price(self) -> None:
         zero = lot_payload(leading_bid=0)
         lot = watch.parse_lot(zero, context="t")
-        row = watch.normalize_lot(lot, observed_at="2026-08-29T12:00:00+00:00")
+        row = watch.normalize_lot(lot, observed_at="2026-08-29T12:00:00+00:00", sek_per_eur=11.2)
         self.assertIsNone(row["price_amount"])
         self.assertEqual(row["price_kind"], "unknown")
 
@@ -142,7 +142,7 @@ class PsauctionWatchTest(unittest.TestCase):
         cancelled = lot_payload(item_id=3, number="1500003", slug="audi-a4-1500003", title="Audi A4 2015", cancelled=True)
         inactive = lot_payload(item_id=4, number="1500004", slug="vw-golf-1500004", title="VW Golf 2014", active=False)
         responses = {watch.SOURCE_ORIGIN + watch.SEARCH_PATH: [catalog([CAR, cancelled, inactive])] * 2}
-        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1)
+        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0)
         report = payload["source_reports"][watch.SOURCE_KEY]
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(
@@ -172,7 +172,7 @@ class PsauctionWatchTest(unittest.TestCase):
             base: [search_payload(page_one, total=6, has_next=True)] * 2,
             base + "?page=2": [search_payload(page_two, total=6, page=2)] * 2,
         }
-        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1)
+        payload = watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0)
         self.assertEqual(payload["row_count"], 6)
         report = payload["source_reports"][watch.SOURCE_KEY]
         self.assertEqual(report["declared"], 6)
@@ -187,7 +187,7 @@ class PsauctionWatchTest(unittest.TestCase):
             ],
         }
         with self.assertRaisesRegex(watch.PsauctionWatchError, "total changed"):
-            watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1)
+            watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0)
 
     def test_lot_facts_changed_between_passes_fails_closed(self) -> None:
         base = watch.SOURCE_ORIGIN + watch.SEARCH_PATH
@@ -198,20 +198,33 @@ class PsauctionWatchTest(unittest.TestCase):
             ],
         }
         with self.assertRaisesRegex(watch.PsauctionWatchError, "facts changed"):
-            watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1)
+            watch.build_watch(fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0)
 
     def test_year_and_fuel_inference(self) -> None:
         lot = watch.parse_lot(lot_payload(title="Kia E-Soul Electric 64 kWh 2021", slug="kia-e-soul-1405978"), context="t")
-        row = watch.normalize_lot(lot, observed_at="2026-08-29T12:00:00+00:00")
+        row = watch.normalize_lot(lot, observed_at="2026-08-29T12:00:00+00:00", sek_per_eur=11.2)
         self.assertEqual(row["year"], 2021)
         self.assertEqual(row["fuel"], "electric")
 
-    def test_sek_currency_kept_with_eur_null(self) -> None:
+    def test_sek_bid_converted_to_eur(self) -> None:
         lot = watch.parse_lot(CAR, context="t")
-        row = watch.normalize_lot(lot, observed_at="2026-08-29T12:00:00+00:00")
-        self.assertEqual(row["price_currency"], "SEK")
-        self.assertEqual(row["price_amount"], 15000.0)
-        self.assertIsNone(row["price_eur"])
+        row = watch.normalize_lot(lot, observed_at="2026-08-29T12:00:00+00:00", sek_per_eur=12.0)
+        self.assertEqual(row["price_currency"], "EUR")
+        self.assertEqual(row["price_amount"], 1250.0)
+        self.assertEqual(row["price_eur"], 1250.0)
+        self.assertEqual(row["price_kind"], "starting_bid")
+        self.assertIn("15000 SEK", row["price_label"])
+        self.assertIn("EUR 1250", row["price_label"])
+
+    def test_eur_conversion_in_full_build(self) -> None:
+        responses = {watch.SOURCE_ORIGIN + watch.SEARCH_PATH: [catalog([CAR])] * 2}
+        payload = watch.build_watch(
+            fetch=FakeFetcher(responses), now=NOW, snapshot_attempts=1, sek_per_eur=10.0
+        )
+        report = payload["source_reports"][watch.SOURCE_KEY]
+        self.assertEqual(report["fx"]["sek_per_eur"], 10.0)
+        self.assertEqual(payload["rows"][0]["price_eur"], 1500.0)
+        self.assertEqual(payload["rows"][0]["price_currency"], "EUR")
 
 
 if __name__ == "__main__":

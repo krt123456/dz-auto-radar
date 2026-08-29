@@ -1,40 +1,35 @@
 #!/usr/bin/env python3
 """Loopback browser fetch daemon for sources behind JS WAF challenges.
 
-The official auction collectors must read sources whose WAF (AWS WAF, from
-measurements on PS Auction) rejects plain HTTP clients with a 202/403 browser
-challenge.  A headless Chromium solves that challenge once per domain and can
-then issue same-origin ``fetch()`` calls from inside the real page context.
+PS Auction (and similar sources) answer plain HTTP clients with a JS WAF
+challenge.  A real headless Chromium solves that challenge once per domain and
+can then issue same-origin ``fetch()`` calls from inside the real page.
 
-This daemon exposes that solved session over loopback only:
+This daemon exposes the solved browser session over loopback only:
 
     GET /healthz                        -> {"ok": true}
     GET /fetch?url=<absolute https URL> -> {"status": int, "body": str, "url": str}
 
-Design rules:
-- Binds to 127.0.0.1 only; never exposes the browser to the network.
-- One solved page per origin; fetch calls are serialized per origin with
-  polite pacing, and a bounded re-solve is performed when a challenge
-  reappears or the session stops returning real content.
-- Never follows non-HTTPS URLs and never returns more than a size cap.
+Threading model: Playwright sync objects may only be touched from the thread
+that created them, so ALL browser work runs on one dedicated worker thread fed
+by a queue; HTTP handler threads block on a per-request result slot.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import queue
 import sys
 import threading
 import time
 import urllib.parse
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from playwright.sync_api import sync_playwright
-
-MAX_BODY_BYTES = 12_000_000
 MAX_RESPONSE_BYTES = 40_000_000
-SOLVE_WAIT_SECONDS = 10
+SOLVE_WAIT_SECONDS = 12
 SOLVE_ATTEMPTS = 3
-FETCH_TIMEOUT_SECONDS = 45
+POLITE_DELAY_SECONDS = 0.4
 CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "cf-chl")
 CONSENT_SELECTORS = (
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
@@ -50,64 +45,81 @@ USER_AGENT = (
 )
 
 
-class OriginSession:
-    """A solved browser page for one https origin."""
+def looks_like_challenge(status: int, body: str) -> bool:
+    if status in (202, 403, 503):
+        return True
+    lowered = body[:4000].lower()
+    return any(marker in lowered for marker in CHALLENGE_MARKERS) and len(body) < 60_000
 
-    def __init__(self, browser, origin: str) -> None:
-        self.browser = browser
-        self.origin = origin
-        self.page = browser.new_page(
-            user_agent=USER_AGENT,
-            locale="en-GB",
-            viewport={"width": 1366, "height": 900},
+
+class BrowserWorker(threading.Thread):
+    """Single thread that owns Playwright and processes queued fetch jobs."""
+
+    def __init__(self) -> None:
+        super().__init__(daemon=True, name="waf-fetch-browser")
+        self.queue: "queue.Queue[tuple[str, dict]]" = queue.Queue()
+        self.playwright = None
+        self.browser = None
+        self.pages: dict[str, Any] = {}
+
+    def run(self) -> None:
+        self.playwright = sync_playwright_start()
+        self.browser = self.playwright.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
         )
-        self.lock = threading.Lock()
-        self.last_used = time.time()
-        self.solved = False
+        while True:
+            url, result_slot = self.queue.get()
+            try:
+                result_slot["result"] = self._fetch(url)
+            except Exception as error:  # surfaced to the HTTP handler
+                result_slot["error"] = f"{type(error).__name__}: {error}"
+            finally:
+                result_slot["done"].set()
 
-    def _looks_like_challenge(self, status: int, body: str) -> bool:
-        if status in (202, 403, 503):
-            return True
-        lowered = body[:4000].lower()
-        return any(marker in lowered for marker in CHALLENGE_MARKERS) and len(body) < 60_000
+    def _page_for(self, origin: str):
+        page = self.pages.get(origin)
+        if page is None:
+            page = self.browser.new_page(
+                user_agent=USER_AGENT,
+                locale="en-GB",
+                viewport={"width": 1366, "height": 900},
+            )
+            self.pages[origin] = page
+        return page
 
-    def _solve(self) -> None:
-        self.page.goto(self.origin + "/", timeout=60_000, wait_until="domcontentloaded")
+    def _solve(self, page, origin: str) -> None:
+        page.goto(origin + "/", timeout=60_000, wait_until="domcontentloaded")
         deadline = time.time() + SOLVE_WAIT_SECONDS
         clicked = False
         while time.time() < deadline:
             if not clicked:
                 for selector in CONSENT_SELECTORS:
                     try:
-                        self.page.click(selector, timeout=1_500)
+                        page.click(selector, timeout=1_500)
                         clicked = True
                         break
                     except Exception:
                         continue
-            title = (self.page.title() or "").lower()
-            content_length = len(self.page.content())
+            title = (page.title() or "").lower()
+            try:
+                content_length = len(page.content())
+            except Exception:
+                content_length = 0
             if "just a moment" not in title and content_length > 150_000:
-                self.solved = True
                 return
             time.sleep(1.5)
-        # A minimal page may be legitimately small; accept after the wait.
-        self.solved = True
 
-    def ensure_solved(self) -> None:
-        if not self.solved:
-            self._solve()
-
-    def resolve(self) -> None:
-        self.solved = False
-        self._solve()
-
-    def fetch(self, url: str) -> tuple[int, str]:
-        if urllib.parse.urlsplit(url).origin() != self.origin:
-            raise ValueError(f"cross-origin fetch refused for {url}")
+    def _fetch(self, url: str) -> tuple[int, str, str]:
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme != "https" or not parts.hostname:
+            raise ValueError(f"only https URLs are accepted: {url!r}")
+        origin = f"{parts.scheme}://{parts.netloc}"
+        page = self._page_for(origin)
         for attempt in range(SOLVE_ATTEMPTS):
-            self.ensure_solved()
+            self._solve(page, origin)
             try:
-                result = self.page.evaluate(
+                result = page.evaluate(
                     """async (u) => {
                         const r = await fetch(u, {headers: {'Accept': 'application/json, text/html'}, credentials: 'include'});
                         const t = await r.text();
@@ -116,67 +128,40 @@ class OriginSession:
                     url,
                 )
             except Exception:
-                self.resolve()
+                self._solve(page, origin)
                 time.sleep(2 * (attempt + 1))
                 continue
             status = int(result.get("status", 0))
             body = str(result.get("body", ""))[:MAX_RESPONSE_BYTES]
-            if self._looks_like_challenge(status, body):
-                self.resolve()
+            if looks_like_challenge(status, body):
+                self._solve(page, origin)
                 time.sleep(2 * (attempt + 1))
                 continue
-            self.last_used = time.time()
-            return status, body
+            time.sleep(POLITE_DELAY_SECONDS)
+            return status, body, str(result.get("url", url))
         raise RuntimeError(f"fetch failed after {SOLVE_ATTEMPTS} attempts for {url}")
 
 
-class FetchDaemon:
-    def __init__(self, max_sessions: int = 4) -> None:
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-blink-features=AutomationControlled"],
-        )
-        self.sessions: dict[str, OriginSession] = {}
-        self.global_lock = threading.Lock()
-        self.max_sessions = max_sessions
+def sync_playwright_start():
+    from playwright.sync_api import sync_playwright
 
-    def session_for(self, origin: str) -> OriginSession:
-        with self.global_lock:
-            session = self.sessions.get(origin)
-            if session is None:
-                if len(self.sessions) >= self.max_sessions:
-                    oldest_origin = min(self.sessions, key=lambda o: self.sessions[o].last_used)
-                    try:
-                        self.sessions[oldest_origin].page.close()
-                    except Exception:
-                        pass
-                    del self.sessions[oldest_origin]
-                session = OriginSession(self.browser, origin)
-                self.sessions[origin] = session
-            return session
+    manager = sync_playwright()
+    return manager.start()
 
-    def fetch(self, url: str) -> tuple[int, str, str]:
-        parts = urllib.parse.urlsplit(url)
-        if parts.scheme != "https" or not parts.hostname:
-            raise ValueError(f"only https URLs are accepted: {url!r}")
-        origin = urllib.parse.urlsplit(url).scheme + "://" + urllib.parse.urlsplit(url).netloc
-        session = self.session_for(origin)
-        with session.lock:
-            time.sleep(0.4)
-            status, body = session.fetch(url)
-            return status, body, url
 
-    def stop(self) -> None:
-        try:
-            self.browser.close()
-            self.playwright.stop()
-        except Exception:
-            pass
+def submit_fetch(worker: BrowserWorker, url: str, timeout: float) -> tuple[int, str, str]:
+    result_slot: dict = {"done": threading.Event()}
+    worker.queue.put((url, result_slot))
+    if not result_slot["done"].wait(timeout=timeout):
+        raise RuntimeError(f"browser fetch timed out after {timeout:.0f}s for {url}")
+    if "error" in result_slot:
+        raise RuntimeError(result_slot["error"])
+    return result_slot["result"]
 
 
 class Handler(BaseHTTPRequestHandler):
-    daemon: FetchDaemon | None = None
+    worker: BrowserWorker | None = None
+    fetch_timeout: float = 90.0
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
         sys.stderr.write("[waf-fetch] " + format % args + "\n")
@@ -201,9 +186,8 @@ class Handler(BaseHTTPRequestHandler):
         if not target:
             self._send_json({"error": "missing url"}, status=400)
             return
-        assert self.daemon is not None
         try:
-            status, body, final_url = self.daemon.fetch(target)
+            status, body, final_url = submit_fetch(self.worker, target, self.fetch_timeout)
         except ValueError as error:
             self._send_json({"error": str(error)}, status=400)
             return
@@ -214,10 +198,13 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Loopback WAF-solving fetch daemon")
+    parser = argparse.ArgumentParser(description="Loopback WAF-solving browser fetch daemon")
     parser.add_argument("--port", type=int, default=8977)
+    parser.add_argument("--fetch-timeout", type=float, default=90.0)
     args = parser.parse_args()
-    Handler.daemon = FetchDaemon()
+    Handler.worker = BrowserWorker()
+    Handler.worker.start()
+    Handler.fetch_timeout = args.fetch_timeout
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     print(f"[waf-fetch] listening on 127.0.0.1:{args.port}", flush=True)
     try:
@@ -225,8 +212,6 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        assert Handler.daemon is not None
-        Handler.daemon.stop()
         server.server_close()
     return 0
 
