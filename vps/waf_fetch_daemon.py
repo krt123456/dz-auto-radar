@@ -31,6 +31,7 @@ SOLVE_WAIT_SECONDS = 12
 SOLVE_ATTEMPTS = 3
 POLITE_DELAY_SECONDS = 0.4
 RENDER_EXTRA_WAIT_SECONDS = 3
+XHR_CAPTURE_WAIT_SECONDS = 8
 CHALLENGE_MARKERS = ("aws-waf-token", "captcha-bypass", "just a moment", "un instant", "cf-chl")
 CONSENT_SELECTORS = (
     "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
@@ -91,7 +92,9 @@ class BrowserWorker(threading.Thread):
             job, result_slot = self.queue.get()
             try:
                 if job[0] == "render":
-                    result_slot["result"] = self._render(job[1])
+                    result_slot["result"] = self._render(job[1])[:3]
+                elif job[0] == "renderx":
+                    result_slot["result"] = self._render(job[1], capture_json=True)
                 else:
                     result_slot["result"] = self._fetch(job[1])
             except Exception as error:  # surfaced to the HTTP handler
@@ -136,12 +139,14 @@ class BrowserWorker(threading.Thread):
                 return
             time.sleep(1.5)
 
-    def _render(self, url: str) -> tuple[int, str, str]:
+    def _render(self, url: str, *, capture_json: bool = False) -> tuple[int, str, str, list]:
         """Navigate a real browser page to url and return rendered HTML.
 
         Waits out JS WAF interstitials: polls until the document grows past a
         shell-sized threshold and challenge titles clear, bounded by a wait
-        budget (default 3s extra, up to 30s via &wait=).
+        budget (default 3s extra, up to 30s via &wait=).  With capture_json a
+        list of JSON XHR/fetch payloads observed during the render is returned
+        as the fourth element.
         """
         wait_budget = RENDER_EXTRA_WAIT_SECONDS
         parts = urllib.parse.urlsplit(url)
@@ -152,25 +157,44 @@ class BrowserWorker(threading.Thread):
             wait_budget = min(max(int(query_wait), 0), 30)
         origin = f"{parts.scheme}://{parts.netloc}"
         context, page = self._session_for(origin)
-        self._solve(page, origin)
-        response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
-        deadline = time.time() + wait_budget
-        while time.time() < deadline:
-            title = (page.title() or "").lower()
+        captured: list = []
+
+        def on_response(resp) -> None:
+            if not capture_json:
+                return
             try:
-                content_length = len(page.content())
+                ctype = resp.headers.get("content-type", "")
+                if "json" in ctype and resp.request.resource_type in ("xhr", "fetch"):
+                    captured.append({
+                        "url": resp.url[:400],
+                        "body": resp.text()[:MAX_RESPONSE_BYTES],
+                    })
             except Exception:
-                content_length = 0
-            if (
-                "just a moment" not in title
-                and "un instant" not in title
-                and content_length > 100_000
-            ):
-                break
-            time.sleep(1.5)
-        content = page.content()[:MAX_RESPONSE_BYTES]
-        status = response.status if response is not None else 200
-        return status, content, page.url
+                pass
+
+        page.on("response", on_response)
+        try:
+            response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
+            deadline = time.time() + max(wait_budget, XHR_CAPTURE_WAIT_SECONDS if capture_json else 0)
+            while time.time() < deadline:
+                title = (page.title() or "").lower()
+                try:
+                    content_length = len(page.content())
+                except Exception:
+                    content_length = 0
+                if (
+                    "just a moment" not in title
+                    and "un instant" not in title
+                    and content_length > 100_000
+                ):
+                    if not (capture_json and len(captured) == 0):
+                        break
+                time.sleep(1.5)
+            content = page.content()[:MAX_RESPONSE_BYTES]
+            status = response.status if response is not None else 200
+            return status, content, page.url, captured
+        finally:
+            page.remove_listener("response", on_response)
 
     def _fetch(self, url: str) -> tuple[int, str, str]:
         parts = urllib.parse.urlsplit(url)
@@ -216,9 +240,10 @@ def submit_fetch(worker: BrowserWorker, url: str, timeout: float) -> tuple[int, 
     return result_slot["result"]
 
 
-def submit_render(worker: BrowserWorker, url: str, timeout: float) -> tuple[int, str, str]:
+def submit_render(worker: BrowserWorker, url: str, timeout: float, *, capture_json: bool = False) -> tuple:
     result_slot: dict = {"done": threading.Event()}
-    worker.queue.put((("render", url), result_slot))
+    kind = "renderx" if capture_json else "render"
+    worker.queue.put(((kind, url), result_slot))
     if not result_slot["done"].wait(timeout=timeout):
         raise RuntimeError(f"browser render timed out after {timeout:.0f}s for {url}")
     if "error" in result_slot:
@@ -251,15 +276,18 @@ class Handler(BaseHTTPRequestHandler):
             if not target:
                 self._send_json({"error": "missing url"}, status=400)
                 return
+            capture_json = urllib.parse.parse_qs(parsed.query).get("capture", [""])[0] == "1"
             try:
-                status, body, final_url = submit_render(self.worker, target, self.fetch_timeout)
+                status, body, final_url, xhrs = submit_render(
+                    self.worker, target, self.fetch_timeout, capture_json=capture_json
+                )
             except ValueError as error:
                 self._send_json({"error": str(error)}, status=400)
                 return
             except Exception as error:
                 self._send_json({"error": f"{type(error).__name__}: {error}"}, status=502)
                 return
-            self._send_json({"status": status, "body": body, "url": final_url})
+            self._send_json({"status": status, "body": body, "url": final_url, "xhrs": xhrs})
             return
         if parsed.path != "/fetch":
             self._send_json({"error": "unknown endpoint"}, status=404)
