@@ -112,6 +112,9 @@ OFFICIAL_AUCTION_SOURCE_COUNTRY_OVERRIDES = {
     # Belgian asset cards; retain the card country just as the collector and
     # central watch builder do.
     "agorastore": SCHENGEN_COUNTRIES,
+    # Troostwijk's public Cars subcategories list each lot's official asset
+    # location (NL, BE, AT, SI, FR observed); retain the per-lot country.
+    "troostwijk": SCHENGEN_COUNTRIES,
     "justiz-auktion": frozenset({"DE", "AT"}),
     "retrade": frozenset({"DK", "FI", "NO", "SE"}),
 }
