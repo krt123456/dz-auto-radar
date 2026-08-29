@@ -336,7 +336,8 @@ def parse_card(
         emitted_currency, price_eur = "EUR", emitted_amount
         price_label = f"public current bid {price} {source.currency} (≈ EUR {emitted_amount})"
     else:
-        emitted_amount, emitted_currency, price_eur = price, source.currency, None
+        emitted_amount, price_eur = price, None
+        emitted_currency = source.currency if price is not None else ""
         price_label = "public current bid" if price is not None else "price not shown in public catalogue card"
     return "car", {
         "id": f"klaravik:{source.country.casefold()}:{item_id}",
