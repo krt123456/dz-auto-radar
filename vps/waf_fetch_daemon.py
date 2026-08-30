@@ -190,10 +190,17 @@ class BrowserWorker(threading.Thread):
             status = 0
             content = ""
             final_url = url
+            response = None
             for attempt in range(RENDER_ATTEMPTS):
                 captured.clear()
                 self._solve(page, origin)
-                response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
+                try:
+                    response = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
+                except Exception:
+                    # JS WAF interstitials often redirect mid-navigation; let
+                    # the retry loop take another pass after a pause.
+                    time.sleep(2 * (attempt + 1))
+                    continue
                 deadline = time.time() + max(wait_budget, XHR_CAPTURE_WAIT_SECONDS if capture_json else 0)
                 while time.time() < deadline:
                     title = (page.title() or "").lower()
