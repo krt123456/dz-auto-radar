@@ -32,6 +32,7 @@ SCHENGEN_WIDE_WATCH="$STATE/runtime/schengen_wide_official_auction_watch.json"
 RETRADE_WATCH="$STATE/runtime/retrade_official_auction_watch.json"
 TROOSTWIJK_WATCH="$STATE/runtime/troostwijk_official_auction_watch.json"
 PSAUCTION_WATCH="$STATE/runtime/psauction_se_official_auction_watch.json"
+EDRAZBE_WATCH="$STATE/runtime/edrazbe_si_official_auction_watch.json"
 AUKSJONEN_WATCH="$STATE/runtime/auksjonen_watch.json"
 AUTOBID_WATCH="$STATE/runtime/autobid_official_auction_watch.json"
 EXLEASINGCAR_WATCH="$STATE/runtime/exleasingcar_official_auction_watch.json"
@@ -336,6 +337,17 @@ run_official_watch "psauction-se" \
   --timeout "${RADAR_PSAUCTION_WATCH_TIMEOUT_SEC:-45}" \
   --snapshot-attempts "${RADAR_PSAUCTION_SNAPSHOT_ATTEMPTS:-3}"
 
+# eDražbe publishes its sales through a POST JSON API that only the site's
+# own front-end calls, so the collector reads it via the daemon's
+# render+capture mode.  Two-pass coherence on the captured publication lists.
+run_official_watch "edrazbe-si" \
+  python3 /opt/sonardeals-radar/edrazbe_official_watch.py \
+  --out "$EDRAZBE_WATCH" \
+  --fetch-base "${RADAR_WAF_FETCH_BASE_RENDER:-http://127.0.0.1:8977/render}" \
+  --timeout "${RADAR_EDRAZBE_WATCH_TIMEOUT_SEC:-170}" \
+  --render-wait "${RADAR_EDRAZBE_RENDER_WAIT:-20}" \
+  --snapshot-attempts "${RADAR_EDRAZBE_SNAPSHOT_ATTEMPTS:-3}"
+
 # Bilauppboð exposes a small, finite public catalogue.  Read it after the
 # broad parallel batch has quiesced so its two-pass coherence proof is not
 # distorted by the large concurrent network burst from unrelated collectors.
@@ -356,6 +368,7 @@ for watch_file in \
   "$AUTOBID_WATCH" "$EXLEASINGCAR_WATCH" "$VPAUTO_WATCH" "$RBAUCTION_WATCH" "$AUTOROLA_WATCH" "$HUUTOKAUPAT_WATCH" "$VAVATO_WATCH" "$PONIP_WATCH" "$CARAUKCE_WATCH" "$AURENA_WATCH" "$AUCTIONMASTER_WATCH" "$BILWEB_WATCH" "$KVDCARS_WATCH" "$BILAUPPBOD_WATCH" "$KIERTONET_WATCH" "$AUKTIONSHUSET_DAB_WATCH" "$ASTE_WATCH" "$KLARAVIK_WATCH" "$VEACOM_WATCH" "$AUTOAUCTION24_WATCH" "$AUCTION24_CZ_WATCH" "$PVP_WATCH" \
   "$AUTOMOTIVE_AUCTIONS_NL_WATCH" \
   "$PSAUCTION_WATCH" \
+  "$EDRAZBE_WATCH" \
   "$SCHENGEN_WIDE_WATCH" "$RETRADE_WATCH" "$TROOSTWIJK_WATCH" "$AGORASTORE_WATCH" \
   "$SOURCE_ADAPTER_WATCH"; do
   if [[ -s "$watch_file" ]]; then
