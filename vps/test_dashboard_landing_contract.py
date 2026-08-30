@@ -64,6 +64,17 @@ def main() -> None:
             canonicals.append(attrs.get("href"))
     require(canonicals == [CANONICAL], f"canonical must be exactly {CANONICAL}")
 
+    icons = []
+    for tag in re.findall(r"<link\b[^>]*>", source, re.IGNORECASE):
+        attrs = attributes(tag)
+        if "icon" in attrs.get("rel", "").lower().split():
+            icons.append(attrs.get("href", ""))
+    require(len(icons) == 1, f"expected one favicon link, found {len(icons)}")
+    require(
+        icons[0].startswith("data:image/svg+xml,%3Csvg") and "favicon.ico" not in icons[0].lower(),
+        "favicon must be an inline SVG data URI",
+    )
+
     expected_properties = {
         "og:type": "website",
         "og:locale": "ar_DZ",
@@ -124,6 +135,28 @@ def main() -> None:
     for element_id in ("lock", "lockcard", "pin", "enter", "remember", "lockmsg", "app"):
         require(len(re.findall(rf'\bid="{element_id}"', source)) == 1, f"PIN flow ID {element_id!r} must remain unique")
     require(re.search(r'<div\s+class="wrap hidden"\s+id="app">', source) is not None, "app must be hidden in initial HTML")
+
+    refresh_group_match = re.search(
+        r'<div\b(?=[^>]*\bid="manualRefreshControls")[^>]*>(.*?)</div>',
+        source,
+        re.DOTALL | re.IGNORECASE,
+    )
+    require(refresh_group_match is not None, "manual refresh controls need one bounded group")
+    refresh_group_tag = refresh_group_match.group(0).split(">", 1)[0] + ">"
+    refresh_group_attrs = attributes(refresh_group_tag)
+    require(
+        re.search(r"\shidden(?:\s|=|>)", refresh_group_tag, re.IGNORECASE) is not None,
+        "manual refresh controls must remain hidden while their queue consumer is disabled",
+    )
+    require(refresh_group_attrs.get("aria-hidden") == "true", "hidden refresh controls must leave the accessibility tree")
+    refresh_group = refresh_group_match.group(1)
+    for element_id in ("refreshBtn", "fullRefreshBtn", "refreshStatus"):
+        require(f'id="{element_id}"' in refresh_group, f"manual refresh wiring lost {element_id}")
+    compact_source = re.sub(r"\s+", "", source)
+    require(
+        ".refreshctl[hidden]{display:none!important}" in compact_source,
+        "author styles must not override the hidden refresh group",
+    )
 
     runtime_match = re.search(r'<script>\s*"use strict";(.*?)</script>', source, re.DOTALL)
     require(runtime_match is not None, "dashboard runtime script is missing")
