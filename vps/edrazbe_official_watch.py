@@ -167,9 +167,14 @@ def parse_item(raw: Any, *, context: str) -> Sale:
     )
 
 
-def extract_items(capture_body: str, captured_xhrs: list) -> list[Sale]:
-    """Pull every publication/list item from one captured render."""
+def extract_items(capture_body: str, captured_xhrs: list) -> tuple[list[Sale], int]:
+    """Pull every publication/list item from one captured render.
+
+    Items without a public description cannot become titled rows; they are
+    skipped and counted (they are property/machinery lots, never cars).
+    """
     merged: dict[str, Sale] = {}
+    skipped = 0
     for xhr in captured_xhrs:
         if "publication/list" not in xhr.get("url", ""):
             continue
@@ -181,11 +186,17 @@ def extract_items(capture_body: str, captured_xhrs: list) -> list[Sale]:
             (v for v in payload.values() if isinstance(v, list)), []
         )
         for raw in items:
-            sale = parse_item(raw, context="captured list")
+            try:
+                sale = parse_item(raw, context="captured list")
+            except EdrazbeWatchError as error:
+                if "no public description" in str(error):
+                    skipped += 1
+                    continue
+                raise
             merged.setdefault(sale.identity, sale)
     if not merged:
         raise EdrazbeWatchError("eDražbe capture contained no publication items")
-    return sorted(merged.values(), key=lambda s: s.identity)
+    return sorted(merged.values(), key=lambda s: s.identity), skipped
 
 
 def make_capture(args: argparse.Namespace) -> Callable[[], list]:
@@ -209,11 +220,11 @@ def make_capture(args: argparse.Namespace) -> Callable[[], list]:
     return capture
 
 
-def walk_catalogue(capture: Callable[[], list]) -> list[Sale]:
-    items = extract_items(AUCTIONS_URL, capture())
+def walk_catalogue(capture: Callable[[], list]) -> tuple[list[Sale], int]:
+    items, skipped = extract_items(AUCTIONS_URL, capture())
     if len(items) > MAX_ITEMS:
         raise EdrazbeWatchError("eDražbe catalogue exceeds item safety limit")
-    return items
+    return items, skipped
 
 
 def assert_coherent(first: list[Sale], second: list[Sale]) -> None:
@@ -316,10 +327,12 @@ def build_watch(
     first: list[Sale] | None = None
     second: list[Sale] | None = None
     attempts_used = 0
+    skipped_no_description = 0
     for _ in range(snapshot_attempts):
         attempts_used += 1
-        first = walk_catalogue(capture)
-        second = walk_catalogue(capture)
+        first, skip1 = walk_catalogue(capture)
+        second, skip2 = walk_catalogue(capture)
+        skipped_no_description = max(skip1, skip2)
         try:
             assert_coherent(first, second)
             break
@@ -345,8 +358,8 @@ def build_watch(
             "(subject_type 090); real estate, motorcycles, and commercial "
             "vehicles are separate subject types excluded structurally at source"
         ),
-        "declared": len(second),
-        "visited": len(second),
+        "declared": len(second) + skipped_no_description,
+        "visited": len(second) + skipped_no_description,
         "passenger_cars": len(rows),
         "source_excluded": dict(sorted(exclusions.items())),
         "two_pass_verified": True,
