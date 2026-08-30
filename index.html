@@ -3,9 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="robots" content="noindex, nofollow">
+<meta name="robots" content="index, follow">
 <meta name="sonardeals-build" content="20260812-observed-peer-v7-ui">
-<title>رادار الصفقات</title>
+<meta name="description" content="رادار الصفقات لمقارنة أسعار إعلانات السيارات الأوروبية المرصودة وفهم منهجية الترتيب وحدودها، مع رصد عام للمزادات الرسمية.">
+<link rel="canonical" href="https://krt123456.github.io/dz-auto-radar/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b1220'/%3E%3Cpath d='M14 39h36l-4-13a6 6 0 0 0-6-4H24a6 6 0 0 0-6 4z' fill='none' stroke='%2322d3a5' stroke-width='5' stroke-linejoin='round'/%3E%3Ccircle cx='21' cy='43' r='5' fill='%2338bdf8'/%3E%3Ccircle cx='43' cy='43' r='5' fill='%2338bdf8'/%3E%3C/svg%3E">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ar_DZ">
+<meta property="og:site_name" content="رادار الصفقات">
+<meta property="og:title" content="رادار صفقات السيارات الأوروبية">
+<meta property="og:description" content="قارن أسعار الإعلانات الأوروبية المرصودة، وافهم مصدر البيانات وحداثتها وحدود المقارنة.">
+<meta property="og:url" content="https://krt123456.github.io/dz-auto-radar/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="رادار صفقات السيارات الأوروبية">
+<meta name="twitter:description" content="مقارنات أسعار مرصودة ومنهجية واضحة ورصد عام للمزادات الرسمية.">
+<title>رادار صفقات السيارات الأوروبية | مقارنة أسعار مرصودة</title>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://krt123456.github.io/dz-auto-radar/#website",
+      "url": "https://krt123456.github.io/dz-auto-radar/",
+      "name": "رادار الصفقات",
+      "description": "مقارنة أسعار إعلانات السيارات الأوروبية المرصودة ورصد المزادات الرسمية.",
+      "inLanguage": "ar"
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://krt123456.github.io/dz-auto-radar/#webpage",
+      "url": "https://krt123456.github.io/dz-auto-radar/",
+      "name": "رادار صفقات السيارات الأوروبية",
+      "description": "صفحة عربية تشرح غرض الرادار ومنهجية المقارنة وحداثة البيانات وحدود استخدامها.",
+      "inLanguage": "ar",
+      "isPartOf": {"@id": "https://krt123456.github.io/dz-auto-radar/#website"}
+    }
+  ]
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
@@ -27,15 +63,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;
   overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 
-/* ---------- lock screen ---------- */
-#lock{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg);z-index:50}
-.lockcard{width:min(92vw,380px);background:linear-gradient(180deg,var(--card),var(--card2));
-  border:1px solid var(--line);border-radius:22px;padding:38px 28px;text-align:center;
+/* ---------- public landing and lock ---------- */
+#lock{position:fixed;inset:0;display:block;overflow-y:auto;background:var(--bg);z-index:50}
+.landing-shell{position:relative;width:min(1120px,100%);margin:0 auto;padding:42px 18px 48px}
+.landing-hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr);gap:30px;align-items:center;padding:26px 0 34px}
+.landing-copy{max-width:680px}
+.landing-eyebrow{display:inline-flex;padding:7px 12px;border:1px solid rgba(34,211,165,.38);border-radius:999px;
+  background:rgba(34,211,165,.08);color:#9ff4dd;font-size:.82rem;font-weight:700}
+.landing-copy h1{margin-top:18px;font-size:clamp(2rem,5vw,3.65rem);line-height:1.15;letter-spacing:-.03em}
+.landing-lede{margin-top:18px;color:#c5d3eb;font-size:1.08rem;line-height:1.9}
+.landing-points{display:grid;gap:9px;margin-top:20px;padding:0;list-style:none;color:#b9c9e6;line-height:1.7}
+.landing-points li{position:relative;padding-inline-start:24px}
+.landing-points li::before{content:"✓";position:absolute;inset-inline-start:0;color:var(--acc);font-weight:800}
+.unlock-cta{display:inline-flex;margin-top:24px;padding:13px 19px;border-radius:13px;background:linear-gradient(135deg,var(--acc),var(--acc2));
+  color:#05263b;font-weight:800;box-shadow:0 12px 32px rgba(34,211,165,.16)}
+.lockcard{width:100%;max-width:410px;justify-self:end;background:linear-gradient(180deg,var(--card),var(--card2));
+  border:1px solid var(--line);border-radius:22px;padding:34px 28px;text-align:center;
   box-shadow:0 30px 80px rgba(0,0,0,.5)}
 .lockicon{width:74px;height:74px;margin:0 auto 18px;border-radius:20px;display:flex;align-items:center;justify-content:center;
   background:linear-gradient(135deg,rgba(34,211,165,.18),rgba(56,189,248,.18));border:1px solid var(--line);font-size:2rem}
-.lockcard h1{font-size:1.35rem;font-weight:800;margin-bottom:6px}
-.lockcard p{color:var(--mut);font-size:.9rem;margin-bottom:22px}
+.lockcard h2{font-size:1.35rem;font-weight:800;margin-bottom:6px}
+.lockcard .lockintro{color:var(--mut);font-size:.9rem;line-height:1.7;margin-bottom:22px}
 #pin{width:100%;padding:14px;border-radius:14px;border:1px solid var(--line);background:#0a1120;color:var(--txt);
   text-align:center;font-size:1.5rem;letter-spacing:.45em;direction:ltr}
 #pin:focus{outline:2px solid var(--acc2);border-color:transparent}
@@ -44,6 +92,18 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 #enter:disabled{opacity:.55}
 .remember{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:14px;color:var(--mut);font-size:.85rem}
 #lockmsg{min-height:22px;margin-top:12px;font-size:.85rem;color:var(--bad)}
+.landing-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:8px}
+.landing-card,.public-watch,.noscript-note{border:1px solid var(--line);border-radius:18px;background:rgba(17,26,44,.72);padding:22px}
+.landing-card h2,.public-watch h2{font-size:1.05rem;color:#eef5ff;margin-bottom:10px}
+.landing-card p,.public-watch p,.noscript-note{color:#b9c9e6;line-height:1.85;font-size:.92rem}
+.public-watch{margin-top:14px;border-color:rgba(56,189,248,.34);background:rgba(56,189,248,.07)}
+.public-watch a{display:inline-block;margin-top:10px;color:#8edcff;text-decoration:underline;text-underline-offset:4px;font-weight:700}
+.noscript-note{margin-top:14px;border-color:rgba(251,191,36,.42);background:rgba(251,191,36,.08);color:#fde68a}
+.landing-foot{padding-top:20px;text-align:center;color:var(--mut);font-size:.8rem;line-height:1.7}
+@media(max-width:820px){
+  .landing-shell{padding-top:20px}.landing-hero{grid-template-columns:1fr;padding-top:10px}.landing-copy{max-width:none}
+  .lockcard{max-width:none;justify-self:stretch}.landing-grid{grid-template-columns:1fr}
+}
 .shake{animation:sh .4s}
 @keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(8px)}75%{transform:translateX(-8px)}}
 
@@ -56,6 +116,7 @@ header{padding:22px 0 12px}
 .brand h1{font-size:1.3rem;font-weight:800}
 .brand small{display:block;color:var(--mut);font-weight:400;font-size:.78rem}
 .refreshctl{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.refreshctl[hidden]{display:none!important}
 .refresh-button{border:1px solid rgba(34,211,165,.45);border-radius:12px;padding:10px 15px;cursor:pointer;
   background:linear-gradient(135deg,rgba(34,211,165,.22),rgba(56,189,248,.2));color:var(--txt);font-weight:800}
 .refresh-button.full{border-color:rgba(251,191,36,.5);background:linear-gradient(135deg,rgba(251,191,36,.18),rgba(248,113,113,.12))}
@@ -201,14 +262,56 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
 <body>
 
 <div id="lock">
-  <div class="lockcard" id="lockcard">
-    <div class="lockicon">🚘</div>
-    <h1>رادار الصفقات</h1>
-    <p>أدخل الرقم السري لفتح اللوحة</p>
-    <input id="pin" type="password" inputmode="numeric" autocomplete="off" aria-label="الرقم السري" placeholder="••••••••">
-    <button id="enter">دخول</button>
-    <label class="remember"><input type="checkbox" id="remember"> تذكرني على هذا الجهاز</label>
-    <div id="lockmsg" role="alert" aria-live="polite"></div>
+  <div class="landing-shell">
+    <header class="landing-hero" aria-labelledby="landing-title">
+      <div class="landing-copy">
+        <p class="landing-eyebrow">رصد أسعار السيارات والمزادات الأوروبية</p>
+        <h1 id="landing-title">اعرف موقع سعر الإعلان بين عروض أوروبية مشابهة</h1>
+        <p class="landing-lede">يجمع رادار الصفقات إشارات من صفحات المصادر، وينظّمها في مقارنة عربية تساعدك على استكشاف فروق الأسعار قبل الانتقال إلى المصدر والتحقق بنفسك.</p>
+        <ul class="landing-points">
+          <li>مقارنة السعر المعلن مع مجموعة نظيرة متقاربة في المواصفات.</li>
+          <li>إظهار مصدر كل إشارة ووقت رصدها داخل اللوحة المحمية.</li>
+          <li>استبعاد الروابط غير المثبتة من تفاصيل الترتيب المنشورة.</li>
+        </ul>
+        <a class="unlock-cta" href="#pin">فتح لوحة المقارنة بالرقم السري</a>
+      </div>
+      <section class="lockcard" id="lockcard" aria-labelledby="unlock-title">
+        <div class="lockicon" aria-hidden="true">🚘</div>
+        <h2 id="unlock-title">دخول لوحة المقارنات المرتبة</h2>
+        <p class="lockintro">الرقم السري يحمي تفاصيل المقارنة والترتيب. أدخله لفتح البيانات المشفرة على هذا الجهاز.</p>
+        <label class="sr-only" for="pin">الرقم السري للوحة المقارنات</label>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="off" aria-label="الرقم السري" placeholder="••••••••">
+        <button id="enter" type="button">فتح اللوحة</button>
+        <label class="remember"><input type="checkbox" id="remember"> تذكرني على هذا الجهاز</label>
+        <div id="lockmsg" role="alert" aria-live="polite"></div>
+      </section>
+    </header>
+
+    <section class="landing-grid" aria-label="كيف يعمل رادار الصفقات">
+      <article class="landing-card">
+        <h2>منهجية المقارنة</h2>
+        <p>تُنظَّم الإعلانات حسب خصائص قابلة للمقارنة مثل الطراز والسنة والمسافة المقطوعة والوقود. يحسب الرادار فرقًا مرصودًا داخل المجموعة النظيرة، ثم يرتب الروابط التي اجتازت بوابة التحقق.</p>
+      </article>
+      <article class="landing-card">
+        <h2>الحداثة والمصدر</h2>
+        <p>البيانات لقطات تتجدد من صفحات المصادر. تعرض اللوحة وقت بناء اللقطة ووقت التحقق وآخر رصد لكل إعلان، لكن السعر والتوفر وشروط البيع قد تتغير بعد ذلك.</p>
+      </article>
+      <article class="landing-card">
+        <h2>حدود الاستخدام</h2>
+        <p>فرق السعر المرصود ليس تقييمًا للسيارة ولا وعدًا بالربح ولا تكلفة اقتناء نهائية. راجع الحالة والضرائب والجمارك والنقل والتسجيل وشروط البائع مباشرة قبل أي قرار.</p>
+      </article>
+    </section>
+
+    <section class="public-watch" aria-labelledby="public-watch-title">
+      <h2 id="public-watch-title">رصد المزادات الرسمية متاح للعامة</h2>
+      <p>يحمي الرقم السري تفاصيل مقارنات السيارات المرتبة داخل اللوحة فقط. أما بيانات رصد المزادات الرسمية وروابط مصادرها فهي عامة ويمكن الاطلاع عليها دون فتح لوحة المقارنة.</p>
+      <a href="official_auction_watch.json">تصفح ملف رصد المزادات الرسمية</a>
+    </section>
+
+    <noscript>
+      <div class="noscript-note" role="status">تحتاج أداة فك تشفير لوحة المقارنات إلى JavaScript في متصفح حديث. يبقى ملف رصد المزادات الرسمية العام متاحًا من الرابط أعلاه دون فتح اللوحة.</div>
+    </noscript>
+    <div class="landing-foot">رادار الصفقات أداة استكشاف ومقارنة؛ المصدر الأصلي هو المرجع النهائي للسعر والتوفر والشروط.</div>
   </div>
 </div>
 
@@ -221,7 +324,8 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
           <h1>رادار الصفقات <small>مقارنة أسعار إعلانات أوروبية مرصودة</small></h1>
         </div>
       </div>
-      <div class="refreshctl">
+      <!-- Keep the manual-refresh wiring dormant until the queue consumer is enabled. -->
+      <div class="refreshctl" id="manualRefreshControls" hidden aria-hidden="true">
         <button class="refresh-button" id="refreshBtn" type="button">⚡ جلب وتحديث ذكي</button>
         <button class="refresh-button full" id="fullRefreshBtn" type="button">🌍 تحديث شامل</button>
         <span id="refreshStatus" role="status" aria-live="polite">التحديث الذكي يجلب رصدًا جديدًا؛ الشامل يمر على كل مسارات المصادر</span>
@@ -663,7 +767,7 @@ function validateOfficialAuctionWatchManifest(value){
   if(!Number.isFinite(generated)||age < -5*60*1000||age>WATCH_MAX_AGE_MS)throw contractFailure();
   return value;
 }
-async function sha256Hex(buffer){
+async function sha256BytesHex(buffer){
   const digest=await crypto.subtle.digest("SHA-256",buffer);
   return Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,"0")).join("");
 }
@@ -676,7 +780,7 @@ async function loadOfficialAuctionWatchParts(manifest,lane){
       const response=await fetch(`${descriptor.path}?v=${Date.now()}`,{cache:"no-store"});
       if(!response.ok)throw contractFailure();
       const raw=await response.arrayBuffer();
-      if(await sha256Hex(raw)!==descriptor.sha256)throw contractFailure();
+      if(await sha256BytesHex(raw)!==descriptor.sha256)throw contractFailure();
       let part;
       try{part=JSON.parse(new TextDecoder().decode(raw));}catch(error){throw contractFailure();}
       if(typeof part!=="object"||part===null||Array.isArray(part)||
@@ -1896,7 +2000,7 @@ function card(o){
     </div>
     <h2 class="title">${esc(o.t)}</h2>
     <div class="saving">
-      <strong>${fmtMoney(o.p)}</strong><span>سعر الإعلان</span>
+      <strong>${fmtMoney(o.p)}</strong><span>سعر الإعلان المرصود · شمول الضريبة غير مثبت</span>
     </div>
     <div class="meta">
       <div>🗓️ <b>${nf.format(o.y)}</b></div>
