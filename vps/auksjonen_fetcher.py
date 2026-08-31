@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Auksjonen.no v2: JSON API based full harvest."""
 import requests, re, json, time, os
+
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 import concurrent.futures as cf
 import datetime as dt
 
