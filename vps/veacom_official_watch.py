@@ -28,6 +28,8 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import requests
+
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -107,6 +109,7 @@ class Listing:
     image_url: str | None
     price_amount: int | None
     price_currency: str
+    price_amount_eur: int | float | None
     summary_year: int | None
     summary_mileage_km: int | None
     summary_fuel: str
@@ -121,6 +124,7 @@ class Listing:
             self.title,
             self.price_amount,
             self.price_currency,
+            self.price_amount_eur,
             self.summary_year,
             self.summary_mileage_km,
             self.summary_fuel,
@@ -306,6 +310,7 @@ def card_listing(
     event_start: dt.datetime | None,
     event_end: dt.datetime,
     now: dt.datetime,
+    fx_rate: float | None = None,
 ) -> Listing:
     detail_ids: set[str] = set()
     detail_url = ""
@@ -340,6 +345,7 @@ def card_listing(
         image_url=image_url or None,
         price_amount=price_amount,
         price_currency=price_currency,
+        price_amount_eur=to_eur(price_amount, fx_rate) if (price_amount is not None and fx_rate) else None,
         summary_year=summary_year,
         summary_mileage_km=parse_mileage_km(summary.get("najeto")),
         summary_fuel=normalize_fuel(summary.get("palivo")),
@@ -348,14 +354,14 @@ def card_listing(
     )
 
 
-def parse_catalogue(markup: str, *, now: dt.datetime) -> Catalogue:
+def parse_catalogue(markup: str, *, now: dt.datetime, fx_rate: float | None = None) -> Catalogue:
     soup = BeautifulSoup(markup, "html.parser")
     event_start, event_end = parse_event_bounds(soup, now=now)
     cards = soup.select("div.auction-row")
     if not cards:
         raise VeacomWatchError("Veacom public upcoming-auction page has no item cards")
     listings = tuple(
-        card_listing(card, event_start=event_start, event_end=event_end, now=now)
+        card_listing(card, event_start=event_start, event_end=event_end, now=now, fx_rate=fx_rate)
         for card in cards
     )
     ids = [listing.listing_id for listing in listings]
@@ -365,8 +371,8 @@ def parse_catalogue(markup: str, *, now: dt.datetime) -> Catalogue:
     return Catalogue(listings=listings)
 
 
-def enumerate_catalogue(session: requests.Session, *, now: dt.datetime, timeout: int) -> Catalogue:
-    return parse_catalogue(fetch_markup(session, CATALOGUE_URL, timeout=timeout), now=now)
+def enumerate_catalogue(session: requests.Session, *, now: dt.datetime, timeout: int, fx_rate: float | None = None) -> Catalogue:
+    return parse_catalogue(fetch_markup(session, CATALOGUE_URL, timeout=timeout), now=now, fx_rate=fx_rate)
 
 
 def detail_values(soup: BeautifulSoup) -> dict[str, str]:
@@ -489,9 +495,9 @@ def detail_to_row(
         "fuel": fuel if fuel != "unknown" else listing.summary_fuel,
         "seller": SOURCE_NAME,
         "image_url": image_url,
-        "price_amount": listing.price_amount,
-        "price_currency": listing.price_currency,
-        "price_eur": None,
+        "price_amount": listing.price_amount_eur if listing.price_amount_eur is not None else listing.price_amount,
+        "price_currency": "EUR" if listing.price_amount_eur is not None else listing.price_currency,
+        "price_eur": listing.price_amount_eur,
         "price_kind": "starting_bid" if listing.price_amount is not None else "unknown",
         "price_label": (
             "Veacom public starting price" if listing.price_amount is not None
@@ -586,16 +592,21 @@ def build_watch(
     now: dt.datetime | None = None,
     timeout: int = DEFAULT_TIMEOUT,
     workers: int = DEFAULT_WORKERS,
+    fx_rates: dict[str, tuple[float, str]] | None = None,
 ) -> dict[str, Any]:
     if workers < 1:
         raise ValueError("workers must be positive")
+    if fx_rates is not None and "CZK" in fx_rates:
+        fx_rate, fx_date = fx_rates["CZK"]
+    else:
+        fx_rate, fx_date = fetch_ecb_units_per_eur("CZK")
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)
     observed_at = current.isoformat()
     supplied_session = session
     active_session = session or configured_session()
     try:
-        first = enumerate_catalogue(active_session, now=current, timeout=timeout)
-        second = enumerate_catalogue(active_session, now=current, timeout=timeout)
+        first = enumerate_catalogue(active_session, now=current, timeout=timeout, fx_rate=fx_rate)
+        second = enumerate_catalogue(active_session, now=current, timeout=timeout, fx_rate=fx_rate)
         if second.fingerprint != first.fingerprint:
             raise VeacomWatchError("Veacom catalogue changed during final reconciliation")
         rows, rejected = classify_all_listings(

@@ -64,20 +64,21 @@ class AuktionshusetDabWatchTest(unittest.TestCase):
     def test_normalization_preserves_bid_and_vehicle_fields(self) -> None:
         from bs4 import BeautifulSoup
         row = watch.card_to_watch(
-            BeautifulSoup(card("abc"), "html.parser").select_one("li"), observed_at=NOW.isoformat(), now=NOW
+            BeautifulSoup(card("abc"), "html.parser").select_one("li"), observed_at=NOW.isoformat(), now=NOW, fx_rate=7.46
         )
         self.assertEqual(row["id"], "auktionshuset-dab:abc")
         self.assertEqual(row["year"], 2021)
         self.assertEqual(row["fuel"], "hybrid")
         self.assertEqual(row["price_kind"], "current_bid")
-        self.assertEqual(row["price_amount"], 15600)
-        self.assertEqual(row["price_currency"], "DKK")
+        self.assertEqual(row["price_amount"], 2091.15)
+        self.assertEqual(row["price_currency"], "EUR")
+        self.assertEqual(row["price_eur"], 2091.15)
         self.assertEqual(row["canonical_end_utc"], "2026-09-03T12:00:00+00:00")
 
     def test_two_complete_passes_emit_every_declared_vehicle_lot(self) -> None:
         rows = [card(str(number)) for number in range(1, 50)]
         pages = {1: lot_page(rows[:48], 49), 2: lot_page(rows[48:], 49)}
-        payload = watch.build_watch(session=Session([pages, pages]), now=NOW, timeout=5)
+        payload = watch.build_watch(session=Session([pages, pages]), now=NOW, timeout=5, fx_rates={"DKK": (7.46, "explicit")})
         self.assertEqual(payload["row_count"], 49)
         report = payload["source_reports"]["auktionshuset-dab"]
         self.assertEqual(report["declared"], 49)
@@ -88,13 +89,13 @@ class AuktionshusetDabWatchTest(unittest.TestCase):
         rows = [card(str(number)) for number in range(1, 49)]
         pages = {1: lot_page(rows, 49), 2: lot_page([], 49)}
         with self.assertRaisesRegex(watch.AuktionshusetDabWatchError, "expected 1"):
-            watch.build_watch(session=Session([pages]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([pages]), now=NOW, timeout=5, fx_rates={"DKK": (7.46, "explicit")})
 
     def test_changed_second_pass_fails_closed(self) -> None:
         first = {1: lot_page([card("one"), card("two")], 2)}
         second = {1: lot_page([card("one"), card("three")], 2)}
         with self.assertRaisesRegex(watch.AuktionshusetDabWatchError, "final reconciliation"):
-            watch.build_watch(session=Session([first, second]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([first, second]), now=NOW, timeout=5, fx_rates={"DKK": (7.46, "explicit")})
 
 
 if __name__ == "__main__":

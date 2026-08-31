@@ -25,6 +25,8 @@ from urllib.parse import parse_qs, urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 import requests
+
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -177,7 +179,7 @@ def text_or_empty(node: Tag | None) -> str:
     return clean(node.get_text(" ", strip=True) if node is not None else "")
 
 
-def card_to_row(card: Tag, *, observed_at: str, now: dt.datetime) -> dict[str, Any]:
+def card_to_row(card: Tag, *, observed_at: str, now: dt.datetime, fx_rate: float | None = None) -> dict[str, Any]:
     detail = card.select_one('a[href^="/item/"]')
     href = str(detail.get("href") or "") if detail is not None else ""
     matched = LISTING_ID_RE.fullmatch(href)
@@ -253,9 +255,9 @@ def card_to_row(card: Tag, *, observed_at: str, now: dt.datetime) -> dict[str, A
         "fuel": fuel,
         "seller": SOURCE_NAME,
         "image_url": image_url or None,
-        "price_amount": price_amount,
-        "price_currency": price_currency,
-        "price_eur": None,
+        "price_amount": to_eur(price_amount, fx_rate) if (price_amount is not None and fx_rate) else price_amount,
+        "price_currency": "EUR" if (price_amount is not None and fx_rate) else price_currency,
+        "price_eur": to_eur(price_amount, fx_rate) if (price_amount is not None and fx_rate) else None,
         "price_kind": price_kind,
         "price_label": price_label,
         "bid_visibility": "public CarAukce catalogue card",
@@ -281,13 +283,13 @@ def card_to_row(card: Tag, *, observed_at: str, now: dt.datetime) -> dict[str, A
 
 
 def parse_page(
-    markup: str, *, page: int, observed_at: str, now: dt.datetime
+    markup: str, *, page: int, observed_at: str, now: dt.datetime, fx_rate: float | None = None
 ) -> ParsedPage:
     soup = BeautifulSoup(markup, "html.parser")
     cards = soup.select("div.vehicle-card")
     if not cards:
         raise CarAukceWatchError(f"CarAukce page {page} contains no vehicle cards")
-    rows = tuple(card_to_row(card, observed_at=observed_at, now=now) for card in cards)
+    rows = tuple(card_to_row(card, observed_at=observed_at, now=now, fx_rate=fx_rate) for card in cards)
     ids = [str(row["id"]) for row in rows]
     if len(ids) != len(set(ids)):
         raise CarAukceWatchError(f"CarAukce page {page} repeats a stable listing ID")
@@ -300,13 +302,14 @@ def parse_page(
 
 
 def enumerate_catalogue(
-    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int
+    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int, fx_rate: float | None = None
 ) -> Catalogue:
     first = parse_page(
         fetch_markup(session, 1, timeout=timeout),
         page=1,
         observed_at=observed_at,
         now=now,
+        fx_rate=fx_rate,
     )
     parsed_pages: list[ParsedPage] = [first]
     for page in first.pages[1:]:
@@ -315,6 +318,7 @@ def enumerate_catalogue(
             page=page,
             observed_at=observed_at,
             now=now,
+            fx_rate=fx_rate,
         )
         if parsed.announced_total != first.announced_total or parsed.pages != first.pages:
             raise CarAukceWatchError("CarAukce catalogue changed while its pages were enumerated")
@@ -341,17 +345,22 @@ def build_watch(
     session: requests.Session | None = None,
     now: dt.datetime | None = None,
     timeout: int = DEFAULT_TIMEOUT,
+    fx_rates: dict[str, tuple[float, str]] | None = None,
 ) -> dict[str, Any]:
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)
     observed_at = current.isoformat()
     supplied_session = session
     active_session = session or configured_session()
+    if fx_rates is not None and "CZK" in fx_rates:
+        fx_rate, fx_date = fx_rates["CZK"]
+    else:
+        fx_rate, fx_date = fetch_ecb_units_per_eur("CZK")
     try:
         first = enumerate_catalogue(
-            active_session, observed_at=observed_at, now=current, timeout=timeout
+            active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate
         )
         second = enumerate_catalogue(
-            active_session, observed_at=observed_at, now=current, timeout=timeout
+            active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate
         )
         if second.fingerprint != first.fingerprint:
             raise CarAukceWatchError("CarAukce catalogue changed during final reconciliation")

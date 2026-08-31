@@ -67,7 +67,7 @@ class BilwebWatchTest(unittest.TestCase):
     def test_object_normalization_preserves_current_bid_and_vehicle_fields(self) -> None:
         payload = auction_page(1, [object_row(10)])
         parsed = watch.parse_auction_page(
-            payload, slug="septemberauktion-1-2026", observed_at=NOW.isoformat(), now=NOW
+            payload, slug="septemberauktion-1-2026", observed_at=NOW.isoformat(), now=NOW, fx_rate=10.0
         )
         row = parsed.rows[0]
         self.assertEqual(row["id"], "bilweb:septemberauktion-1-2026:10")
@@ -76,14 +76,16 @@ class BilwebWatchTest(unittest.TestCase):
         self.assertEqual(row["mileage"], 12345)
         self.assertEqual(row["fuel"], "hybrid")
         self.assertEqual(row["price_kind"], "current_bid")
-        self.assertEqual(row["price_amount"], 15000)
-        self.assertEqual(row["price_currency"], "SEK")
+        self.assertEqual(row["price_amount"], 1500)
+        self.assertEqual(row["price_currency"], "EUR")
+        self.assertEqual(row["price_eur"], 1500)
+        self.assertIn("EUR", row["price_label"])
         self.assertTrue(row["no_reserve"])
         self.assertEqual(row["canonical_end_utc"], "2026-09-02T08:00:00+00:00")
 
     def test_two_complete_passes_emit_every_declared_object(self) -> None:
         page = auction_page(2, [object_row(10), object_row(11)])
-        payload = watch.build_watch(session=Session([(index(), page)]), now=NOW, timeout=5)
+        payload = watch.build_watch(session=Session([(index(), page)]), now=NOW, timeout=5, fx_rates={"SEK": (10.0, "explicit")})
         self.assertEqual(payload["row_count"], 2)
         self.assertEqual([row["id"] for row in payload["rows"]], [
             "bilweb:septemberauktion-1-2026:10",
@@ -97,13 +99,13 @@ class BilwebWatchTest(unittest.TestCase):
     def test_counter_gap_fails_closed(self) -> None:
         incomplete = auction_page(2, [object_row(10)])
         with self.assertRaisesRegex(watch.BilwebWatchError, "declared 2 active objects"):
-            watch.build_watch(session=Session([(index(), incomplete)]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([(index(), incomplete)]), now=NOW, timeout=5, fx_rates={"SEK": (10.0, "explicit")})
 
     def test_changed_second_pass_fails_closed(self) -> None:
         first = auction_page(2, [object_row(10), object_row(11)])
         changed = auction_page(2, [object_row(10), object_row(12)])
         with self.assertRaisesRegex(watch.BilwebWatchError, "final reconciliation"):
-            watch.build_watch(session=Session([(index(), first), (index(), changed)]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([(index(), first), (index(), changed)]), now=NOW, timeout=5, fx_rates={"SEK": (10.0, "explicit")})
 
 
 if __name__ == "__main__":

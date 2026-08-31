@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import requests
+
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
@@ -181,7 +183,7 @@ def mileage_km(properties: dict[str, Any]) -> int | None:
     return int(kilometres) if float(kilometres).is_integer() else None
 
 
-def row_to_watch(auction: dict[str, Any], *, observed_at: str, now: dt.datetime) -> dict[str, Any]:
+def row_to_watch(auction: dict[str, Any], *, observed_at: str, now: dt.datetime, fx_rate: float | None = None) -> dict[str, Any]:
     native_id = clean(auction.get("id"))
     url = clean(auction.get("auctionUrl"))
     if not native_id or not native_id.isdigit() or not url.startswith("https://www.kvd.se/"):
@@ -265,9 +267,9 @@ def row_to_watch(auction: dict[str, Any], *, observed_at: str, now: dt.datetime)
         "seller": SOURCE_NAME,
         "location": location,
         "image_url": clean(auction.get("previewImage")) or None,
-        "price_amount": price,
-        "price_currency": clean(auction.get("currency") or "SEK").upper(),
-        "price_eur": None,
+        "price_amount": to_eur(price, fx_rate) if (price is not None and fx_rate) else price,
+        "price_currency": "EUR" if (price is not None and fx_rate) else clean(auction.get("currency") or "SEK").upper(),
+        "price_eur": to_eur(price, fx_rate) if (price is not None and fx_rate) else None,
         "price_kind": price_kind,
         "price_label": price_label,
         "bid_visibility": "public KVD Cars auction API",
@@ -295,7 +297,7 @@ def row_to_watch(auction: dict[str, Any], *, observed_at: str, now: dt.datetime)
 
 
 def enumerate_catalogue(
-    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int
+    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int, fx_rate: float | None = None
 ) -> Catalogue:
     total, first_page = fetch_page(session, offset=0, timeout=timeout)
     pages = [first_page]
@@ -335,7 +337,7 @@ def enumerate_catalogue(
         if not active:
             closed_or_inactive_bidding_total += 1
             continue
-        rows.append(row_to_watch(auction, observed_at=observed_at, now=now))
+        rows.append(row_to_watch(auction, observed_at=observed_at, now=now, fx_rate=fx_rate))
     row_ids = [str(row["id"]) for row in rows]
     if len(row_ids) != len(set(row_ids)):
         raise KvdCarsWatchError("KVD Cars active bidding results repeat a stable auction identity")
@@ -350,15 +352,20 @@ def enumerate_catalogue(
 
 
 def build_watch(
-    *, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT
+    *, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT,
+    fx_rates: dict[str, tuple[float, str]] | None = None
 ) -> dict[str, Any]:
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)
     observed_at = current.isoformat()
     supplied_session = session
     active_session = session or configured_session()
     try:
-        first = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout)
-        second = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout)
+        if fx_rates is not None and "SEK" in fx_rates:
+            fx_rate, fx_date = fx_rates["SEK"]
+        else:
+            fx_rate, fx_date = fetch_ecb_units_per_eur("SEK")
+        first = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate)
+        second = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate)
     finally:
         if supplied_session is None:
             active_session.close()

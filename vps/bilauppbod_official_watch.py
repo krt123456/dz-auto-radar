@@ -23,6 +23,8 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import requests
+
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 from lxml import etree, html as lxml_html
 from lxml.html import HtmlElement
 from requests.adapters import HTTPAdapter
@@ -285,7 +287,7 @@ def resolve_mileage(
     return second_index, ""
 
 
-def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: int | None) -> dict[str, Any]:
+def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: int | None, fx_rate: float | None = None) -> dict[str, Any]:
     year_match = YEAR_RE.search(card.registration_date) or YEAR_RE.search(card.title)
     # A visible ``0 kr.`` is an open auction with no bid yet, not a hidden or
     # invalid price.  Mark it unknown so the monitored-board price validator
@@ -297,7 +299,9 @@ def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: 
         "category_raw": "Bilauppboð public current vehicle-auction index; passenger-car detail evidence",
         "year": int(year_match.group(1)) if year_match else None, "mileage": mileage_km, "mileage_km": mileage_km, "fuel": normalize_fuel(detail.fuel_raw),
         "seller": detail.seller or card.seller or SOURCE_NAME, "image_url": card.image_url,
-        "price_amount": card.price_amount, "price_currency": "ISK" if card.price_amount is not None else "", "price_eur": None,
+        "price_amount": to_eur(card.price_amount, fx_rate) if (card.price_amount is not None and fx_rate) else card.price_amount,
+        "price_currency": "EUR" if (card.price_amount is not None and fx_rate) else ("ISK" if card.price_amount is not None else ""),
+        "price_eur": to_eur(card.price_amount, fx_rate) if (card.price_amount is not None and fx_rate) else None,
         "price_kind": "current_bid" if has_positive_current_bid else "unknown", "price_label": card.price_label,
         "bid_visibility": "public Bilauppboð current-auction card", "reserve_met": None, "no_reserve": None,
         "sale_terms": "Official Bilauppboð current auction listing", "auction_status": "active",
@@ -310,7 +314,11 @@ def normalize_card(card: Card, detail: Detail, *, observed_at: str, mileage_km: 
     }
 
 
-def build_watch(*, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT, workers: int = DEFAULT_WORKERS, snapshot_attempts: int = DEFAULT_SNAPSHOT_ATTEMPTS) -> dict[str, Any]:
+def build_watch(*, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT, workers: int = DEFAULT_WORKERS, snapshot_attempts: int = DEFAULT_SNAPSHOT_ATTEMPTS, fx_rates: dict[str, tuple[float, str]] | None = None) -> dict[str, Any]:
+    if fx_rates is not None and "ISK" in fx_rates:
+        fx_rate, fx_date = fx_rates["ISK"]
+    else:
+        fx_rate, fx_date = fetch_ecb_units_per_eur("ISK")
     if timeout < 5 or not 1 <= workers <= 12 or not 1 <= snapshot_attempts <= 8:
         raise ValueError("invalid Bilauppboð timeout/workers/snapshot attempts")
     current = now or dt.datetime.now(UTC)
@@ -354,7 +362,7 @@ def build_watch(*, session: requests.Session | None = None, now: dt.datetime | N
             )
             if mileage_reason:
                 mileage_disagreements[card.listing_id] = mileage_reason
-            rows.append(normalize_card(card, detail, observed_at=observed_at, mileage_km=mileage_km))
+            rows.append(normalize_card(card, detail, observed_at=observed_at, mileage_km=mileage_km, fx_rate=fx_rate))
     mileage_reasons = Counter(mileage_disagreements.values())
     report = {
         "status": "ok", "connector_status": "ok",

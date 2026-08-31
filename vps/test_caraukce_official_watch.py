@@ -74,6 +74,7 @@ class CarAukceWatchTest(unittest.TestCase):
             page=1,
             observed_at=NOW.isoformat(),
             now=NOW,
+            fx_rate=20.0,
         )
         self.assertEqual(parsed.announced_total, 2)
         self.assertEqual(len(parsed.rows), 2)
@@ -83,9 +84,9 @@ class CarAukceWatchTest(unittest.TestCase):
         self.assertEqual(first["year"], 2021)
         self.assertEqual(first["mileage"], 12345)
         self.assertEqual(first["fuel"], "petrol")
-        self.assertEqual(first["price_amount"], 250000)
-        self.assertEqual(first["price_currency"], "CZK")
-        self.assertIsNone(first["price_eur"])
+        self.assertEqual(first["price_amount"], 12500)
+        self.assertEqual(first["price_currency"], "EUR")
+        self.assertEqual(first["price_eur"], 12500)
         self.assertEqual(first["price_kind"], "starting_bid")
         self.assertEqual(second["fuel"], "diesel")
         self.assertEqual(second["price_kind"], "guide_price")
@@ -96,7 +97,7 @@ class CarAukceWatchTest(unittest.TestCase):
             1: page(3, [card(10), card(11)], (1, 2)),
             2: page(3, [card(12)], (1, 2)),
         }
-        payload = watch.build_watch(session=Session([snapshot]), now=NOW, timeout=5)
+        payload = watch.build_watch(session=Session([snapshot]), now=NOW, timeout=5, fx_rates={"CZK": (20.0, "explicit")})
         self.assertEqual(payload["row_count"], 3)
         self.assertEqual([row["id"] for row in payload["rows"]], [
             "caraukce:10", "caraukce:11", "caraukce:12",
@@ -112,7 +113,7 @@ class CarAukceWatchTest(unittest.TestCase):
             2: page(4, [card(12)], (1, 2)),
         }
         with self.assertRaisesRegex(watch.CarAukceWatchError, "announced vehicle total"):
-            watch.build_watch(session=Session([incomplete]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([incomplete]), now=NOW, timeout=5, fx_rates={"CZK": (20.0, "explicit")})
 
     def test_changed_second_pass_fails_closed(self) -> None:
         first = {
@@ -124,7 +125,7 @@ class CarAukceWatchTest(unittest.TestCase):
             2: page(3, [card(13)], (1, 2)),
         }
         with self.assertRaisesRegex(watch.CarAukceWatchError, "final reconciliation"):
-            watch.build_watch(session=Session([first, changed]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([first, changed]), now=NOW, timeout=5, fx_rates={"CZK": (20.0, "explicit")})
 
 
 if __name__ == "__main__":

@@ -95,11 +95,12 @@ class Session:
 
 class KvdCarsWatchTest(unittest.TestCase):
     def test_normalization_preserves_public_bid_and_vehicle_fields(self) -> None:
-        row = watch.row_to_watch(auction(10), observed_at=NOW.isoformat(), now=NOW)
+        row = watch.row_to_watch(auction(10), observed_at=NOW.isoformat(), now=NOW, fx_rate=15.0)
         self.assertEqual(row["id"], "kvdcars:10")
         self.assertEqual(row["price_kind"], "current_bid")
-        self.assertEqual(row["price_amount"], 15000)
-        self.assertEqual(row["price_currency"], "SEK")
+        self.assertEqual(row["price_amount"], 1000)
+        self.assertEqual(row["price_currency"], "EUR")
+        self.assertEqual(row["price_eur"], 1000)
         self.assertEqual(row["year"], 2021)
         self.assertEqual(row["mileage_km"], 123450)
         self.assertEqual(row["fuel"], "hybrid")
@@ -108,7 +109,7 @@ class KvdCarsWatchTest(unittest.TestCase):
     def test_two_complete_passes_emit_every_current_bidding_auction(self) -> None:
         rows = [auction(number) for number in range(1, 52)]
         pages = {0: page(rows[:50], 51), 50: page(rows[50:], 51)}
-        payload = watch.build_watch(session=Session([pages, pages]), now=NOW, timeout=5)
+        payload = watch.build_watch(session=Session([pages, pages]), now=NOW, timeout=5, fx_rates={"SEK": (15.0, "explicit")})
         self.assertEqual(payload["row_count"], 51)
         report = payload["source_reports"]["kvdcars"]
         self.assertEqual(report["api_catalogue_total"], 51)
@@ -123,7 +124,7 @@ class KvdCarsWatchTest(unittest.TestCase):
             auction(3, auction_type="BUY_NOW"),
         ]
         pages = {0: page(rows, 3)}
-        payload = watch.build_watch(session=Session([pages, pages]), now=NOW, timeout=5)
+        payload = watch.build_watch(session=Session([pages, pages]), now=NOW, timeout=5, fx_rates={"SEK": (15.0, "explicit")})
         self.assertEqual([row["id"] for row in payload["rows"]], ["kvdcars:1"])
         report = payload["source_reports"]["kvdcars"]
         self.assertEqual(report["closed_or_inactive_bidding_rows"], 1)
@@ -132,13 +133,13 @@ class KvdCarsWatchTest(unittest.TestCase):
     def test_counter_gap_fails_closed(self) -> None:
         pages = {0: page([auction(number) for number in range(1, 51)], 51), 50: page([], 51)}
         with self.assertRaisesRegex(watch.KvdCarsWatchError, "expected 1"):
-            watch.build_watch(session=Session([pages]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([pages]), now=NOW, timeout=5, fx_rates={"SEK": (15.0, "explicit")})
 
     def test_changed_second_pass_fails_closed(self) -> None:
         first = {0: page([auction(1), auction(2)], 2)}
         second = {0: page([auction(1), auction(3)], 2)}
         with self.assertRaisesRegex(watch.KvdCarsWatchError, "final reconciliation"):
-            watch.build_watch(session=Session([first, second]), now=NOW, timeout=5)
+            watch.build_watch(session=Session([first, second]), now=NOW, timeout=5, fx_rates={"SEK": (15.0, "explicit")})
 
 
 if __name__ == "__main__":

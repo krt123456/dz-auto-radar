@@ -110,13 +110,15 @@ class VeacomWatchTest(unittest.TestCase):
                 ),
             },
         )
-        payload = watch.build_watch(session=session, now=NOW, timeout=5, workers=1)
+        payload = watch.build_watch(session=session, now=NOW, timeout=5, workers=1, fx_rates={"CZK": (25.0, "explicit")})
         self.assertEqual(payload["row_count"], 1)
         row = payload["rows"][0]
         self.assertEqual(row["id"], "veacom:10")
         self.assertEqual(row["category"], "car")
         self.assertEqual(row["fuel"], "petrol")
-        self.assertEqual(row["price_amount"], 5300)
+        self.assertEqual(row["price_amount"], 212)
+        self.assertEqual(row["price_currency"], "EUR")
+        self.assertEqual(row["price_eur"], 212)
         self.assertEqual(row["canonical_end_utc"], "2026-08-31T10:00:00+00:00")
         report = payload["source_reports"]["veacom"]
         self.assertEqual(report["declared"], 2)
@@ -131,7 +133,7 @@ class VeacomWatchTest(unittest.TestCase):
             [source],
             {f"{watch.ROOT_URL}/cs/vehicle/detail/11": detail("FORD TRANSIT CUSTOM 2.2 TDCI")},
         )
-        payload = watch.build_watch(session=session, now=NOW, timeout=5, workers=1)
+        payload = watch.build_watch(session=session, now=NOW, timeout=5, workers=1, fx_rates={"CZK": (25.0, "explicit")})
         self.assertEqual(payload["row_count"], 0)
         self.assertEqual(
             payload["source_reports"]["veacom"]["source_excluded"], {"commercial_model": 1}
@@ -144,7 +146,7 @@ class VeacomWatchTest(unittest.TestCase):
             [source],
             {f"{watch.ROOT_URL}/cs/vehicle/detail/12": detail("TESLA ROADSTER", seats="2")},
         )
-        payload = watch.build_watch(session=session, now=NOW, timeout=5, workers=1)
+        payload = watch.build_watch(session=session, now=NOW, timeout=5, workers=1, fx_rates={"CZK": (25.0, "explicit")})
         self.assertEqual(payload["row_count"], 1)
 
     def test_heavy_truck_model_and_mass_are_rejected(self) -> None:
@@ -172,7 +174,7 @@ class VeacomWatchTest(unittest.TestCase):
         changed = catalogue(catalogue_card(11, "AUDI A6 50 TDI"))
         session = Session([first, changed], {})
         with self.assertRaisesRegex(watch.VeacomWatchError, "final reconciliation"):
-            watch.build_watch(session=session, now=NOW, timeout=5, workers=1)
+            watch.build_watch(session=session, now=NOW, timeout=5, workers=1, fx_rates={"CZK": (25.0, "explicit")})
 
     def test_ambiguous_two_seat_listing_is_rejected(self) -> None:
         reason = watch.passenger_car_reason(

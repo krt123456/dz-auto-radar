@@ -16,6 +16,8 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import requests
+
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -172,7 +174,7 @@ def normalize_fuel(text: str) -> str:
     return "unknown"
 
 
-def card_to_watch(card: Tag, *, observed_at: str, now: dt.datetime) -> dict[str, Any]:
+def card_to_watch(card: Tag, *, observed_at: str, now: dt.datetime, fx_rate: float | None = None) -> dict[str, Any]:
     native_id = clean(card.get("id"))
     end = parse_end(card.get("data-ends"))
     if not native_id or end <= now:
@@ -215,9 +217,9 @@ def card_to_watch(card: Tag, *, observed_at: str, now: dt.datetime) -> dict[str,
         "fuel": normalize_fuel(title),
         "seller": SOURCE_NAME,
         "image_url": image_url or None,
-        "price_amount": bid,
-        "price_currency": "DKK" if bid is not None else "",
-        "price_eur": None,
+        "price_amount": to_eur(bid, fx_rate) if (bid is not None and fx_rate) else bid,
+        "price_currency": "EUR" if (bid is not None and fx_rate) else ("DKK" if bid is not None else ""),
+        "price_eur": to_eur(bid, fx_rate) if (bid is not None and fx_rate) else None,
         "price_kind": price_kind,
         "price_label": price_label,
         "bid_visibility": "public Auktionshuset dab vehicle lot card",
@@ -243,7 +245,7 @@ def card_to_watch(card: Tag, *, observed_at: str, now: dt.datetime) -> dict[str,
 
 
 def enumerate_catalogue(
-    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int
+    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int, fx_rate: float | None = None
 ) -> Catalogue:
     unfiltered = fetch_markup(session, category_id=None, page=1, timeout=timeout)
     category_id = vehicle_category_id(unfiltered)
@@ -272,7 +274,7 @@ def enumerate_catalogue(
     seen_urls: set[str] = set()
     rows: list[dict[str, Any]] = []
     for card in cards:
-        row = card_to_watch(card, observed_at=observed_at, now=now)
+        row = card_to_watch(card, observed_at=observed_at, now=now, fx_rate=fx_rate)
         if row["id"] in seen_ids or row["url"] in seen_urls:
             raise AuktionshusetDabWatchError("Auktionshuset dab pagination repeats a stable lot identity")
         seen_ids.add(str(row["id"]))
@@ -282,15 +284,20 @@ def enumerate_catalogue(
 
 
 def build_watch(
-    *, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT
+    *, session: requests.Session | None = None, now: dt.datetime | None = None, timeout: int = DEFAULT_TIMEOUT,
+    fx_rates: dict[str, tuple[float, str]] | None = None
 ) -> dict[str, Any]:
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)
     observed_at = current.isoformat()
     supplied_session = session
     active_session = session or configured_session()
+    if fx_rates is not None and "DKK" in fx_rates:
+        fx_rate, fx_date = fx_rates["DKK"]
+    else:
+        fx_rate, fx_date = fetch_ecb_units_per_eur("DKK")
     try:
-        first = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout)
-        second = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout)
+        first = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate)
+        second = enumerate_catalogue(active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate)
     finally:
         if supplied_session is None:
             active_session.close()

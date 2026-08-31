@@ -17,6 +17,9 @@ from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
 import requests
+
+import fx_rates
+from fx_rates import fetch_ecb_units_per_eur, to_eur
 from bs4 import BeautifulSoup, Tag
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -177,7 +180,7 @@ def normalize_fuel(text: str) -> str:
 
 
 def row_to_watch(
-    row: Tag, *, slug: str, auction_year: int, observed_at: str, now: dt.datetime
+    row: Tag, *, slug: str, auction_year: int, observed_at: str, now: dt.datetime, fx_rate: float | None = None
 ) -> dict[str, Any]:
     object_id = nonnegative_integer(row.get("id"))
     if object_id is None or object_id <= 0:
@@ -204,7 +207,7 @@ def row_to_watch(
     bid = positive_number(bid_value)
     if bid is not None:
         price_kind = "current_bid"
-        price_label = "public current bid from Bilweb Auctions"
+        price_label = "public current bid from Bilweb Auctions (EUR, ECB daily rate)"
     else:
         price_kind = "unknown"
         price_label = "Bilweb Auctions card does not state a positive current bid"
@@ -240,9 +243,9 @@ def row_to_watch(
         "fuel": normalize_fuel(vehicle_text),
         "seller": SOURCE_NAME,
         "image_url": image_url or None,
-        "price_amount": bid,
-        "price_currency": "SEK" if bid is not None else "",
-        "price_eur": None,
+        "price_amount": to_eur(bid, fx_rate) if (bid is not None and fx_rate) else bid,
+        "price_currency": "EUR" if (bid is not None and fx_rate) else ("SEK" if bid is not None else ""),
+        "price_eur": to_eur(bid, fx_rate) if (bid is not None and fx_rate) else None,
         "price_kind": price_kind,
         "price_label": price_label,
         "bid_visibility": "public Bilweb Auctions current-object card",
@@ -268,7 +271,7 @@ def row_to_watch(
 
 
 def parse_auction_page(
-    markup: str, *, slug: str, observed_at: str, now: dt.datetime
+    markup: str, *, slug: str, observed_at: str, now: dt.datetime, fx_rate: float | None = None
 ) -> AuctionPage:
     soup = BeautifulSoup(markup, "html.parser")
     title = text_or_empty(soup.select_one(".ObjectListPage-title"))
@@ -288,7 +291,7 @@ def parse_auction_page(
     if declared_total is None:
         raise BilwebWatchError(f"Bilweb auction {slug} has no active object count")
     rows = tuple(
-        row_to_watch(row, slug=slug, auction_year=int(year_match.group(1)), observed_at=observed_at, now=now)
+        row_to_watch(row, slug=slug, auction_year=int(year_match.group(1)), observed_at=observed_at, now=now, fx_rate=fx_rate)
         for row in panel.select(".RowObject.row-object")
     )
     ids = [str(row["id"]) for row in rows]
@@ -302,7 +305,7 @@ def parse_auction_page(
 
 
 def enumerate_catalogue(
-    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int
+    session: requests.Session, *, observed_at: str, now: dt.datetime, timeout: int, fx_rate: float | None = None
 ) -> Catalogue:
     slugs = ongoing_auction_slugs(fetch_markup(session, AUCTIONS_URL, timeout=timeout))
     auctions = [
@@ -311,6 +314,7 @@ def enumerate_catalogue(
             slug=slug,
             observed_at=observed_at,
             now=now,
+            fx_rate=fx_rate,
         )
         for slug in slugs
     ]
@@ -330,17 +334,22 @@ def build_watch(
     session: requests.Session | None = None,
     now: dt.datetime | None = None,
     timeout: int = DEFAULT_TIMEOUT,
+    fx_rates: dict[str, tuple[float, str]] | None = None,
 ) -> dict[str, Any]:
     current = (now or dt.datetime.now(UTC)).astimezone(UTC)
     observed_at = current.isoformat()
     supplied_session = session
     active_session = session or configured_session()
+    if fx_rates is not None and "SEK" in fx_rates:
+        fx_rate, fx_date = fx_rates["SEK"]
+    else:
+        fx_rate, fx_date = fetch_ecb_units_per_eur("SEK")
     try:
         first = enumerate_catalogue(
-            active_session, observed_at=observed_at, now=current, timeout=timeout
+            active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate
         )
         second = enumerate_catalogue(
-            active_session, observed_at=observed_at, now=current, timeout=timeout
+            active_session, observed_at=observed_at, now=current, timeout=timeout, fx_rate=fx_rate
         )
         if second.fingerprint != first.fingerprint:
             raise BilwebWatchError("Bilweb current-auction catalogue changed during final reconciliation")

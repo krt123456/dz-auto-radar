@@ -58,7 +58,7 @@ class BilauppbodWatchTest(unittest.TestCase):
             f"{watch.SOURCE_URL}auction/view/100": detail("Mazda", "4", "Bensín/Rafmagn"),
             f"{watch.SOURCE_URL}auction/view/101": detail("Ford", "4", "Dísel"),
         }
-        payload = watch.build_watch(session=Session(responses), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1)
+        payload = watch.build_watch(session=Session(responses), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, fx_rates={'ISK': (150.0, 'explicit')})
         report = payload["source_reports"][watch.SOURCE_KEY]
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["rows"][0]["id"], "bilauppbod:100")
@@ -71,7 +71,7 @@ class BilauppbodWatchTest(unittest.TestCase):
 
     def test_card_change_between_passes_fails_closed(self) -> None:
         with self.assertRaisesRegex(watch.BilauppbodWatchError, "coherent snapshot"):
-            watch.build_watch(session=Session({watch.SOURCE_URL: [page(card("100", "MAZDA 6")), page(card("100", "TOYOTA RAV4"))]}), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=1)
+            watch.build_watch(session=Session({watch.SOURCE_URL: [page(card("100", "MAZDA 6")), page(card("100", "TOYOTA RAV4"))]}), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=1, fx_rates={'ISK': (150.0, 'explicit')})
 
     def test_later_coherent_snapshot_is_accepted(self) -> None:
         stable = page(card("100", "MAZDA 6"))
@@ -80,7 +80,7 @@ class BilauppbodWatchTest(unittest.TestCase):
             watch.SOURCE_URL: [stable, changed, stable, stable],
             f"{watch.SOURCE_URL}auction/view/100": detail("Mazda", "4"),
         }
-        payload = watch.build_watch(session=Session(responses), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=2)
+        payload = watch.build_watch(session=Session(responses), now=dt.datetime(2026, 8, 28, 20, tzinfo=UTC), workers=1, snapshot_attempts=2, fx_rates={'ISK': (150.0, 'explicit')})
         self.assertEqual(payload["row_count"], 1)
         self.assertEqual(payload["source_reports"][watch.SOURCE_KEY]["snapshot_attempt"], 2)
 
