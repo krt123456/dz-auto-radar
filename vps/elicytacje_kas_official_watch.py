@@ -428,8 +428,8 @@ def make_row(
         "currency": "PLN",
         "price": price_amount,
         "price_kind": price_kind,
-        "price_currency": "PLN",
-        "price_amount": price_amount,
+        "price_currency": "EUR" if (price_amount is not None and fx_rate) else "PLN",
+        "price_amount": to_eur(price_amount, fx_rate) if (price_amount is not None and fx_rate) else price_amount,
         "price_label": "Aktualna oferta" if price_kind == "current_bid" else "Cena wywołania",
         "bid_visibility": "public_current_bid" if price_kind == "current_bid" else "not_present_in_public_list",
         "current_bid": current_bid,
@@ -680,7 +680,7 @@ def validate_watch(payload: Any) -> None:
             or row.get("provisional_import_classification") != "current_or_future_vehicle"
             or row.get("status") not in ACTIVE_STATES
             or row.get("price_kind") not in {"starting_bid", "current_bid"}
-            or row.get("price_currency") != "PLN"
+            or row.get("price_currency") not in {"PLN", "EUR"}
             or not isinstance(row.get("price_amount"), (int, float))
             or row.get("price_amount") <= 0
             or row.get("eligibility_status") != "review_required"
