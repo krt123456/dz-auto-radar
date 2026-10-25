@@ -98,6 +98,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .landing-card p,.public-watch p,.noscript-note{color:#b9c9e6;line-height:1.85;font-size:.92rem}
 .public-watch{margin-top:14px;border-color:rgba(56,189,248,.34);background:rgba(56,189,248,.07)}
 .public-watch a{display:inline-block;margin-top:10px;color:#8edcff;text-decoration:underline;text-underline-offset:4px;font-weight:700}
+.europe-sources{margin-top:14px;border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.07)}
+.eu-search{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0 10px}
+.eu-search input{flex:1;min-width:200px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(5,12,24,.72);color:#eef5ff;font-size:.92rem;font-family:inherit}
+.eu-search input::placeholder{color:#7f92b5}
+.eu-totals{color:#dbeafe;font-weight:700;font-size:.9rem;line-height:1.8}
+.eu-legend{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 12px}
+.eu-chip{font-size:.76rem;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:#b9c9e6;background:rgba(5,12,24,.5)}
+.eu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.eu-country{border:1px solid var(--line);border-radius:14px;background:rgba(8,15,30,.6);padding:10px 12px}
+.eu-country summary{cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;color:#eef5ff;font-weight:700;font-size:.92rem;list-style:none}
+.eu-country summary::-webkit-details-marker{display:none}
+.eu-country[open]{border-color:rgba(143,191,244,.4)}
+.eu-count{color:var(--mut);font-size:.8rem;font-weight:700}
+.eu-country ul{margin:10px 0 2px;padding:0;display:flex;flex-direction:column;gap:7px;list-style:none;border-top:1px dashed var(--line);padding-top:10px}
+.eu-site{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.eu-site a{color:#8edcff;text-decoration:underline;text-underline-offset:3px;font-size:.87rem;font-weight:700}
+.eu-badge{flex:none;font-size:.7rem;padding:2px 8px;border-radius:999px;font-weight:700;white-space:nowrap}
+.eu-badge.verified{background:rgba(52,211,153,.16);color:#6ee7b7;border:1px solid rgba(52,211,153,.45)}
+.eu-badge.walled{background:rgba(251,191,36,.14);color:#fde68a;border:1px solid rgba(251,191,36,.45)}
+.eu-badge.unreachable{background:rgba(148,163,184,.14);color:#cbd5e1;border:1px solid rgba(148,163,184,.45)}
+.eu-note{margin-top:12px;color:var(--mut);font-size:.8rem;line-height:1.8}
+.eu-note a{color:#8edcff;text-decoration:underline;text-underline-offset:4px;font-weight:700}
+@media(max-width:820px){.eu-grid{grid-template-columns:1fr}}
 .noscript-note{margin-top:14px;border-color:rgba(251,191,36,.42);background:rgba(251,191,36,.08);color:#fde68a}
 .landing-foot{padding-top:20px;text-align:center;color:var(--mut);font-size:.8rem;line-height:1.7}
 @media(max-width:820px){
@@ -306,6 +329,19 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
       <h2 id="public-watch-title">رصد المزادات الرسمية متاح للعامة</h2>
       <p>يحمي الرقم السري تفاصيل مقارنات السيارات المرتبة داخل اللوحة فقط. أما بيانات رصد المزادات الرسمية وروابط مصادرها فهي عامة ويمكن الاطلاع عليها دون فتح لوحة المقارنة.</p>
       <a href="official_auction_watch.json">تصفح ملف رصد المزادات الرسمية</a>
+    </section>
+
+    <section class="public-watch europe-sources" id="europeSources" aria-labelledby="europe-sources-title">
+      <h2 id="europe-sources-title">مصادر السيارات في أوروبا</h2>
+      <p>دليل شامل لمواقع إعلانات السيارات الأوروبية سوقًا بسوق، مبني على فحص مباشر مع ختم وقت لكل مصدر. الحالة إمّا موثّقة، محمية بحاجز، أو خارج نطاق شبكة الرصد — دون أي ادّعاء غير مثبت.</p>
+      <div class="eu-search">
+        <input type="search" id="euSearch" placeholder="ابحث عن دولة أو موقع…" autocomplete="off" aria-label="بحث في مصادر السيارات الأوروبية">
+        <a href="europe_car_ads_sources.json">ملف بيانات المصادر</a>
+      </div>
+      <div class="eu-totals" id="euTotals" role="status" aria-live="polite">جارٍ تحميل فهرس المصادر…</div>
+      <div class="eu-legend" id="euLegend"></div>
+      <div class="eu-grid" id="euGrid"></div>
+      <div class="eu-note" id="euNote" role="status"></div>
     </section>
 
     <noscript>
@@ -2150,6 +2186,136 @@ async function startRefresh(mode){
 }
 $("refreshBtn").onclick=()=>startRefresh("smart");
 $("fullRefreshBtn").onclick=()=>startRefresh("full");
+const EU_SCHEMA={
+  schema:1,
+  lane:"europe_car_ads_sources",
+  kinds:["classifieds","portal","auction","dealer"],
+  statuses:["verified","walled","unreachable"],
+  reasons:["disqualified","empty_response","dns_failure","timeout","connection_failure","http_error","invalid_url","not_probed"],
+  reachable:[200,201,202,203,204,206,301,302,303,307,308],
+  gated:[401,403,429,451,468,501,503,507],
+  kindLabels:{classifieds:"إعلانات",portal:"بوابة",auction:"مزاد",dealer:"معرض"},
+  statusLabels:{verified:"موثّق",walled:"محمي بحاجز",unreachable:"خارج نطاق الرصد"},
+  reasonLabels:{disqualified:"مستبعد",empty_response:"رد فارغ",dns_failure:"فشل النطاق",timeout:"انتهت المهلة",connection_failure:"فشل الاتصال",http_error:"استجابة خطأ",invalid_url:"رابط غير صالح",not_probed:"لم يُفحص"},
+  countryCount:52
+};
+function validateEuropeSources(data){
+  if(!data||typeof data!=="object")throw contractFailure();
+  if(data.schema_version!==EU_SCHEMA.schema||data.lane!==EU_SCHEMA.lane)throw contractFailure();
+  const contract=data.contract,summary=data.summary,countries=data.countries,sites=data.sites,excluded=data.excluded;
+  if(!contract||!summary||!Array.isArray(countries)||!sites||typeof sites!=="object"||!Array.isArray(excluded))throw contractFailure();
+  if(!Array.isArray(contract.unmapped_registry_keys))throw contractFailure();
+  if(typeof contract.probe_checked_at_utc!=="string"||!contract.probe_checked_at_utc)throw contractFailure();
+  if(contract.country_count!==EU_SCHEMA.countryCount||countries.length!==EU_SCHEMA.countryCount||summary.countries!==EU_SCHEMA.countryCount)throw contractFailure();
+  if(typeof contract.site_count!=="number"||typeof contract.unique_host_count!=="number"||!Number.isInteger(contract.site_count))throw contractFailure();
+  const codes=new Set(countries.map(row=>row&&row.code));
+  if(codes.size!==EU_SCHEMA.countryCount)throw contractFailure();
+  const siteKeys=Object.keys(sites);
+  if(contract.site_count!==siteKeys.length||summary.sites!==siteKeys.length||contract.unique_host_count!==siteKeys.length)throw contractFailure();
+  const hosts=new Set();
+  const byStatus={verified:0,walled:0,unreachable:0};
+  const byKind={classifieds:0,portal:0,auction:0,dealer:0};
+  let wired=0;
+  for(const key of siteKeys){
+    const entry=sites[key];
+    if(!entry||typeof entry!=="object")throw contractFailure();
+    for(const field of ["name","url","host","kind","status"])if(typeof entry[field]!=="string"||!entry[field])throw contractFailure();
+    if(!entry.url.startsWith("https://"))throw contractFailure();
+    let host;
+    try{host=new URL(entry.url).hostname.replace(/^www\./,"");}catch(e){throw contractFailure();}
+    if(host!==entry.host||hosts.has(host))throw contractFailure();
+    hosts.add(host);
+    if(!EU_SCHEMA.kinds.includes(entry.kind)||!EU_SCHEMA.statuses.includes(entry.status))throw contractFailure();
+    if(typeof entry.wired!=="boolean")throw contractFailure();
+    if(!Array.isArray(entry.source_keys)||!Array.isArray(entry.countries))throw contractFailure();
+    if(entry.countries.join(",")!==entry.countries.slice().sort().join(",")||new Set(entry.countries).size!==entry.countries.length)throw contractFailure();
+    for(const code of entry.countries)if(!codes.has(code))throw contractFailure();
+    const ev=entry.evidence;
+    if(!ev||typeof ev!=="object")throw contractFailure();
+    if(typeof ev.checked_at_utc!=="string"||!ev.checked_at_utc)throw contractFailure();
+    if(typeof ev.title!=="string")throw contractFailure();
+    if(!Number.isInteger(ev.http_status)||ev.http_status<0||typeof ev.challenge!=="boolean")throw contractFailure();
+    if(entry.status==="verified"){
+      if(!EU_SCHEMA.reachable.includes(ev.http_status)||ev.challenge)throw contractFailure();
+    }else if(entry.status==="walled"){
+      if(!EU_SCHEMA.gated.includes(ev.http_status)&&!ev.challenge)throw contractFailure();
+    }else if(!EU_SCHEMA.reasons.includes(ev.probe_reason))throw contractFailure();
+    if(entry.wired&&!entry.source_keys.length)throw contractFailure();
+    if(entry.kind==="auction"&&!entry.source_keys.length&&!entry.registry_urls)throw contractFailure();
+    byStatus[entry.status]++;byKind[entry.kind]++;if(entry.wired)wired++;
+  }
+  if(summary.wired_sites!==wired)throw contractFailure();
+  for(const status of EU_SCHEMA.statuses)if((summary.by_status&&summary.by_status[status]||0)!==byStatus[status])throw contractFailure();
+  for(const kind of EU_SCHEMA.kinds)if((summary.by_kind&&summary.by_kind[kind]||0)!==byKind[kind])throw contractFailure();
+  if(summary.excluded!==excluded.length)throw contractFailure();
+  let withSites=0;
+  for(const row of countries){
+    if(!row||typeof row!=="object"||typeof row.code!=="string"||row.code.length!==2)throw contractFailure();
+    if(typeof row.flag!=="string"||!row.flag||typeof row.name!=="string"||!row.name||typeof row.name_ar!=="string"||!row.name_ar)throw contractFailure();
+    const keys=row.site_keys;
+    if(!Array.isArray(keys)||keys.join(",")!==keys.slice().sort().join(",")||new Set(keys).size!==keys.length)throw contractFailure();
+    if(keys.length)withSites++;
+    const expected=siteKeys.filter(k=>sites[k].countries.includes(row.code)).sort();
+    if(expected.length!==keys.length||expected.some((k,i)=>k!==keys[i]))throw contractFailure();
+    for(const k of keys)if(!sites[k]||!sites[k].countries.includes(row.code))throw contractFailure();
+  }
+  if(summary.countries_with_sites!==withSites)throw contractFailure();
+  for(const item of excluded){
+    if(!item||typeof item!=="object"||!EU_SCHEMA.reasons.includes(item.reason))throw contractFailure();
+    if(typeof item.url!=="string"||!item.url||!Array.isArray(item.countries)||!item.countries.length)throw contractFailure();
+    for(const code of item.countries)if(!codes.has(code))throw contractFailure();
+  }
+  return {countries:EU_SCHEMA.countryCount,sites:siteKeys.length,wired,byStatus,byKind,excluded:excluded.length,reasons:excluded.map(x=>x.reason),probeChecked:contract.probe_checked_at_utc};
+}
+function renderEuropeSources(data,stats){
+  const grid=$("euGrid"),legend=$("euLegend"),note=$("euNote");
+  const chips=[];
+  for(const status of EU_SCHEMA.statuses)chips.push(`<span class="eu-chip">${EU_SCHEMA.statusLabels[status]}: ${stats.byStatus[status]}</span>`);
+  for(const kind of EU_SCHEMA.kinds)chips.push(`<span class="eu-chip">${EU_SCHEMA.kindLabels[kind]}: ${stats.byKind[kind]}</span>`);
+  chips.push(`<span class="eu-chip">متصلة بالرصد المباشر: ${stats.wired}</span>`);
+  legend.innerHTML=chips.join("");
+  $("euTotals").textContent=`${stats.sites} موقعًا في ${stats.countries} سوقًا أوروبية — موثّقة: ${stats.byStatus.verified} · محمية بحاجز: ${stats.byStatus.walled} · خارج نطاق الرصد: ${stats.byStatus.unreachable}`;
+  const cards=[];
+  for(const row of data.countries){
+    const search=esc(normalizeSearchText(`${row.flag} ${row.name} ${row.name_ar} ${row.site_keys.map(k=>data.sites[k].name).join(" ")}`));
+    const items=[];
+    for(const key of row.site_keys){
+      const site=data.sites[key];
+      const badge=EU_SCHEMA.statusLabels[site.status]+(site.wired?" · مباشر":"");
+      items.push(`<li class="eu-site"><a href="${esc(site.url)}" target="_blank" rel="noopener noreferrer">${esc(site.name)}</a><span class="eu-badge ${esc(site.status)}">${esc(badge)}</span></li>`);
+    }
+    if(!items.length)items.push('<li class="eu-site">لا يوجد موقع مخصّص مرصود لهذه السوق؛ تغطية الإعلانات تأتي من الأسواق المجاورة.</li>');
+    cards.push(`<details class="eu-country" data-search="${search}"><summary><span>${esc(row.flag)} ${esc(row.name_ar)}</span><span class="eu-count">${row.site_keys.length}</span></summary><ul>${items.join("")}</ul></details>`);
+  }
+  grid.innerHTML=cards.join("");
+  const search=$("euSearch");
+  if(search&&typeof search.addEventListener==="function"){
+    search.addEventListener("input",event=>{
+      const query=normalizeSearchText(event&&event.target&&event.target.value||"");
+      for(const card of grid.children||[])card.hidden=!!query&&String(card.dataset&&card.dataset.search||"").includes(query);
+    });
+  }
+  const counts={};
+  for(const reason of stats.reasons)counts[reason]=(counts[reason]||0)+1;
+  const parts=Object.keys(counts).map(reason=>`${EU_SCHEMA.reasonLabels[reason]||reason}: ${counts[reason]}`);
+  note.innerHTML=stats.excluded
+    ? `تعذّر التحقق من ${stats.excluded} مضيفًا أثناء الفحص (${parts.join(" · ")})؛ تبقى مذكورة في ملف البيانات دون عرض. آخر فحص: ${esc(stats.probeChecked)}.`
+    : `أُفحصت كل المصادر المعلنة. آخر فحص: ${esc(stats.probeChecked)}.`;
+}
+async function loadEuropeSources(){
+  try{
+    const response=await fetch("europe_car_ads_sources.json",{cache:"no-cache"});
+    if(!response.ok)throw new Error(`http_${response.status}`);
+    const data=await response.json();
+    renderEuropeSources(data,validateEuropeSources(data));
+  }catch(error){
+    $("euTotals").textContent="تعذّر تحميل فهرس المصادر الأوروبية الآن.";
+    $("euLegend").innerHTML="";
+    $("euGrid").innerHTML="";
+    $("euNote").innerHTML=`فهرس المصادر لا يُعرض لتعذّر التحقق منه. الملف الأصلي متاح على <a href="europe_car_ads_sources.json">هذا الرابط</a>.`;
+  }
+}
+loadEuropeSources();
 FX_LOAD_PROMISE=loadFx();
 readRefreshStatus();
 setInterval(readRefreshStatus,60000);
