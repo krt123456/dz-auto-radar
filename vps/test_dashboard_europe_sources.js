@@ -151,6 +151,22 @@ async function main() {
   }
 
   {
+    const { sandbox } = makeSandbox(sourcesFetch(JSON.parse(JSON.stringify(artifact))));
+    check(
+      sandbox.euFilterMatches("فرنسا", "france فرنسا leboncoin") === true,
+      "filter must keep a market that matches the query",
+    );
+    check(
+      sandbox.euFilterMatches("فرنسا", "germany ألمانيا mobile") === false,
+      "filter must drop a market that does not match the query",
+    );
+    check(
+      sandbox.euFilterMatches("", "anything at all") === true,
+      "an empty query must keep every market visible",
+    );
+  }
+
+  {
     const tampered = JSON.parse(JSON.stringify(artifact));
     const key = Object.keys(tampered.sites).find(k => tampered.sites[k].status === "verified");
     check(!!key, "artifact must publish a verified site to tamper with");

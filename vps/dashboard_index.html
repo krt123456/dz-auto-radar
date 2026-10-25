@@ -2267,6 +2267,9 @@ function validateEuropeSources(data){
   }
   return {countries:EU_SCHEMA.countryCount,sites:siteKeys.length,wired,byStatus,byKind,excluded:excluded.length,reasons:excluded.map(x=>x.reason),probeChecked:contract.probe_checked_at_utc};
 }
+function euFilterMatches(query,text){
+  return !query||String(text||"").includes(query);
+}
 function renderEuropeSources(data,stats){
   const grid=$("euGrid"),legend=$("euLegend"),note=$("euNote");
   const chips=[];
@@ -2292,7 +2295,7 @@ function renderEuropeSources(data,stats){
   if(search&&typeof search.addEventListener==="function"){
     search.addEventListener("input",event=>{
       const query=normalizeSearchText(event&&event.target&&event.target.value||"");
-      for(const card of grid.children||[])card.hidden=!!query&&String(card.dataset&&card.dataset.search||"").includes(query);
+      for(const card of grid.children||[])card.hidden=!euFilterMatches(query,card.dataset&&card.dataset.search);
     });
   }
   const counts={};
