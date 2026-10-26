@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "captured_at_utc": "2026-10-25T21:31:41Z",
+  "captured_at_utc": "2026-10-26T03:31:40Z",
   "source": {
     "name": "ALCES External Portal",
     "url": "https://alces.douane.gov.dz/api/public/com/main/selectFxrtList",
@@ -9,30 +9,30 @@
   "semantic": {
     "base_currency": "EUR",
     "display_currency": "DZD",
-    "effective_date": "2026-10-22",
-    "buy_rate": "150.95550",
-    "sell_rate": "150.99920",
+    "effective_date": "2026-10-26",
+    "buy_rate": "151.06510",
+    "sell_rate": "151.14920",
     "rate_scale": 100000,
-    "sell_rate_scaled": 15099920
+    "sell_rate_scaled": 15114920
   },
-  "semantic_sha256": "415932194939963fd157f81196cbcad34f991ac95cedf8b2604cc2bf98dd36d0",
+  "semantic_sha256": "2354199f404b477c26ad5dc0f50b2148beddaa8e8c5468a1f7321b6ccbdf4e35",
   "read_count": 2,
   "evidence": [
     {
       "replica": "41.111.157.9",
-      "evidence_file": "evidence/20261025T213141Z-415932194939/read-01.json",
-      "bytes": 1966,
-      "raw_sha256": "ee19b93529a40b8a94ccad2012ffe4afd77306bc629559d6501b83e2c376c3a7"
+      "evidence_file": "evidence/20261026T033140Z-2354199f404b/read-01.json",
+      "bytes": 1992,
+      "raw_sha256": "254f90cfb5796e3c0c979313690d09f23fb988652fb8c2d82e1c0e74e4224549"
     },
     {
       "replica": "41.111.157.9",
-      "evidence_file": "evidence/20261025T213141Z-415932194939/read-02.json",
-      "bytes": 1992,
-      "raw_sha256": "e7ad89f52dc8e78fd8e761761529f83fd97f7da2d2357831f741afab9e34d578"
+      "evidence_file": "evidence/20261026T033140Z-2354199f404b/read-02.json",
+      "bytes": 1966,
+      "raw_sha256": "6e92be3ea0d0ebb3c6d056609d4d0979bf3874c3d67d5042dd20604fc0a82614"
     }
   ],
   "seal": {
     "algorithm": "sha256",
-    "value": "5d62fa0f913e07b45b5bd4b1c81f8fa3d3b365301cc4d8339d6b7741638d1ec6"
+    "value": "8e4d3ec0147a8126c394201cefea45d313a53ab7b3d3810aa87e5a41fcf34f32"
   }
 }
