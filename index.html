@@ -332,8 +332,8 @@ footer{color:var(--mut);text-align:center;font-size:.78rem;padding:10px 0 30px}
     </section>
 
     <section class="public-watch europe-sources" id="europeSources" aria-labelledby="europe-sources-title">
-      <h2 id="europe-sources-title">مصادر السيارات في أوروبا</h2>
-      <p>دليل شامل لمواقع إعلانات السيارات الأوروبية سوقًا بسوق، مبني على فحص مباشر مع ختم وقت لكل مصدر. الحالة إمّا موثّقة، محمية بحاجز، أو خارج نطاق شبكة الرصد — دون أي ادّعاء غير مثبت.</p>
+      <h2 id="europe-sources-title">مصادر السيارات في الاتحاد الأوروبي</h2>
+      <p>دليل شامل لمواقع إعلانات السيارات في دول الاتحاد الأوروبي سوقًا بسوق، مبني على فحص مباشر مع ختم وقت لكل مصدر. الحالة إمّا موثّقة، محمية بحاجز، أو خارج نطاق شبكة الرصد — دون أي ادّعاء غير مثبت.</p>
       <div class="eu-search">
         <input type="search" id="euSearch" placeholder="ابحث عن دولة أو موقع…" autocomplete="off" aria-label="بحث في مصادر السيارات الأوروبية">
         <a href="europe_car_ads_sources.json">ملف بيانات المصادر</a>
@@ -2197,7 +2197,7 @@ const EU_SCHEMA={
   kindLabels:{classifieds:"إعلانات",portal:"بوابة",auction:"مزاد",dealer:"معرض"},
   statusLabels:{verified:"موثّق",walled:"محمي بحاجز",unreachable:"خارج نطاق الرصد"},
   reasonLabels:{disqualified:"مستبعد",empty_response:"رد فارغ",dns_failure:"فشل النطاق",timeout:"انتهت المهلة",connection_failure:"فشل الاتصال",http_error:"استجابة خطأ",invalid_url:"رابط غير صالح",not_probed:"لم يُفحص"},
-  countryCount:52
+  countryCount:28
 };
 function validateEuropeSources(data){
   if(!data||typeof data!=="object")throw contractFailure();

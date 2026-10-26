@@ -24,6 +24,7 @@ def probe_record(**overrides: object) -> dict:
         "body_bytes": 4096,
         "challenge": False,
         "error": "",
+        "channel": "direct",
         "checked_at_utc": "2026-10-25T00:00:00+00:00",
     }
     record.update(overrides)
@@ -80,9 +81,9 @@ def synthetic_probe() -> dict:
                 body_bytes=0,
             ),
             probe_record(
-                url="https://www.bilasol.is/",
-                host="bilasol.is",
-                site_key="bilasol-is",
+                url="https://www.motors.mt/",
+                host="motors.mt",
+                site_key="motors-mt",
                 http_status=0,
                 error="dns_failure",
                 title="",
@@ -201,13 +202,20 @@ class BuildArtifactTests(unittest.TestCase):
 
     def test_build_passes_validation(self) -> None:
         summary = eas.validate_artifact(self.artifact)
-        self.assertEqual(summary["countries"], 52)
+        self.assertEqual(summary["countries"], len(eas.ACTIVE_COUNTRIES))
         self.assertGreater(summary["sites"], 0)
 
     def test_country_set_is_complete_even_without_sites(self) -> None:
         codes = [row["code"] for row in self.artifact["countries"]]
-        self.assertEqual(codes, sorted(eas.COUNTRIES))
-        self.assertEqual(len(codes), 52)
+        self.assertEqual(codes, list(eas.ACTIVE_COUNTRIES))
+        self.assertEqual(len(codes), len(eas.ACTIVE_COUNTRIES))
+
+    def test_non_eu_markets_are_out_of_scope(self) -> None:
+        codes = {row["code"] for row in self.artifact["countries"]}
+        self.assertTrue(codes <= set(eas.ACTIVE_COUNTRIES))
+        self.assertFalse(codes & (set(eas.COUNTRIES) - set(eas.ACTIVE_COUNTRIES)))
+        for entry in self.artifact["sites"].values():
+            self.assertTrue(set(entry["countries"]) <= codes)
 
     def test_unmapped_registry_key_is_reported(self) -> None:
         self.assertEqual(
@@ -215,11 +223,11 @@ class BuildArtifactTests(unittest.TestCase):
         )
 
     def test_candidate_probe_failure_is_excluded_without_registry_backing(self) -> None:
-        bilasol = next(
-            item for item in self.artifact["excluded"] if item["host"] == "bilasol.is"
+        motors = next(
+            item for item in self.artifact["excluded"] if item["host"] == "motors.mt"
         )
-        self.assertEqual(bilasol["reason"], "dns_failure")
-        self.assertEqual(bilasol["countries"], ["IS"])
+        self.assertEqual(motors["reason"], "dns_failure")
+        self.assertEqual(motors["countries"], ["MT"])
         self.assertEqual(self.artifact["sites"]["autohero-com"]["status"], "verified")
 
     def test_unprobed_candidate_fails_closed_as_not_probed(self) -> None:
@@ -328,8 +336,9 @@ class ValidateArtifactTests(unittest.TestCase):
     def test_country_set_shrink_is_rejected(self) -> None:
         clone = copy.deepcopy(self.artifact)
         clone["countries"] = [row for row in clone["countries"] if row["code"] != "MT"]
-        clone["contract"]["country_count"] = 51
-        clone["summary"]["countries"] = 51
+        remaining = len(clone["countries"])
+        clone["contract"]["country_count"] = remaining
+        clone["summary"]["countries"] = remaining
         self.assert_rejected(clone)
 
     def test_unsorted_country_codes_are_rejected(self) -> None:
@@ -369,6 +378,12 @@ class ValidateArtifactTests(unittest.TestCase):
         clone["summary"]["by_status"]["verified"] += 1
         self.assert_rejected(clone)
 
+    def test_unknown_evidence_channel_is_rejected(self) -> None:
+        clone = copy.deepcopy(self.artifact)
+        key = next(iter(clone["sites"]))
+        clone["sites"][key]["evidence"]["channel"] = "phantom"
+        self.assert_rejected(clone)
+
 
 class ProbePlumbingTests(unittest.TestCase):
     def test_normalize_host_requires_https_and_strips_www(self) -> None:
@@ -404,6 +419,71 @@ class ProbePlumbingTests(unittest.TestCase):
         self.assertEqual(record["url"], "https://nonexistent-tld-sources.invalid/")
         self.assertIn("checked_at_utc", record)
 
+    def test_probe_targets_exclude_non_eu_candidates(self) -> None:
+        hosts = {host for _key, host, _url in eas.collect_probe_targets({})}
+        self.assertIn("mobile.de", hosts)
+        self.assertIn("willhaben.at", hosts)
+        self.assertNotIn("merrjep.al", hosts)
+
+
+class BrowserLaneTests(unittest.TestCase):
+    def _with_daemon(self, payload, fn):
+        original = eas.probe_via_daemon
+        eas.probe_via_daemon = payload
+        try:
+            return fn()
+        finally:
+            eas.probe_via_daemon = original
+
+    def test_walled_record_is_upgraded_only_when_render_verifies(self) -> None:
+        results = [probe_record(http_status=403, challenge=True, error="http_403")]
+        rendered = probe_record(channel="render", title="Mobile.de Gebrauchtwagen")
+
+        def run():
+            return eas.upgrade_with_browser(results)
+
+        upgraded = self._with_daemon(lambda url, wait_ms=0, timeout=0: rendered, run)
+        self.assertEqual(upgraded, 1)
+        self.assertEqual(results[0]["channel"], "render")
+        self.assertEqual(results[0]["plain_status"], 403)
+        self.assertEqual(eas.classify_probe(results[0])[0], "verified")
+
+    def test_daemon_failure_keeps_the_plain_probe_result(self) -> None:
+        results = [probe_record(http_status=403, challenge=True, error="http_403")]
+
+        def run():
+            return eas.upgrade_with_browser(results)
+
+        upgraded = self._with_daemon(lambda url, wait_ms=0, timeout=0: None, run)
+        self.assertEqual(upgraded, 0)
+        self.assertEqual(results[0]["channel"], "direct")
+        self.assertEqual(eas.classify_probe(results[0])[0], "walled")
+
+    def test_verified_records_are_never_refetched(self) -> None:
+        results = [probe_record()]
+
+        def fail(url, wait_ms=0, timeout=0):  # pragma: no cover - guard
+            raise AssertionError("verified records must not hit the daemon")
+
+        def run():
+            return eas.upgrade_with_browser(results)
+
+        self.assertEqual(self._with_daemon(fail, run), 0)
+        self.assertEqual(results[0]["channel"], "direct")
+
+    def test_render_record_with_challenge_does_not_upgrade(self) -> None:
+        results = [probe_record(http_status=403, challenge=True, error="http_403")]
+        challenged = probe_record(
+            channel="render", http_status=403, challenge=True, title="Just a moment..."
+        )
+
+        def run():
+            return eas.upgrade_with_browser(results)
+
+        upgraded = self._with_daemon(lambda url, wait_ms=0, timeout=0: challenged, run)
+        self.assertEqual(upgraded, 0)
+        self.assertEqual(results[0]["channel"], "direct")
+
 
 class LandingSurfaceTests(unittest.TestCase):
     @classmethod
@@ -423,7 +503,7 @@ class LandingSurfaceTests(unittest.TestCase):
         self.assertIn('id="europeSources"', landing)
         self.assertIn('id="euGrid"', landing)
         self.assertIn('id="euSearch"', landing)
-        self.assertIn("مصادر السيارات في أوروبا", landing)
+        self.assertIn("مصادر السيارات في الاتحاد الأوروبي", landing)
 
     def test_sources_file_is_linked_from_the_public_landing(self) -> None:
         self.assertIn('<a href="europe_car_ads_sources.json">', self.source)

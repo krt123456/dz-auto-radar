@@ -134,10 +134,14 @@ async function main() {
     const { elements } = makeSandbox(sourcesFetch(JSON.parse(JSON.stringify(artifact))));
     await settle();
     const totals = elements.get("euTotals").textContent;
-    check(/موقعًا في 52 سوقًا/.test(totals), `totals line must state 52 markets: ${totals}`);
+    const markets = artifact.summary.countries;
+    check(new RegExp(`موقعًا في ${markets} سوقًا`).test(totals), `totals line must state ${markets} markets: ${totals}`);
     check(totals.includes(String(artifact.summary.sites)), "totals must carry the site count");
     const grid = elements.get("euGrid").innerHTML;
-    check((grid.match(/<details class="eu-country"/g) || []).length === 52, "every market must render");
+    check(
+      (grid.match(/<details class="eu-country"/g) || []).length === markets,
+      "every market must render",
+    );
     const siteRows = (grid.match(/<li class="eu-site"/g) || []).length;
     check(siteRows >= artifact.summary.sites, "every published site must render a row");
     const legend = elements.get("euLegend").innerHTML;

@@ -36,6 +36,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote as url_quote
 from urllib.request import Request, urlopen
 
 SCHEMA_VERSION = 1
@@ -45,6 +46,13 @@ USER_AGENT = (
 )
 PROBE_TIMEOUT_SECONDS = 15
 PROBE_WORKERS = 6
+# Browser lane: the local WAF daemon renders the page with a real browser and
+# solved cookies, which is what it takes for AWS-WAF/Cloudflare sites.
+DAEMON_RENDER_URL = "http://127.0.0.1:8977/render"
+BROWSER_WAIT_MS = 3000
+BROWSER_PROBE_TIMEOUT_SECONDS = 90
+MAX_RENDER_BODY_BYTES = 8_388_608
+CHANNELS = ("direct", "render")
 MAX_TITLE_CHARS = 120
 # Strong interstitial signals: their presence in the document alone means the
 # response is a challenge shell rather than the site.
@@ -162,6 +170,16 @@ COUNTRIES: Dict[str, Tuple[str, str, str]] = {
     "EU": ("أوروبا متعددة الدول", "Cross-border Europe", "\U0001F1EA\U0001F1FA"),
 }
 
+# Founder directive: the published directory covers the European Union only.
+# The EU pseudo-market stays in scope because the cross-border auction and
+# leasing platforms mapped to it serve the member states directly.
+EU_COUNTRIES: Tuple[str, ...] = (
+    "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR",
+    "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK",
+    "SI", "ES", "SE",
+)
+ACTIVE_COUNTRIES: Tuple[str, ...] = tuple(sorted(EU_COUNTRIES + ("EU",)))
+
 # country -> [(site_key, display_name, url, kind)]
 # Hand-curated classifieds, portals and dealer markets.  Every URL is probed
 # before publication; unknown or dead hosts fall to `excluded`.
@@ -172,6 +190,7 @@ CANDIDATES: Dict[str, List[Tuple[str, str, str, str]]] = {
     "AT": [
         ("willhaben", "Willhaben", "https://www.willhaben.at/", "classifieds"),
         ("autoscout24-at", "AutoScout24 Austria", "https://www.autoscout24.at/", "portal"),
+        ("pkw-at", "pkw.at", "https://www.pkw.at/", "portal"),
         ("gebrauchtwagen-at", "Gebrauchtwagen.at", "https://www.gebrauchtwagen.at/", "portal"),
     ],
     "AZ": [("autos-az", "Autos.az", "https://www.autos.az/", "portal")],
@@ -186,6 +205,8 @@ CANDIDATES: Dict[str, List[Tuple[str, str, str, str]]] = {
     "BG": [
         ("mobile-bg", "mobile.bg", "https://www.mobile.bg/", "portal"),
         ("autobazar-bg", "Autobazar.bg", "https://www.autobazar.bg/", "classifieds"),
+        ("bazar-bg", "Bazar.bg", "https://www.bazar.bg/", "classifieds"),
+        ("auto-bg", "auto.bg", "https://auto.bg/", "portal"),
     ],
     "BY": [("abw", "ABW.by", "https://www.abw.by/", "portal")],
     "CH": [
@@ -212,6 +233,7 @@ CANDIDATES: Dict[str, List[Tuple[str, str, str, str]]] = {
         ("dba-dk", "DBA", "https://www.dba.dk/", "classifieds"),
         ("bilgalleri", "Bilgalleri", "https://www.bilgalleri.dk/", "portal"),
         ("autouncle-dk", "AutoUncle Denmark", "https://www.autouncle.dk/", "portal"),
+        ("bilhandel-dk", "Bilhandel", "https://www.bilhandel.dk/", "portal"),
     ],
     "EE": [
         ("auto24", "auto24.ee", "https://www.auto24.ee/", "portal"),
@@ -249,8 +271,15 @@ CANDIDATES: Dict[str, List[Tuple[str, str, str, str]]] = {
         ("ss-ge", "SS.ge", "https://ss.ge/", "classifieds"),
     ],
     "GR": [("car-gr", "car.gr", "https://www.car.gr/", "portal")],
-    "HR": [("njuskalo", "Njuskalo", "https://www.njuskalo.hr/", "classifieds")],
-    "HU": [("hasznaltauto", "Hasznaltauto.hu", "https://www.hasznaltauto.hu/", "portal")],
+    "HR": [
+        ("njuskalo", "Njuskalo", "https://www.njuskalo.hr/", "classifieds"),
+        ("autoportal-hr", "Autoportal.hr", "https://www.autoportal.hr/", "portal"),
+    ],
+    "HU": [
+        ("hasznaltauto", "Hasznaltauto.hu", "https://www.hasznaltauto.hu/", "portal"),
+        ("joautok-hu", "JoAutok", "https://www.joautok.hu/", "portal"),
+        ("autopro-hu", "Autopro", "https://www.autopro.hu/", "portal"),
+    ],
     "IE": [
         ("donedeal", "DoneDeal", "https://www.donedeal.ie/", "classifieds"),
         ("motors-ie", "Motors.ie", "https://www.motors.ie/", "portal"),
@@ -297,6 +326,7 @@ CANDIDATES: Dict[str, List[Tuple[str, str, str, str]]] = {
     "RO": [
         ("olx-ro", "OLX Romania", "https://www.olx.ro/", "classifieds"),
         ("autovit", "Autovit", "https://www.autovit.ro/", "portal"),
+        ("auto-ro", "auto.ro", "https://www.auto.ro/", "classifieds"),
     ],
     "RS": [
         ("polovniautomobili", "Polovni Automobili", "https://www.polovniautomobili.rs/", "portal"),
@@ -311,6 +341,8 @@ CANDIDATES: Dict[str, List[Tuple[str, str, str, str]]] = {
     "SE": [
         ("blocket", "Blocket", "https://www.blocket.se/", "classifieds"),
         ("bytbil", "Bytbil", "https://www.bytbil.com/", "portal"),
+        ("kvd-se", "KVD", "https://www.kvd.se/", "portal"),
+        ("autoscout24-se", "AutoScout24 Sweden", "https://www.autoscout24.se/", "portal"),
     ],
     "SI": [
         ("avto-net", "avto.net", "https://www.avto.net/", "portal"),
@@ -484,6 +516,7 @@ def _probe_once(url: str, timeout: int = PROBE_TIMEOUT_SECONDS) -> Dict[str, Any
         "body_bytes": 0,
         "challenge": False,
         "error": "",
+        "channel": "direct",
         "checked_at_utc": utc_now_iso(),
     }
     request = Request(
@@ -568,6 +601,70 @@ def probe_url(url: str, timeout: int = PROBE_TIMEOUT_SECONDS) -> Dict[str, Any]:
     return record
 
 
+def probe_via_daemon(
+    url: str,
+    wait_ms: int = BROWSER_WAIT_MS,
+    timeout: int = BROWSER_PROBE_TIMEOUT_SECONDS,
+) -> Optional[Dict[str, Any]]:
+    """Fetch one URL through the local WAF daemon's browser lane.  Never raises.
+
+    Returns a record shaped like `_probe_once` with `channel="render"`, or
+    None when the daemon is down or refuses the job.
+    """
+    query = url_quote(url, safe="")
+    request = Request(f"{DAEMON_RENDER_URL}?url={query}&wait={wait_ms}")
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read(MAX_RENDER_BODY_BYTES).decode("utf-8", "replace"))
+    except Exception:
+        return None
+    if not isinstance(payload, dict) or payload.get("error"):
+        return None
+    body = str(payload.get("body") or "")
+    title, challenge = evaluate_document(body)
+    return {
+        "url": url,
+        "http_status": int(payload.get("status") or 0),
+        "final_url": str(payload.get("url") or url),
+        "title": title,
+        "body_bytes": len(body.encode("utf-8", "replace")),
+        "challenge": challenge,
+        "error": "",
+        "channel": "render",
+        "checked_at_utc": utc_now_iso(),
+    }
+
+
+def upgrade_with_browser(
+    results: List[Dict[str, Any]],
+    wait_ms: int = BROWSER_WAIT_MS,
+) -> int:
+    """Re-probe every non-verified target through the browser lane.
+
+    A record is replaced only when the browser pass classifies it `verified`,
+    so a walled or unreachable plain probe can only be upgraded by a rendered
+    document that carries a real title and a reachable status.  Returns the
+    number of upgraded records.
+    """
+    upgraded = 0
+    for index, record in enumerate(results):
+        if classify_probe(record)[0] == "verified":
+            continue
+        url = str(record.get("url") or "")
+        if not url:
+            continue
+        browser = probe_via_daemon(url, wait_ms=wait_ms)
+        if browser is None or classify_probe(browser)[0] != "verified":
+            continue
+        browser["site_key"] = record.get("site_key")
+        browser["host"] = record.get("host")
+        browser["plain_status"] = int(record.get("http_status") or 0)
+        browser["plain_challenge"] = bool(record.get("challenge"))
+        results[index] = browser
+        upgraded += 1
+    return upgraded
+
+
 def registry_sources(
     manifest: Dict[str, Any],
 ) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
@@ -612,10 +709,14 @@ def collect_probe_targets(registry: Dict[str, Dict[str, str]]) -> List[Tuple[str
         seen_hosts.add(host)
         targets.append((site_key_for_host(host), host, f"https://{host}/"))
 
-    for entries in CANDIDATES.values():
+    for country, entries in sorted(CANDIDATES.items()):
+        if country not in ACTIVE_COUNTRIES:
+            continue
         for _key, _name, url, _kind in entries:
             add(url)
-    for entry in registry.values():
+    for source_key, entry in sorted(registry.items()):
+        if AUCTION_REGISTRY_COUNTRIES.get(source_key) not in ACTIVE_COUNTRIES:
+            continue
         add(entry["url"])
     return sorted(targets, key=lambda item: item[1])
 
@@ -743,6 +844,7 @@ def build_artifact(
                 "checked_at_utc": str(record.get("checked_at_utc") or ""),
                 "title": str(record.get("title") or ""),
                 "challenge": bool(record.get("challenge")),
+                "channel": str(record.get("channel") or "direct"),
             },
         }
         if status == "unreachable":
@@ -759,6 +861,9 @@ def build_artifact(
     }
     by_host: Dict[str, Dict[str, Any]] = {}
     for source_key, entry in sorted(registry.items()):
+        market = AUCTION_REGISTRY_COUNTRIES.get(source_key)
+        if market not in ACTIVE_COUNTRIES:
+            continue
         try:
             host = normalize_host(entry["url"])
         except ValueError:
@@ -771,7 +876,6 @@ def build_artifact(
             "names": [],
             "markets": set(),
         })
-        market = AUCTION_REGISTRY_COUNTRIES[source_key]
         bucket["countries"].add(market)
         bucket["markets"].add(market)
         bucket["source_keys"].add(source_key)
@@ -797,6 +901,8 @@ def build_artifact(
 
     # 2. Hand-curated classifieds, portals and dealer markets.
     for country, entries in sorted(CANDIDATES.items()):
+        if country not in ACTIVE_COUNTRIES:
+            continue
         for _key, name, url, kind in entries:
             try:
                 host = normalize_host(url)
@@ -818,9 +924,9 @@ def build_artifact(
                 wired=False,
             )
 
-    # 3. Countries: every declared market, including empty coverage.
+    # 3. Countries: every declared EU market, including empty coverage.
     countries: List[Dict[str, Any]] = []
-    for code in sorted(COUNTRIES):
+    for code in ACTIVE_COUNTRIES:
         name_ar, name_en, flag = COUNTRIES[code]
         keys = sorted(key for key, entry in sites.items() if code in entry["countries"])
         countries.append({
@@ -889,8 +995,8 @@ def validate_artifact(artifact: Any) -> Dict[str, Any]:
     codes = [row.get("code") for row in countries]
     if codes != sorted(codes) or len(codes) != len(set(codes)):
         raise ValueError("country codes must be unique and sorted")
-    if set(codes) != set(COUNTRIES):
-        raise ValueError("country set must equal the declared European market set")
+    if set(codes) != set(ACTIVE_COUNTRIES):
+        raise ValueError("country set must equal the declared EU market set")
     if contract.get("country_count") != len(codes):
         raise ValueError("contract.country_count mismatch")
     unmapped = contract.get("unmapped_registry_keys")
@@ -941,6 +1047,8 @@ def validate_artifact(artifact: Any) -> Dict[str, Any]:
             raise ValueError(f"site {key}: published without probe evidence")
         if not isinstance(evidence.get("challenge"), bool):
             raise ValueError(f"site {key}: evidence must record the challenge flag")
+        if evidence.get("channel") not in CHANNELS:
+            raise ValueError(f"site {key}: evidence channel must be direct or render")
         if entry["status"] == "verified":
             if evidence["http_status"] not in REACHABLE_STATUSES or evidence["challenge"]:
                 raise ValueError(f"site {key}: verified status without reachable evidence")
@@ -1020,6 +1128,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     probe_cmd.add_argument("--manifest", required=True, help="official_auction_watch.json path")
     probe_cmd.add_argument("--out", required=True, help="probe evidence output path")
     probe_cmd.add_argument("--workers", type=int, default=PROBE_WORKERS)
+    probe_cmd.add_argument(
+        "--browser",
+        action="store_true",
+        help="re-probe non-verified targets through the local WAF daemon",
+    )
 
     build_cmd = sub.add_parser("build", help="build the published artifact")
     build_cmd.add_argument("--probe", required=True, help="probe evidence path")
@@ -1036,6 +1149,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         registry, unmapped = registry_sources(manifest)
         targets = collect_probe_targets(registry)
         result = run_probe(targets, workers=args.workers)
+        upgraded = upgrade_with_browser(result["results"]) if args.browser else 0
         Path(args.out).write_text(
             json.dumps(result, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
         )
@@ -1044,7 +1158,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
         print(
             f"PROBED={len(targets)} REACHABLE={reachable} "
-            f"EXCLUDED={len(targets) - reachable} UNMAPPED={len(unmapped)}"
+            f"EXCLUDED={len(targets) - reachable} UNMAPPED={len(unmapped)} "
+            f"BROWSER_UPGRADED={upgraded}"
         )
         return 0
     if args.command == "build":

@@ -1,64 +1,37 @@
 {
  "schema_version": 1,
  "lane": "europe_car_ads_sources",
- "generated_at_utc": "2026-10-25T20:17:28Z",
+ "generated_at_utc": "2026-10-26T00:36:22Z",
  "contract": {
-  "country_count": 52,
-  "site_count": 212,
-  "unique_host_count": 212,
+  "country_count": 28,
+  "site_count": 182,
+  "unique_host_count": 182,
   "https_only": true,
   "every_site_probed": true,
-  "probe_checked_at_utc": "2026-10-25T20:17:28Z",
+  "probe_checked_at_utc": "2026-10-26T00:08:50Z",
   "unmapped_registry_keys": [
    "bilauppbod"
   ]
  },
  "summary": {
-  "countries": 52,
-  "countries_with_sites": 48,
-  "sites": 212,
+  "countries": 28,
+  "countries_with_sites": 28,
+  "sites": 182,
   "by_kind": {
-   "classifieds": 45,
-   "portal": 53,
-   "auction": 110,
+   "classifieds": 30,
+   "portal": 43,
+   "auction": 105,
    "dealer": 4
   },
   "by_status": {
    "verified": 144,
-   "walled": 56,
-   "unreachable": 12
+   "walled": 32,
+   "unreachable": 6
   },
-  "wired_sites": 39,
-  "excluded": 2
+  "wired_sites": 37,
+  "excluded": 1
  },
  "countries": [
-  {
-   "code": "AD",
-   "name": "Andorra",
-   "name_ar": "أندورا",
-   "flag": "🇦🇩",
-   "site_keys": [
-    "cochesandorra-com"
-   ]
-  },
-  {
-   "code": "AL",
-   "name": "Albania",
-   "name_ar": "ألبانيا",
-   "flag": "🇦🇱",
-   "site_keys": [
-    "merrjep-al"
-   ]
-  },
-  {
-   "code": "AM",
-   "name": "Armenia",
-   "name_ar": "أرمينيا",
-   "flag": "🇦🇲",
-   "site_keys": [
-    "list-am"
-   ]
-  },
   {
    "code": "AT",
    "name": "Austria",
@@ -70,27 +43,9 @@
     "autoscout24-at",
     "fahrzeuge-dorotheum-com",
     "gebrauchtwagen-at",
+    "pkw-at",
     "willhaben-at",
     "womauktion-com"
-   ]
-  },
-  {
-   "code": "AZ",
-   "name": "Azerbaijan",
-   "name_ar": "أذربيجان",
-   "flag": "🇦🇿",
-   "site_keys": [
-    "autos-az"
-   ]
-  },
-  {
-   "code": "BA",
-   "name": "Bosnia and Herzegovina",
-   "name_ar": "البوسنة والهرسك",
-   "flag": "🇧🇦",
-   "site_keys": [
-    "mojauto-ba",
-    "olx-ba"
    ]
   },
   {
@@ -113,34 +68,12 @@
    "name_ar": "بلغاريا",
    "flag": "🇧🇬",
    "site_keys": [
+    "auto-bg",
     "autobazar-bg",
+    "bazar-bg",
     "mobile-bg",
     "sales-nra-bg",
     "zapori-mjs-bg"
-   ]
-  },
-  {
-   "code": "BY",
-   "name": "Belarus",
-   "name_ar": "بيلاروسيا",
-   "flag": "🇧🇾",
-   "site_keys": [
-    "abw-by"
-   ]
-  },
-  {
-   "code": "CH",
-   "name": "Switzerland",
-   "name_ar": "سويسرا",
-   "flag": "🇨🇭",
-   "site_keys": [
-    "autoauction24-ch",
-    "autoscout24-ch",
-    "ayvens-com",
-    "bca-com",
-    "carauktion-ch",
-    "restwertboerse-ch",
-    "tutti-ch"
    ]
   },
   {
@@ -202,6 +135,7 @@
     "bca-com",
     "bilbasen-dk",
     "bilgalleri-dk",
+    "bilhandel-dk",
     "campenauktioner-dk",
     "dba-dk",
     "klaravik-dk"
@@ -285,13 +219,6 @@
    ]
   },
   {
-   "code": "FO",
-   "name": "Faroe Islands",
-   "name_ar": "جزر فارو",
-   "flag": "🇫🇴",
-   "site_keys": []
-  },
-  {
    "code": "FR",
    "name": "France",
    "name_ar": "فرنسا",
@@ -305,31 +232,6 @@
     "lacentrale-fr",
     "leboncoin-fr",
     "leparking-fr"
-   ]
-  },
-  {
-   "code": "GB",
-   "name": "United Kingdom",
-   "name_ar": "بريطانيا العظمى",
-   "flag": "🇬🇧",
-   "site_keys": [
-    "autotrader-co-uk",
-    "cargurus-co-uk",
-    "ebay-co-uk",
-    "gumtree-com",
-    "motors-co-uk",
-    "pistonheads-com"
-   ]
-  },
-  {
-   "code": "GE",
-   "name": "Georgia",
-   "name_ar": "جورجيا",
-   "flag": "🇬🇪",
-   "site_keys": [
-    "auto-ge",
-    "cars-ge",
-    "ss-ge"
    ]
   },
   {
@@ -349,6 +251,7 @@
    "name_ar": "كرواتيا",
    "flag": "🇭🇷",
    "site_keys": [
+    "autoportal-hr",
     "edrazba-fina-hr",
     "njuskalo-hr",
     "ponip-fina-hr"
@@ -362,8 +265,10 @@
    "site_keys": [
     "arveres-mbvk-hu",
     "arveres-nav-gov-hu",
+    "autopro-hu",
     "e-arveres-mnv-hu",
-    "hasznaltauto-hu"
+    "hasznaltauto-hu",
+    "joautok-hu"
    ]
   },
   {
@@ -375,15 +280,6 @@
     "carzone-ie",
     "donedeal-ie",
     "motors-ie"
-   ]
-  },
-  {
-   "code": "IS",
-   "name": "Iceland",
-   "name_ar": "آيسلندا",
-   "flag": "🇮🇸",
-   "site_keys": [
-    "bilar-is"
    ]
   },
   {
@@ -399,15 +295,6 @@
     "gobid-it",
     "pvp-giustizia-it",
     "subito-it"
-   ]
-  },
-  {
-   "code": "LI",
-   "name": "Liechtenstein",
-   "name_ar": "ليختنشتاين",
-   "flag": "🇱🇮",
-   "site_keys": [
-    "autoscout24-li"
    ]
   },
   {
@@ -446,40 +333,6 @@
    ]
   },
   {
-   "code": "MC",
-   "name": "Monaco",
-   "name_ar": "موناكو",
-   "flag": "🇲🇨",
-   "site_keys": []
-  },
-  {
-   "code": "MD",
-   "name": "Moldova",
-   "name_ar": "مولدوفا",
-   "flag": "🇲🇩",
-   "site_keys": [
-    "999-md"
-   ]
-  },
-  {
-   "code": "ME",
-   "name": "Montenegro",
-   "name_ar": "الجبل الأسود",
-   "flag": "🇲🇪",
-   "site_keys": [
-    "oglas-me"
-   ]
-  },
-  {
-   "code": "MK",
-   "name": "North Macedonia",
-   "name_ar": "مقدونيا الشمالية",
-   "flag": "🇲🇰",
-   "site_keys": [
-    "pazar3-mk"
-   ]
-  },
-  {
    "code": "MT",
    "name": "Malta",
    "name_ar": "مالطا",
@@ -507,17 +360,6 @@
     "onlineveilingmeester-nl",
     "troostwijkauctions-com",
     "vavato-com"
-   ]
-  },
-  {
-   "code": "NO",
-   "name": "Norway",
-   "name_ar": "النرويج",
-   "flag": "🇳🇴",
-   "site_keys": [
-    "auksjonen-no",
-    "bca-com",
-    "finn-no"
    ]
   },
   {
@@ -559,32 +401,11 @@
    "flag": "🇷🇴",
    "site_keys": [
     "anabi-just-ro",
+    "auto-ro",
     "autovit-ro",
     "carmarket-ayvens-com",
     "exleasingcar-ro",
     "olx-ro"
-   ]
-  },
-  {
-   "code": "RS",
-   "name": "Serbia",
-   "name_ar": "صربيا",
-   "flag": "🇷🇸",
-   "site_keys": [
-    "halooglasi-rs",
-    "kp-rs",
-    "polovniautomobili-rs"
-   ]
-  },
-  {
-   "code": "RU",
-   "name": "Russia",
-   "name_ar": "روسيا",
-   "flag": "🇷🇺",
-   "site_keys": [
-    "auto-ru",
-    "avito-ru",
-    "drom-ru"
    ]
   },
   {
@@ -594,6 +415,7 @@
    "flag": "🇸🇪",
    "site_keys": [
     "auktionstorget-kronofogden-se",
+    "autoscout24-se",
     "bca-com",
     "bilwebauctions-se",
     "blinto-se",
@@ -628,49 +450,6 @@
     "carmarket-ayvens-com",
     "ropk-sk"
    ]
-  },
-  {
-   "code": "SM",
-   "name": "San Marino",
-   "name_ar": "سان مارينو",
-   "flag": "🇸🇲",
-   "site_keys": []
-  },
-  {
-   "code": "TR",
-   "name": "Turkiye",
-   "name_ar": "تركيا",
-   "flag": "🇹🇷",
-   "site_keys": [
-    "arabam-com",
-    "sahibinden-com"
-   ]
-  },
-  {
-   "code": "UA",
-   "name": "Ukraine",
-   "name_ar": "أوكرانيا",
-   "flag": "🇺🇦",
-   "site_keys": [
-    "auto-ria-com",
-    "olx-ua"
-   ]
-  },
-  {
-   "code": "VA",
-   "name": "Vatican City",
-   "name_ar": "الفاتيكان",
-   "flag": "🇻🇦",
-   "site_keys": []
-  },
-  {
-   "code": "XK",
-   "name": "Kosovo",
-   "name_ar": "كوسوفو",
-   "flag": "🇽🇰",
-   "site_keys": [
-    "merrjep-al"
-   ]
   }
  ],
  "sites": {
@@ -687,9 +466,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
+    "checked_at_utc": "2026-10-26T00:08:07Z",
     "title": "2dehands - Dé plek om nieuwe en tweedehands zaken te kopen en verkopen",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "2trde-com": {
@@ -707,31 +487,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
+    "checked_at_utc": "2026-10-26T00:08:07Z",
     "title": "Home - 2trde",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://2trde.com/"
    ]
-  },
-  "999-md": {
-   "name": "999.md",
-   "url": "https://www.999.md/",
-   "host": "999.md",
-   "kind": "classifieds",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "MD"
-   ],
-   "evidence": {
-    "http_status": 307,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
-    "title": "",
-    "challenge": false
-   }
   },
   "aaaauto-cz": {
    "name": "AAA Auto Czech",
@@ -746,9 +509,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
+    "checked_at_utc": "2026-10-26T00:08:07Z",
     "title": "Autobazar AAA AUTO - největší výběr ojetých vozů",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "aaaauto-sk": {
@@ -764,27 +528,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
+    "checked_at_utc": "2026-10-26T00:08:07Z",
     "title": "Autobazár AAA AUTO - najväčší výber ojazdených vozidiel",
-    "challenge": false
-   }
-  },
-  "abw-by": {
-   "name": "ABW.by",
-   "url": "https://www.abw.by/",
-   "host": "abw.by",
-   "kind": "portal",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "BY"
-   ],
-   "evidence": {
-    "http_status": 468,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
-    "title": "",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "agorastore-fr": {
@@ -802,9 +549,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
+    "checked_at_utc": "2026-10-26T00:08:07Z",
     "title": "",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://agorastore.fr/"
@@ -815,7 +563,7 @@
    "url": "https://alcopa-auction.es/",
    "host": "alcopa-auction.es",
    "kind": "auction",
-   "status": "unreachable",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "alcopa-es"
@@ -824,11 +572,11 @@
     "ES"
    ],
    "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:37Z",
-    "title": "",
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:09:07Z",
+    "title": "Alcopa Auction - Primer operador de Subastas de Automóviles de Ocasión",
     "challenge": false,
-    "probe_reason": "connection_failure"
+    "channel": "render"
    },
    "registry_urls": [
     "https://alcopa-auction.es/"
@@ -849,9 +597,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "ERROR: The request could not be satisfied",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://alcopa-auction.fr/"
@@ -870,9 +619,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "allegro-pl": {
@@ -888,9 +638,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "allegro.pl",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "anabi-just-ro": {
@@ -908,31 +659,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Agenția Națională de Administrare a Bunurilor Indisponibilizate",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://anabi.just.ro/"
    ]
-  },
-  "arabam-com": {
-   "name": "Arabam.com",
-   "url": "https://www.arabam.com/",
-   "host": "arabam.com",
-   "kind": "portal",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "TR"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
-    "title": "Just a moment...",
-    "challenge": true
-   }
   },
   "arveres-mbvk-hu": {
    "name": "MBVK EAr",
@@ -949,9 +683,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "MBVKEÁR",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://arveres.mbvk.hu/"
@@ -973,9 +708,10 @@
    ],
    "evidence": {
     "http_status": 503,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://arveres.nav.gov.hu/"
@@ -996,9 +732,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Astegiudiziarie.it - Il portale italiano delle aste giudiziarie immobiliari e mobiliari - Aste Giudiziarie Inlinea S.p.A",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://astegiudiziarie.it/"
@@ -1019,9 +756,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Online auctions for vehicles, machinery and more | Auctim",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://auctim.com/"
@@ -1042,9 +780,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Online auctions of vehicles and machinery | Auction24.cz",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://auction24.cz/"
@@ -1065,9 +804,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:38Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "AuctionMaster.com - Online Auctions. Find. Bid. Win.",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://auctionmaster.com/"
@@ -1088,35 +828,13 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Auctions: PKOLeasing",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://aukcje.pkoleasing.pl/"
-   ]
-  },
-  "auksjonen-no": {
-   "name": "Auksjonen.no",
-   "url": "https://auksjonen.no/",
-   "host": "auksjonen.no",
-   "kind": "auction",
-   "status": "verified",
-   "wired": true,
-   "source_keys": [
-    "auksjonen"
-   ],
-   "countries": [
-    "NO"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
-    "title": "Auksjonen.no | Kjøp og selg brukt på nettauksjon",
-    "challenge": false
-   },
-   "registry_urls": [
-    "https://auksjonen.no/"
    ]
   },
   "auktionshuset-dk": {
@@ -1124,7 +842,7 @@
    "url": "https://auktionshuset.dk/",
    "host": "auktionshuset.dk",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": true,
    "source_keys": [
     "auktionshuset-dab"
@@ -1133,10 +851,11 @@
     "DK"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
-    "title": "Service unavailable",
-    "challenge": false
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:11:43Z",
+    "title": "Forside | Auktionshuset dab A/S",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://auktionshuset.dk/"
@@ -1157,9 +876,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "Auktionstorget | Kronofogden",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://auktionstorget.kronofogden.se/"
@@ -1180,9 +900,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "aurena.at | Österreichs spannendste Auktionen",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://aurena.at/"
@@ -1203,13 +924,33 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
+    "checked_at_utc": "2026-10-26T00:08:08Z",
     "title": "www.auto-auctions.gr",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://auto-auctions.gr/"
    ]
+  },
+  "auto-bg": {
+   "name": "auto.bg",
+   "url": "https://auto.bg/",
+   "host": "auto.bg",
+   "kind": "portal",
+   "status": "walled",
+   "wired": false,
+   "source_keys": [],
+   "countries": [
+    "BG"
+   ],
+   "evidence": {
+    "http_status": 403,
+    "checked_at_utc": "2026-10-26T00:08:09Z",
+    "title": "Just a moment...",
+    "challenge": true,
+    "channel": "direct"
+   }
   },
   "auto-de": {
    "name": "auto.de",
@@ -1224,63 +965,29 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
+    "checked_at_utc": "2026-10-26T00:08:09Z",
     "title": "Der beste Vergleich für Gebrauchtwagen & Neuwagen - Auto.de",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
-  "auto-ge": {
-   "name": "Auto.ge",
-   "url": "https://www.auto.ge/",
-   "host": "auto.ge",
+  "auto-ro": {
+   "name": "auto.ro",
+   "url": "https://www.auto.ro/",
+   "host": "auto.ro",
    "kind": "classifieds",
    "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
-    "GE"
+    "RO"
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:39Z",
-    "title": "AUTO.GE | აუტო.ჯი ავტომობილების ყიდვა-გაყიდვა საქართველოში!",
-    "challenge": false
-   }
-  },
-  "auto-ria-com": {
-   "name": "auto.ria.com",
-   "url": "https://auto.ria.com/",
-   "host": "auto.ria.com",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "UA"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
-    "title": "AUTO.RIA™ — Автобазар №1, купить и продать проверенное авто легко!",
-    "challenge": false
-   }
-  },
-  "auto-ru": {
-   "name": "Auto.ru",
-   "url": "https://www.auto.ru/",
-   "host": "auto.ru",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "RU"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
-    "title": "Авто.ру: купить и продать автомобиль",
-    "challenge": false
+    "checked_at_utc": "2026-10-26T00:08:09Z",
+    "title": "Vanzari auto, anunturi masini de vanzare second hand - auto.ro",
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "auto1-com": {
@@ -1298,9 +1005,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:09Z",
     "title": "AUTO1.com - the platform for used cars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://auto1.com/"
@@ -1311,17 +1019,18 @@
    "url": "https://www.auto24.ee/",
    "host": "auto24.ee",
    "kind": "portal",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
     "EE"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
-    "title": "auto24.ee - Turvakontroll | Проверка безопасности | Security check",
-    "challenge": false
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:12:34Z",
+    "title": "Avaleht - auto24.ee",
+    "challenge": false,
+    "channel": "render"
    }
   },
   "autoa-bid": {
@@ -1339,35 +1048,13 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:09Z",
     "title": "Sell or buy a car at the best price! | autoa.bid",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autoa.bid/"
-   ]
-  },
-  "autoauction24-ch": {
-   "name": "AutoAuction24.ch",
-   "url": "https://autoauction24.ch/",
-   "host": "autoauction24.ch",
-   "kind": "auction",
-   "status": "verified",
-   "wired": true,
-   "source_keys": [
-    "autoauction24-ch"
-   ],
-   "countries": [
-    "CH"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
-    "title": "Auto Auction",
-    "challenge": false
-   },
-   "registry_urls": [
-    "https://autoauction24.ch/"
    ]
   },
   "autobazar-bg": {
@@ -1383,9 +1070,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:09Z",
     "title": "AutoBazar.bg - Обяви за автомобили – Българският автомобилен пазар",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autobazos-sk": {
@@ -1401,9 +1089,10 @@
    ],
    "evidence": {
     "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:09Z",
     "title": "",
     "challenge": false,
+    "channel": "direct",
     "probe_reason": "connection_failure"
    }
   },
@@ -1422,9 +1111,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:09Z",
     "title": "Car Auction Portal: Car Auctions For Car Dealers | Autobid.de",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autobid.de/"
@@ -1443,9 +1133,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "autohero-com": {
@@ -1461,9 +1152,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Autohero | Auto kaufen: Endlich einfach",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "automotive-auctions-nl": {
@@ -1481,9 +1173,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Welkom bij Automotive Auctions - Automotive Auctions",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://automotive-auctions.nl/"
@@ -1504,9 +1197,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:40Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "International Car Auction - Join Automotive Trade Center for free!",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://automotivetradecenter.com/"
@@ -1525,9 +1219,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Auto usate, Km 0 e Auto nuove. Prove, Listini e News su Automoto.it",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autopoint-eu": {
@@ -1545,13 +1240,52 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Autopoint - Find your dream car!",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autopoint.eu/"
    ]
+  },
+  "autoportal-hr": {
+   "name": "Autoportal.hr",
+   "url": "https://www.autoportal.hr/",
+   "host": "autoportal.hr",
+   "kind": "portal",
+   "status": "verified",
+   "wired": false,
+   "source_keys": [],
+   "countries": [
+    "HR"
+   ],
+   "evidence": {
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:08:10Z",
+    "title": "Sve o automobilima, testovi, savjeti, tehnika - Autoportal.hr",
+    "challenge": false,
+    "channel": "direct"
+   }
+  },
+  "autopro-hu": {
+   "name": "Autopro",
+   "url": "https://www.autopro.hu/",
+   "host": "autopro.hu",
+   "kind": "portal",
+   "status": "walled",
+   "wired": false,
+   "source_keys": [],
+   "countries": [
+    "HU"
+   ],
+   "evidence": {
+    "http_status": 403,
+    "checked_at_utc": "2026-10-26T00:08:10Z",
+    "title": "Just a moment...",
+    "challenge": true,
+    "channel": "direct"
+   }
   },
   "autoproff-com": {
    "name": "AutoProff",
@@ -1568,9 +1302,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "AutoProff - your B2B platform for used car buying and selling",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autoproff.com/"
@@ -1591,9 +1326,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Autorola",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autorola.at/"
@@ -1614,9 +1350,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Online car auction - buy and sell cars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autorola.eu/"
@@ -1637,9 +1374,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Online car auction - buy and sell cars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autorola.lu/"
@@ -1660,9 +1398,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:41Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Online car auction - buy and sell cars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autorola.pt/"
@@ -1683,31 +1422,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Online car auction - buy and sell cars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://autorola.sk/"
    ]
-  },
-  "autos-az": {
-   "name": "Autos.az",
-   "url": "https://www.autos.az/",
-   "host": "autos.az",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "AZ"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
-    "title": "autos.az",
-    "challenge": false
-   }
   },
   "autoscout24-at": {
    "name": "AutoScout24 Austria",
@@ -1722,9 +1444,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "Gebrauchtwagen und Neuwagen bei AutoScout24",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-be": {
@@ -1740,27 +1463,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:10Z",
     "title": "AutoScout24",
-    "challenge": false
-   }
-  },
-  "autoscout24-ch": {
-   "name": "AutoScout24 Switzerland",
-   "url": "https://www.autoscout24.ch/",
-   "host": "autoscout24.ch",
-   "kind": "portal",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "CH"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
-    "title": "Auto & MotoScout24",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-de": {
@@ -1776,9 +1482,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "Gebrauchtwagen und Neuwagen bei AutoScout24",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-es": {
@@ -1794,9 +1501,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "Coches de segunda mano - AutoScout24",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-fr": {
@@ -1812,9 +1520,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "AutoScout24 : Vente et achat de voitures neuves et d'occasion",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-it": {
@@ -1830,27 +1539,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:42Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "Auto usate – AutoScout24",
-    "challenge": false
-   }
-  },
-  "autoscout24-li": {
-   "name": "AutoScout24 Liechtenstein",
-   "url": "https://www.autoscout24.li/",
-   "host": "autoscout24.li",
-   "kind": "portal",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "LI"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
-    "title": "Auto & MotoScout24",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-lu": {
@@ -1866,9 +1558,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "AutoScout24 : Vente et achat de voitures neuves et d'occasion",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autoscout24-nl": {
@@ -1884,27 +1577,29 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "AutoScout24 – Occasion of nieuwe auto kopen en gratis verkopen",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
-  "autotrader-co-uk": {
-   "name": "Auto Trader",
-   "url": "https://www.autotrader.co.uk/",
-   "host": "autotrader.co.uk",
+  "autoscout24-se": {
+   "name": "AutoScout24 Sweden",
+   "url": "https://www.autoscout24.se/",
+   "host": "autoscout24.se",
    "kind": "portal",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
-    "GB"
+    "SE"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
-    "title": "Just a moment...",
-    "challenge": true
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:08:11Z",
+    "title": "Europas marknadsplats för nya och begagnade bilar - AutoScout24",
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autouncle-dk": {
@@ -1920,9 +1615,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "AutoUncle | Din guide til gode beslutninger når du skal handle bil",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autovit-ro": {
@@ -1938,9 +1634,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "AUTOVIT - Anunturi auto, mașini de vânzare - noi și second-hand",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "autowereld-nl": {
@@ -1956,9 +1653,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:43Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "Access Denied",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "avariilised-autod-ee": {
@@ -1976,9 +1674,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "avariilised-autod.ee",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://avariilised-autod.ee/"
@@ -1999,72 +1698,33 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "Online Car Auctions - Used & Damaged Vehicles from Europe | AVCars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://avcars.eu/"
    ]
-  },
-  "avito-ru": {
-   "name": "Avito",
-   "url": "https://www.avito.ru/",
-   "host": "avito.ru",
-   "kind": "classifieds",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "RU"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
-    "title": "Авито — Объявления на сайте Авито",
-    "challenge": false
-   }
   },
   "avto-net": {
    "name": "avto.net",
    "url": "https://www.avto.net/",
    "host": "avto.net",
    "kind": "portal",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
     "SI"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
-    "title": "Just a moment...",
-    "challenge": true
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:14:34Z",
+    "title": "www.Avto.net - AVTONET",
+    "challenge": false,
+    "channel": "render"
    }
-  },
-  "ayvens-com": {
-   "name": "Ayvens Carmarket Switzerland",
-   "url": "https://ayvens.com/",
-   "host": "ayvens.com",
-   "kind": "auction",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [
-    "ayvens-ch"
-   ],
-   "countries": [
-    "CH"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
-    "title": "ERROR: The request could not be satisfied",
-    "challenge": false
-   },
-   "registry_urls": [
-    "https://ayvens.com/"
-   ]
   },
   "b2b-2ndmove-eu": {
    "name": "2ndMove by Europcar",
@@ -2081,13 +1741,33 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
+    "checked_at_utc": "2026-10-26T00:08:11Z",
     "title": "European Car Auction System – 2ndMove by Europcar",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://b2b.2ndmove.eu/"
    ]
+  },
+  "bazar-bg": {
+   "name": "Bazar.bg",
+   "url": "https://www.bazar.bg/",
+   "host": "bazar.bg",
+   "kind": "classifieds",
+   "status": "verified",
+   "wired": false,
+   "source_keys": [],
+   "countries": [
+    "BG"
+   ],
+   "evidence": {
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:08:12Z",
+    "title": "Безплатни обяви от Bazar.bg – обяви за работа, имоти, коли, услуги..",
+    "challenge": false,
+    "channel": "direct"
+   }
   },
   "bazaraki-com": {
    "name": "Bazaraki",
@@ -2102,9 +1782,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Attention Required! | Cloudflare",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "bazos-cz": {
@@ -2120,9 +1801,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Inzerce, inzeráty, bazar - Bazos.cz",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "bca-com": {
@@ -2130,61 +1812,40 @@
    "url": "https://bca.com/",
    "host": "bca.com",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "bca-be",
-    "bca-ch",
     "bca-dk",
     "bca-es",
     "bca-eu",
     "bca-it",
     "bca-nl",
-    "bca-no",
     "bca-pl",
     "bca-pt",
     "bca-se"
    ],
    "countries": [
     "BE",
-    "CH",
     "DK",
     "ES",
     "EU",
     "IT",
     "NL",
-    "NO",
     "PL",
     "PT",
     "SE"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
-    "title": "Attention Required!",
-    "challenge": true
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:15:28Z",
+    "title": "BCA Group",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://bca.com/"
    ]
-  },
-  "bilar-is": {
-   "name": "Bilar.is",
-   "url": "https://www.bilar.is/",
-   "host": "bilar.is",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "IS"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
-    "title": "Bílar.is - smáauglýsingar fyrir ökutæki",
-    "challenge": false
-   }
   },
   "bilbasen-dk": {
    "name": "Bilbasen",
@@ -2199,9 +1860,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:44Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Brugte biler til salg | Køb brugt bil og nye biler - søg blandt +60.000 biler!",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "bilgalleri-dk": {
@@ -2217,9 +1879,29 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Biler med attitude - BilGalleri.dk",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
+   }
+  },
+  "bilhandel-dk": {
+   "name": "Bilhandel",
+   "url": "https://www.bilhandel.dk/",
+   "host": "bilhandel.dk",
+   "kind": "portal",
+   "status": "verified",
+   "wired": false,
+   "source_keys": [],
+   "countries": [
+    "DK"
+   ],
+   "evidence": {
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:08:12Z",
+    "title": "Køb og salg af brugte biler [+20.000 biler til salg] | Bilhandel",
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "bilwebauctions-se": {
@@ -2237,9 +1919,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "En marknadsplats för samlarbilar på Bilweb Auctions",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://bilwebauctions.se/"
@@ -2260,9 +1943,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://blinto.se/"
@@ -2281,9 +1965,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Nytt och begagnat, köp och sälj på Blocket – alltid en bra affär",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "bolha-com": {
@@ -2299,9 +1984,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Oglasnik bolha.com",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "bytbil-com": {
@@ -2317,9 +2003,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Massor av bilar från Sveriges bilhandlare - Bytbil.com 🚗",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "campenauktioner-dk": {
@@ -2338,9 +2025,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Campen Auktioner er et af Danmarks mest alsidige auktionshuse - Campen Auktioner",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://campenauktioner.dk/"
@@ -2359,9 +2047,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:12Z",
     "title": "Car.gr - Σφάλμα",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "caraukce-cz": {
@@ -2379,35 +2068,13 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "caraukce.cz – On-line aukce vozidel",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://caraukce.cz/"
-   ]
-  },
-  "carauktion-ch": {
-   "name": "CARAUKTION AG",
-   "url": "https://carauktion.ch/",
-   "host": "carauktion.ch",
-   "kind": "auction",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [
-    "carauktion-ch"
-   ],
-   "countries": [
-    "CH"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:45Z",
-    "title": "CARAUKTION AG",
-    "challenge": false
-   },
-   "registry_urls": [
-    "https://carauktion.ch/"
    ]
   },
   "carcollect-com": {
@@ -2425,31 +2092,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "CarCollect - The all-in-one automotive platform",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://carcollect.com/"
    ]
-  },
-  "cargurus-co-uk": {
-   "name": "CarGurus UK",
-   "url": "https://www.cargurus.co.uk/",
-   "host": "cargurus.co.uk",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "GB"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
-    "title": "Car shop confidently | Complete pricing and car details | CarGurus.co.uk",
-    "challenge": false
-   }
   },
   "carmarket-ayvens-com": {
    "name": "Ayvens Carmarket",
@@ -2474,9 +2124,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Used cars lots for sale - car auctions for dealers and traders | Ayvens Carmarket",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://carmarket.ayvens.com/"
@@ -2497,31 +2148,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Ihr System für den Gebrauchtwagenhandel | CarOnSale",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://caronsale.com/"
    ]
-  },
-  "cars-ge": {
-   "name": "Cars.ge",
-   "url": "https://cars.ge/",
-   "host": "cars.ge",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "GE"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
-    "title": "Cars.ge - ყველა ავტოსალონი ერთ სივრცეში",
-    "challenge": false
-   }
   },
   "cars2click-com": {
    "name": "Cars2Click",
@@ -2538,9 +2172,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Cars2click",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://cars2click.com/"
@@ -2559,9 +2194,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Carzone Ireland | New & Used Cars For Sale",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "clickar-com": {
@@ -2579,9 +2215,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Gebrauchtwagen kaufen – Fahrzeuge aus Firmenflotten | Clickar",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://clickar.com/"
@@ -2600,27 +2237,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Coches.net: Coches nuevos, coches de ocasión, seminuevos, Km0",
-    "challenge": false
-   }
-  },
-  "cochesandorra-com": {
-   "name": "Coches Andorra",
-   "url": "https://www.cochesandorra.com/",
-   "host": "cochesandorra.com",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "AD"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:46Z",
-    "title": "Coches Segunda Mano en Andorra | Portal de vehículos",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "copart-de": {
@@ -2638,9 +2258,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:47Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://copart.de/"
@@ -2661,9 +2282,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:47Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://copart.es/"
@@ -2684,9 +2306,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:47Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://copart.fi/"
@@ -2705,9 +2328,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:47Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "CustoJusto Portugal | Anúncios grátis, classificados grátis",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "dba-dk": {
@@ -2723,9 +2347,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Nyt og brugt, køb og salg på DBA - Altid en god handel",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "domeinenrz-nl": {
@@ -2743,9 +2368,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
+    "checked_at_utc": "2026-10-26T00:08:13Z",
     "title": "Home | Domeinen Roerende Zaken",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://domeinenrz.nl/"
@@ -2764,27 +2390,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "Page Unavailable | DoneDeal",
-    "challenge": false
-   }
-  },
-  "drom-ru": {
-   "name": "Drom.ru",
-   "url": "https://www.drom.ru/",
-   "host": "drom.ru",
-   "kind": "portal",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "RU"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
-    "title": "Дром - цены на машины",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "e-arveres-mnv-hu": {
@@ -2792,7 +2401,7 @@
    "url": "https://e-arveres.mnv.hu/",
    "host": "e-arveres.mnv.hu",
    "kind": "auction",
-   "status": "unreachable",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "e-arveres-mnv"
@@ -2801,11 +2410,11 @@
     "HU"
    ],
    "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
-    "title": "",
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:19:27Z",
+    "title": "Elektronikus Aukciós Rendszer",
     "challenge": false,
-    "probe_reason": "connection_failure"
+    "channel": "render"
    },
    "registry_urls": [
     "https://e-arveres.mnv.hu/"
@@ -2816,7 +2425,7 @@
    "url": "https://e-leiloes.pt/",
    "host": "e-leiloes.pt",
    "kind": "auction",
-   "status": "unreachable",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "e-leiloes"
@@ -2825,11 +2434,11 @@
     "PT"
    ],
    "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
-    "title": "",
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:19:44Z",
+    "title": "e-leiloes.pt",
     "challenge": false,
-    "probe_reason": "connection_failure"
+    "channel": "render"
    },
    "registry_urls": [
     "https://e-leiloes.pt/"
@@ -2850,31 +2459,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "Elektroninių varžytynių ir aukcionų portalas",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://eaukcionai.lt/"
    ]
-  },
-  "ebay-co-uk": {
-   "name": "eBay UK",
-   "url": "https://www.ebay.co.uk/",
-   "host": "ebay.co.uk",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "GB"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:48Z",
-    "title": "Error Page | eBay",
-    "challenge": false
-   }
   },
   "ecarstrade-com": {
    "name": "eCarsTrade",
@@ -2891,9 +2483,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "Used European Cars Online Auctions | Buy Car Easy | eCarsTrade",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://ecarstrade.com/"
@@ -2914,9 +2507,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "e-Dražba",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://edrazba.fina.hr/"
@@ -2937,9 +2531,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "edražbe.si",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://edrazbe.si/"
@@ -2950,7 +2545,7 @@
    "url": "https://elicytacje.mf.gov.pl/",
    "host": "elicytacje.mf.gov.pl",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": true,
    "source_keys": [
     "elicytacje-kas"
@@ -2960,9 +2555,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
-    "title": "",
-    "challenge": true
+    "checked_at_utc": "2026-10-26T00:19:58Z",
+    "title": "eLicytacje",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://elicytacje.mf.gov.pl/"
@@ -2973,7 +2569,7 @@
    "url": "https://encheres-domaine.gouv.fr/",
    "host": "encheres-domaine.gouv.fr",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": true,
    "source_keys": [
     "encheres-du-domaine"
@@ -2983,9 +2579,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
-    "title": "",
-    "challenge": true
+    "checked_at_utc": "2026-10-26T00:20:15Z",
+    "title": "Les enchères du Domaine",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://encheres-domaine.gouv.fr/"
@@ -3006,9 +2603,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "Car auction : Car auctions in Toulouse, Bordeaux and Marseille | Encheres-vo.com",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://encheres-vo.com/"
@@ -3029,9 +2627,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:14Z",
     "title": "Subastas Online - La mayor oferta de stocks en España - Escrapalia",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://escrapalia.com/"
@@ -3052,9 +2651,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Used Heavy Construction Equipment & Trucks For Sale | IronPlanet",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://eu.ironplanet.com/"
@@ -3075,9 +2675,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Elektroninių varžytynių ir aukcionų portalas",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://evarzytynes.lt/"
@@ -3098,9 +2699,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:49Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Pirkite ir Parduokite Automobilius bei Kitus Daiktus | EVG Auction",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://evg.auction/"
@@ -3121,9 +2723,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Car auctions | Exleasingcar.com | Auto from Europe",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://exleasingcar.com/"
@@ -3144,9 +2747,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://exleasingcar.pl/"
@@ -3167,9 +2771,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Exleasingcar.ro | Licitatii auto",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://exleasingcar.ro/"
@@ -3190,31 +2795,14 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Attention Required! | Cloudflare",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://fahrzeuge.dorotheum.com/"
    ]
-  },
-  "finn-no": {
-   "name": "FINN.no",
-   "url": "https://www.finn.no/",
-   "host": "finn.no",
-   "kind": "classifieds",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "NO"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
-    "title": "FINN.no – mulighetenes marked",
-    "challenge": false
-   }
   },
   "finshop-belgium-be": {
    "name": "Fin Shop",
@@ -3231,9 +2819,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Home | Fin Shop",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://finshop.belgium.be/"
@@ -3252,9 +2841,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Access Denied",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "gebrauchtwagen-at": {
@@ -3270,9 +2860,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:15Z",
     "title": "Gebrauchtwagen.at - Österreichische Neu- & Gebrauchtwagen",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "gobid-it": {
@@ -3290,50 +2881,14 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:50Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://gobid.it/"
    ]
-  },
-  "gumtree-com": {
-   "name": "Gumtree",
-   "url": "https://www.gumtree.com/",
-   "host": "gumtree.com",
-   "kind": "classifieds",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "GB"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
-    "title": "Gumtree UK | Buy, Sell & Find Local Classified Ads",
-    "challenge": false
-   }
-  },
-  "halooglasi-rs": {
-   "name": "Halo Oglasi",
-   "url": "https://www.halooglasi.rs/",
-   "host": "halooglasi.rs",
-   "kind": "classifieds",
-   "status": "unreachable",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "RS"
-   ],
-   "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
-    "title": "",
-    "challenge": false,
-    "probe_reason": "connection_failure"
-   }
   },
   "hasznaltauto-hu": {
    "name": "Hasznaltauto.hu",
@@ -3348,9 +2903,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Attention Required! | Cloudflare",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "huutokaupat-com": {
@@ -3368,9 +2924,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Huutokaupat.com | Suomen kiinnostavin kauppapaikka",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://huutokaupat.com/"
@@ -3391,9 +2948,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Used Industrial Machinery - Industrial Auctions Online",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://industrialdiscount.com/"
@@ -3404,7 +2962,7 @@
    "url": "https://interencheres.com/",
    "host": "interencheres.com",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "interencheres"
@@ -3413,14 +2971,34 @@
     "FR"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
-    "title": "Just a moment...",
-    "challenge": true
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:23:39Z",
+    "title": "Interencheres : le site n°1 des ventes aux enchères en France | Interencheres.com",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://interencheres.com/"
    ]
+  },
+  "joautok-hu": {
+   "name": "JoAutok",
+   "url": "https://www.joautok.hu/",
+   "host": "joautok.hu",
+   "kind": "portal",
+   "status": "walled",
+   "wired": false,
+   "source_keys": [],
+   "countries": [
+    "HU"
+   ],
+   "evidence": {
+    "http_status": 429,
+    "checked_at_utc": "2026-10-26T00:08:16Z",
+    "title": "Vercel Security Checkpoint",
+    "challenge": false,
+    "channel": "direct"
+   }
   },
   "justiz-auktion-de": {
    "name": "Justiz-Auktion",
@@ -3437,9 +3015,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Startseite | Justiz-Auktion",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://justiz-auktion.de/"
@@ -3460,9 +3039,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Kiertonet – Suomen suosituin julkisen sektorin huutokauppa",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://kiertonet.fi/"
@@ -3483,9 +3063,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:51Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Køb og sælg maskiner, værktøj og køretøjer på auktion | Klaravik",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://klaravik.dk/"
@@ -3506,9 +3087,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Köp & sälj maskiner, verktyg & fordon på auktion | Klaravik",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://klaravik.se/"
@@ -3527,28 +3109,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Kleinanzeigen – früher eBay Kleinanzeigen. Anzeigen gratis inserieren mit Kleinanzeigen",
-    "challenge": false
-   }
-  },
-  "kp-rs": {
-   "name": "KupujemProdajem",
-   "url": "https://www.kp.rs/",
-   "host": "kp.rs",
-   "kind": "classifieds",
-   "status": "unreachable",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "RS"
-   ],
-   "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
-    "title": "",
     "challenge": false,
-    "probe_reason": "timeout"
+    "channel": "direct"
    }
   },
   "kv-ee": {
@@ -3556,17 +3120,18 @@
    "url": "https://www.kv.ee/",
    "host": "kv.ee",
    "kind": "classifieds",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
     "EE"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
-    "title": "KV | Vabandame, meie süsteem tuvastas võimaliku tõrke teie veebilehitsejas.",
-    "challenge": false
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:24:32Z",
+    "title": "KV.EE - Kinnisvara pakkumised - korterid majad maad äripinnad",
+    "challenge": false,
+    "channel": "render"
    }
   },
   "kvd-se": {
@@ -3584,9 +3149,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "Begagnade bilar på nätet. Köpa bil ska vara enkelt | kvd.se",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://kvd.se/"
@@ -3605,9 +3171,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "lacentrale.fr",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "leboncoin-fr": {
@@ -3623,9 +3190,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
+    "checked_at_utc": "2026-10-26T00:08:16Z",
     "title": "leboncoin.fr",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "leparking-fr": {
@@ -3641,9 +3209,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:52Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "Access denied | www.leparking.fr used Cloudflare to restrict access | www.leparking.fr | Cloudflare",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "licytacje-komornik-pl": {
@@ -3651,7 +3220,7 @@
    "url": "https://licytacje.komornik.pl/",
    "host": "licytacje.komornik.pl",
    "kind": "auction",
-   "status": "unreachable",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "licytacje-komornik"
@@ -3660,40 +3229,22 @@
     "PL"
    ],
    "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:53Z",
-    "title": "",
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:08:17Z",
+    "title": "Portal Obwieszczeń i Licytacji Komorniczych - Serwis Krajowej Rady Komorniczej",
     "challenge": false,
-    "probe_reason": "connection_failure"
+    "channel": "direct"
    },
    "registry_urls": [
     "https://licytacje.komornik.pl/"
    ]
-  },
-  "list-am": {
-   "name": "List.am",
-   "url": "https://www.list.am/",
-   "host": "list.am",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "AM"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:53Z",
-    "title": "Just a moment...",
-    "challenge": true
-   }
   },
   "manheim-eu": {
    "name": "Manheim Europe",
    "url": "https://manheim.eu/",
    "host": "manheim.eu",
    "kind": "auction",
-   "status": "verified",
+   "status": "unreachable",
    "wired": false,
    "source_keys": [
     "manheim-eu"
@@ -3702,10 +3253,12 @@
     "EU"
    ],
    "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:53Z",
-    "title": "Manheim Europe",
-    "challenge": false
+    "http_status": 0,
+    "checked_at_utc": "2026-10-26T00:08:17Z",
+    "title": "",
+    "challenge": false,
+    "channel": "direct",
+    "probe_reason": "connection_failure"
    },
    "registry_urls": [
     "https://manheim.eu/"
@@ -3726,9 +3279,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:53Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "Manheim Express - digital auction platform for used car trade",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://manheim-express.eu/"
@@ -3749,9 +3303,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:53Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "Manheim Portugal - leilões automóveis para profissionais",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://manheim.pt/"
@@ -3770,28 +3325,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:53Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "Marktplaats - De plek om nieuwe en tweedehands spullen te kopen en verkopen",
-    "challenge": false
-   }
-  },
-  "merrjep-al": {
-   "name": "Merrjep",
-   "url": "https://www.merrjep.al/",
-   "host": "merrjep.al",
-   "kind": "classifieds",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "AL",
-    "XK"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:54Z",
-    "title": "Njoftime Falas | Makina | Apartamente | Shtëpi me qera | Punë | Telefona | Laptop | Vegla pune | Shërbime | Rroba | Merr",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "milanuncios-com": {
@@ -3799,7 +3336,7 @@
    "url": "https://www.milanuncios.com/",
    "host": "milanuncios.com",
    "kind": "classifieds",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
@@ -3807,9 +3344,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:54Z",
-    "title": "Pardon Our Interruption",
-    "challenge": true
+    "checked_at_utc": "2026-10-26T00:26:45Z",
+    "title": "MILANUNCIOS: segunda mano, anuncios gratis, empleo, clasificados...",
+    "challenge": false,
+    "channel": "render"
    }
   },
   "mobile-bg": {
@@ -3825,9 +3363,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:54Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "Mobile.bg � �������� �� ���� � ������������ ����������",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "mobile-de": {
@@ -3843,46 +3382,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:54Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "Zugriff verweigert / Access denied",
-    "challenge": true
-   }
-  },
-  "mojauto-ba": {
-   "name": "MojAuto",
-   "url": "https://www.mojauto.ba/",
-   "host": "mojauto.ba",
-   "kind": "portal",
-   "status": "unreachable",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "BA"
-   ],
-   "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:54Z",
-    "title": "",
-    "challenge": false,
-    "probe_reason": "connection_failure"
-   }
-  },
-  "motors-co-uk": {
-   "name": "Motors.co.uk",
-   "url": "https://www.motors.co.uk/",
-   "host": "motors.co.uk",
-   "kind": "portal",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "GB"
-   ],
-   "evidence": {
-    "http_status": 429,
-    "checked_at_utc": "2026-10-25T20:16:54Z",
-    "title": "Vercel Security Checkpoint",
-    "challenge": false
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "motors-ie": {
@@ -3898,9 +3401,10 @@
    ],
    "evidence": {
     "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:55Z",
+    "checked_at_utc": "2026-10-26T00:08:17Z",
     "title": "",
     "challenge": false,
+    "channel": "direct",
     "probe_reason": "connection_failure"
    }
   },
@@ -3919,9 +3423,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:55Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "ÚZSVM - NMS",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://nabidkamajetku.gov.cz/"
@@ -3940,9 +3445,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:55Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "njuskalo-hr": {
@@ -3958,9 +3464,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:55Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "Njuskalo.hr oglasnik",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "northgatetrade-es": {
@@ -3978,9 +3485,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:55Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "Northgate Trade",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://northgatetrade.es/"
@@ -4001,9 +3509,10 @@
    ],
    "evidence": {
     "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:55Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "",
     "challenge": false,
+    "channel": "direct",
     "probe_reason": "timeout"
    },
    "registry_urls": [
@@ -4023,28 +3532,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:56Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "OCASIONPLUS 🥇 120 Centros en España. +20.000 Coches",
-    "challenge": false
-   }
-  },
-  "oglas-me": {
-   "name": "Oglas.me",
-   "url": "https://www.oglas.me/",
-   "host": "oglas.me",
-   "kind": "classifieds",
-   "status": "unreachable",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "ME"
-   ],
-   "evidence": {
-    "http_status": 0,
-    "checked_at_utc": "2026-10-25T20:16:56Z",
-    "title": "",
     "challenge": false,
-    "probe_reason": "connection_failure"
+    "channel": "direct"
    }
   },
   "oksjonikeskus-ee": {
@@ -4062,31 +3553,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:56Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "KPK e-oksjoni keskkond",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://oksjonikeskus.ee/"
    ]
-  },
-  "olx-ba": {
-   "name": "OLX Bosnia",
-   "url": "https://www.olx.ba/",
-   "host": "olx.ba",
-   "kind": "classifieds",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "BA"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:57Z",
-    "title": "PIK.ba početna",
-    "challenge": false
-   }
   },
   "olx-pl": {
    "name": "OLX Poland",
@@ -4101,9 +3575,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:57Z",
+    "checked_at_utc": "2026-10-26T00:08:18Z",
     "title": "Ogłoszenia - Sprzedam, kupię na OLX.pl",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "olx-pt": {
@@ -4119,9 +3594,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:57Z",
+    "checked_at_utc": "2026-10-26T00:08:19Z",
     "title": "Portugal Anúncios Classificados OLX",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "olx-ro": {
@@ -4137,27 +3613,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:57Z",
+    "checked_at_utc": "2026-10-26T00:08:19Z",
     "title": "Anunturi Gratuite - Peste 4 milioane anunturi - OLX.ro",
-    "challenge": false
-   }
-  },
-  "olx-ua": {
-   "name": "OLX Ukraine",
-   "url": "https://www.olx.ua/",
-   "host": "olx.ua",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "UA"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:57Z",
-    "title": "ERROR: The request could not be satisfied",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "online-auction-state-gov": {
@@ -4175,9 +3634,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
+    "checked_at_utc": "2026-10-26T00:08:19Z",
     "title": "Online Auction Home Page",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://online-auction.state.gov/"
@@ -4198,9 +3658,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
+    "checked_at_utc": "2026-10-26T00:08:19Z",
     "title": "Onlineveilingmeester.nl – online veilingen voor iedereen die iets te bieden heeft.",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://onlineveilingmeester.nl/"
@@ -4211,7 +3672,7 @@
    "url": "https://openlane.eu/",
    "host": "openlane.eu",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "openlane-eu"
@@ -4220,10 +3681,11 @@
     "EU"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
-    "title": "Attention Required! | Cloudflare",
-    "challenge": true
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:29:20Z",
+    "title": "Online Car Auctions - Buy & Sell Used Cars - OPENLANE",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://openlane.eu/"
@@ -4234,17 +3696,18 @@
    "url": "https://www.osta.ee/",
    "host": "osta.ee",
    "kind": "classifieds",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [],
    "countries": [
     "EE"
    ],
    "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
-    "title": "Osta.ee | Vabandame, meie süsteem tuvastas võimaliku tõrke teie veebilehitsejas.",
-    "challenge": false
+    "http_status": 200,
+    "checked_at_utc": "2026-10-26T00:29:39Z",
+    "title": "Osta.ee - oksjonid, e-poed ja Eesti Disain - rohkelt eripakkumisi - Osta.ee",
+    "challenge": false,
+    "channel": "render"
    }
   },
   "otomoto-pl": {
@@ -4260,63 +3723,30 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
+    "checked_at_utc": "2026-10-26T00:08:19Z",
     "title": "OTOMOTO - nowe i używane samochody i motocykle oraz części samochodowe. Ogłoszenia motoryzacyjne.",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
-  "pazar3-mk": {
-   "name": "Pazar3",
-   "url": "https://www.pazar3.mk/",
-   "host": "pazar3.mk",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "MK"
-   ],
-   "evidence": {
-    "http_status": 503,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
-    "title": "Pazar3.mk",
-    "challenge": false
-   }
-  },
-  "pistonheads-com": {
-   "name": "PistonHeads",
-   "url": "https://www.pistonheads.com/",
-   "host": "pistonheads.com",
+  "pkw-at": {
+   "name": "pkw.at",
+   "url": "https://www.pkw.at/",
+   "host": "pkw.at",
    "kind": "portal",
-   "status": "verified",
+   "status": "unreachable",
    "wired": false,
    "source_keys": [],
    "countries": [
-    "GB"
+    "AT"
    ],
    "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
-    "title": "PistonHeads UK - Stop Dreaming Start Driving",
-    "challenge": false
-   }
-  },
-  "polovniautomobili-rs": {
-   "name": "Polovni Automobili",
-   "url": "https://www.polovniautomobili.rs/",
-   "host": "polovniautomobili.rs",
-   "kind": "portal",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "RS"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:58Z",
-    "title": "Attention Required! | Cloudflare",
-    "challenge": true
+    "http_status": 0,
+    "checked_at_utc": "2026-10-26T00:08:19Z",
+    "title": "",
+    "challenge": false,
+    "channel": "direct",
+    "probe_reason": "connection_failure"
    }
   },
   "ponip-fina-hr": {
@@ -4334,9 +3764,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "403 Forbidden",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://ponip.fina.hr/"
@@ -4357,9 +3788,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Připravované dražby - Portál dražeb",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://portaldrazeb.cz/"
@@ -4380,9 +3812,10 @@
    ],
    "evidence": {
     "http_status": 202,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://psauction.fi/"
@@ -4403,9 +3836,10 @@
    ],
    "evidence": {
     "http_status": 202,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://psauction.se/"
@@ -4426,9 +3860,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Home",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://pvp.giustizia.it/"
@@ -4447,9 +3882,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Kostenlose Kleinanzeigen auf Quoka schalten",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "rbauction-eu": {
@@ -4467,35 +3903,13 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Ritchie Bros. Auctioneers: Heavy Equipment Auctions in Europe",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://rbauction.eu/"
-   ]
-  },
-  "restwertboerse-ch": {
-   "name": "Restwertbörse.ch",
-   "url": "https://restwertboerse.ch/",
-   "host": "restwertboerse.ch",
-   "kind": "auction",
-   "status": "verified",
-   "wired": false,
-   "source_keys": [
-    "restwertboerse"
-   ],
-   "countries": [
-    "CH"
-   ],
-   "evidence": {
-    "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:16:59Z",
-    "title": "Restwertbörse.ch",
-    "challenge": false
-   },
-   "registry_urls": [
-    "https://restwertboerse.ch/"
    ]
   },
   "retrade-eu": {
@@ -4513,9 +3927,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:00Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Auctions | Retrade",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://retrade.eu/"
@@ -4536,9 +3951,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:00Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Romu.ee – Oksjonid",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://romu.ee/"
@@ -4559,32 +3975,15 @@
    ],
    "evidence": {
     "http_status": 404,
-    "checked_at_utc": "2026-10-25T20:17:00Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "",
     "challenge": false,
+    "channel": "direct",
     "probe_reason": "http_error"
    },
    "registry_urls": [
     "https://ropk.sk/"
    ]
-  },
-  "sahibinden-com": {
-   "name": "Sahibinden",
-   "url": "https://www.sahibinden.com/",
-   "host": "sahibinden.com",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "TR"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:01Z",
-    "title": "",
-    "challenge": false
-   }
   },
   "sales-nra-bg": {
    "name": "NRA Sales",
@@ -4601,9 +4000,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:02Z",
+    "checked_at_utc": "2026-10-26T00:08:20Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://sales.nra.bg/"
@@ -4622,9 +4022,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:03Z",
+    "checked_at_utc": "2026-10-26T00:08:21Z",
     "title": "Sauto.cz - Největší online autobazar, prodej aut, inzerce automobilů",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "sodnedrazbe-si": {
@@ -4642,9 +4043,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:04Z",
+    "checked_at_utc": "2026-10-26T00:08:21Z",
     "title": "SodneDrazbe.si",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://sodnedrazbe.si/"
@@ -4663,9 +4065,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:04Z",
+    "checked_at_utc": "2026-10-26T00:08:21Z",
     "title": "Ogłoszenia, tablica darmowych ogłoszeń - sprzedam na Sprzedajemy.pl",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "ss-com": {
@@ -4681,27 +4084,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:04Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Sludinājumi - SS.COM",
-    "challenge": false
-   }
-  },
-  "ss-ge": {
-   "name": "SS.ge",
-   "url": "https://ss.ge/",
-   "host": "ss.ge",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "GE"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:04Z",
-    "title": "Just a moment...",
-    "challenge": true
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "standvirtual-com": {
@@ -4717,9 +4103,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:05Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Standvirtual - Comprar e vender carros usados",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "subastas-boe-es": {
@@ -4737,9 +4124,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:05Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Portal de Subastas Electrónicas",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://subastas.boe.es/"
@@ -4758,9 +4146,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:05Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Access Denied",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "tipcars-com": {
@@ -4776,9 +4165,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:05Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Just a moment...",
-    "challenge": true
+    "challenge": true,
+    "channel": "direct"
    }
   },
   "tori-fi": {
@@ -4794,9 +4184,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:06Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Tori.fi - Osta ja myy helposti uutta ja käytettyä",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "troostwijkauctions-com": {
@@ -4814,31 +4205,14 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:06Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Online industriële veilingen | Troostwijk Auctions",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://troostwijkauctions.com/"
    ]
-  },
-  "tutti-ch": {
-   "name": "Tutti",
-   "url": "https://www.tutti.ch/",
-   "host": "tutti.ch",
-   "kind": "classifieds",
-   "status": "walled",
-   "wired": false,
-   "source_keys": [],
-   "countries": [
-    "CH"
-   ],
-   "evidence": {
-    "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:06Z",
-    "title": "",
-    "challenge": false
-   }
   },
   "utrupe-lv": {
    "name": "Utrupe",
@@ -4855,9 +4229,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:07Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "Apdrošinātāju auto izsoles - bojāti un avārijas auto - Utrupe.lv",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://utrupe.lv/"
@@ -4878,9 +4253,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:07Z",
+    "checked_at_utc": "2026-10-26T00:08:22Z",
     "title": "High-end online veilingen | Vavato",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://vavato.com/"
@@ -4901,9 +4277,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:07Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "Aukce vozidel, stavební techniky a speciálních strojů | Veacom",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://veacom.cz/"
@@ -4924,9 +4301,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:07Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "VEBEG - Federal Surplus Sales | VEBEG Tender-Sales",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://vebeg.de/"
@@ -4947,9 +4325,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:08Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "Auction of used cars",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://vpauto.eu/"
@@ -4968,9 +4347,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:09Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "ERROR: The request could not be satisfied",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "weby-ee": {
@@ -4988,9 +4368,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:09Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "WEBY.ee – autode ja varuosade oksjonid",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://weby.ee/"
@@ -5009,9 +4390,10 @@
    ],
    "evidence": {
     "http_status": 403,
-    "checked_at_utc": "2026-10-25T20:17:09Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "willhaben.at",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    }
   },
   "womauktion-com": {
@@ -5019,7 +4401,7 @@
    "url": "https://womauktion.com/",
    "host": "womauktion.com",
    "kind": "auction",
-   "status": "walled",
+   "status": "verified",
    "wired": false,
    "source_keys": [
     "wom",
@@ -5031,9 +4413,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:09Z",
-    "title": "",
-    "challenge": true
+    "checked_at_utc": "2026-10-26T00:34:43Z",
+    "title": "Die Auktionsplattform für Unfallfahrzeuge in Europa für Händler",
+    "challenge": false,
+    "channel": "render"
    },
    "registry_urls": [
     "https://womauktion.com/"
@@ -5054,9 +4437,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:09Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "client",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://zapori.mjs.bg/"
@@ -5077,9 +4461,10 @@
    ],
    "evidence": {
     "http_status": 200,
-    "checked_at_utc": "2026-10-25T20:17:10Z",
+    "checked_at_utc": "2026-10-26T00:08:23Z",
     "title": "Zoll-Auktion",
-    "challenge": false
+    "challenge": false,
+    "channel": "direct"
    },
    "registry_urls": [
     "https://zoll-auktion.de/"
@@ -5087,14 +4472,6 @@
   }
  },
  "excluded": [
-  {
-   "host": "bilasol.is",
-   "url": "https://www.bilasol.is/",
-   "countries": [
-    "IS"
-   ],
-   "reason": "dns_failure"
-  },
   {
    "host": "motors.mt",
    "url": "https://www.motors.mt/",
