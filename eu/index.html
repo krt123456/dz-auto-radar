@@ -92,6 +92,12 @@ details.panel summary{cursor:pointer;font-family:var(--font-display);font-weight
 details.intro summary .intro-h{font-size:1.05rem}
 details.intro summary .intro-sub{font-family:inherit;font-weight:400;color:var(--muted);font-size:.9rem;margin-left:4px}
 details.intro[open] summary{margin-bottom:8px}
+.mode-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.mode-tab{font:inherit;font-weight:700;padding:8px 16px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.mode-tab.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.mode-tab .n{font-weight:400}
+.auction-filters{margin-bottom:12px;padding-bottom:12px;border-bottom:1px dashed var(--line)}
+.auc-note{color:var(--muted);font-size:.88rem;margin:0 0 10px;max-width:90ch}
 details.more{margin-top:10px}
 details.more summary{cursor:pointer;color:var(--accent);font-weight:600}
 details.more ul{margin-top:8px}
@@ -147,6 +153,20 @@ th{color:var(--muted);font-weight:600}
   </details>
 
   <section class="panel">
+    <!-- the two tabs of the old site (16 Nov): cars for sale, and auctions with their own filters -->
+    <div class="mode-tabs" role="tablist" aria-label="Offers or auctions">
+      <button type="button" class="mode-tab active" id="mCars" role="tab" aria-selected="true">Cars for sale</button>
+      <button type="button" class="mode-tab" id="mAuc" role="tab" aria-selected="false">Auctions <span class="n" id="aucCount"></span></button>
+    </div>
+    <div id="aucFilters" hidden>
+      <p class="auc-note">Auctions of public auction houses and of state, court and customs sales. The price is the bid so far or the starting bid, never the final price; the house's fees and VAT come on top. Check the house's rules for buyers from abroad and for companies.</p>
+      <div class="filters auction-filters">
+        <label class="field"><span>Auction ends</span><select id="fEnds"><option value="">Any time</option><option value="0.5">Within 12 hours</option><option value="1">Within 24 hours</option><option value="2">Within 48 hours</option><option value="3">Within 3 days</option><option value="5">Within 5 days</option><option value="7">Within a week</option><option value="30">Within a month</option><option value="unknown">End not given by the house</option></select></label>
+        <label class="field"><span>Vehicle</span><select id="fAsset"><option value="car">Passenger cars only</option><option value="">All vehicles (vans too)</option></select></label>
+        <label class="field"><span>Price shown</span><select id="fBid"><option value="">Any price</option><option value="bids">Bids already placed</option><option value="buynow">A "buy now" price</option><option value="estimate">The house's estimate given</option></select></label>
+        <label class="field"><span>Sale terms</span><select id="fTerms"><option value="">Any terms</option><option value="noreserve">No reserve price</option></select></label>
+      </div>
+    </div>
     <div class="filters">
       <label class="field"><span>Make</span><select id="fMake"></select></label>
       <div class="field"><span>Model (one or several)</span><details class="multi" id="dModel"><summary id="sModel">Choose a make first</summary><div class="multi-list" id="lModel"></div></details></div>
@@ -323,7 +343,7 @@ function fillMulti(listId, sumId, allLabel, counts, names, display, sel) {
   host.textContent = "";
   // a choice with no ads in this list (another make's model) is dropped
   Object.keys(sel).forEach(function (k) { if (!counts[k]) delete sel[k]; });
-  var clear = el("button", "mclear", "All (" + allLabel.toLowerCase() + ")"); clear.type = "button";
+  var clear = el("button", "mclear", allLabel); clear.type = "button"; // "All models" / "Any fuel": clears the ticks
   clear.addEventListener("click", function () { Object.keys(sel).forEach(function (k) { delete sel[k]; }); fillMulti(listId, sumId, allLabel, counts, names, display, sel); shown = 60; render(); });
   host.append(clear);
   Object.keys(counts).map(Number).filter(function (id) { return names[id]; }).sort(function (a, b) { return counts[b] - counts[a]; }).forEach(function (id) {
@@ -361,6 +381,7 @@ function view() {
   var u3 = $("#fU3").checked, cond = $("#fCond").value;
   var ge = $("#fGear").value, within = parseInt($("#fNew").value, 10) || 0, cutOnly = $("#fCut").checked;
   var sale = $("#fSale").value, who = $("#fSeller").value, co = $("#fBuyer").value === "co", vatOnly = $("#fVat").checked;
+  var aucMode = sale === "auction", ends = $("#fEnds").value, asset = $("#fAsset").value, bid = $("#fBid").value, terms = $("#fTerms").value;
   var low = $("#fLow").value, incUnk = $("#fUnk").checked, incNoYear = $("#fNoYear").checked;
   hiddenUnk = 0; hiddenLow = 0; hiddenNoYear = 0;
   // damaged (16) and unknown condition (128) follow the Condition choice, not the warning box: the owner inspects
@@ -381,6 +402,17 @@ function view() {
     if (sale === "" ? (lot || auc) : sale === "auction" ? !auc : sale === "lot" ? !lot : false) continue;
     // an auction whose end has passed since the page was built is no longer an offer: it is not listed
     if (auc && r[C.end] && endMin(r) < NOW_MIN) continue;
+    // the auctions tab's own filters, as on the old site: end, vehicle, price shown, sale terms
+    if (aucMode && auc) {
+      if (ends === "unknown") { if (r[C.end]) continue; }
+      else if (ends) { if (!r[C.end] || endMin(r) > NOW_MIN + parseFloat(ends) * 1440) continue; }
+      if (asset === "car" && (r[C.flags] & 4096)) continue;
+      var nt = String(r[C.note] || "");
+      if (bid === "bids" && !/(^|[^0-9])[1-9][0-9]* bids?\b/i.test(nt)) continue;
+      if (bid === "buynow" && !/buy now|sofortkauf|achat imm[ée]diat|compra ya/i.test(nt)) continue;
+      if (bid === "estimate" && !/expects|estimat/i.test(nt)) continue;
+      if (terms === "noreserve" && !/no reserve|sans (?:prix de )?r[ée]serve|ohne mindestpreis|sin (?:precio )?m[ií]nimo|bez ceny minimalnej|senza riserva/i.test(nt + " " + r[C.title])) continue;
+    }
     if (who !== "" && String(r[C.seller] || 0) !== who) continue;
     if (vatOnly && !(r[C.net] > 0)) continue;
     // an ad whose list entry gives no year (year 0): no age, no comparison; counted, and shown only when asked for
@@ -452,13 +484,14 @@ var TRADE_CO = "price for traders or without VAT: open to a company; the VAT com
 var FLAG = [[1, "price far below similar cars: it may be a deposit, a monthly rate, a damaged car or a real bargain. Verify the ad"], [2, "few similar cars to compare with"], [4, "mileage not given"], [8192, "the year comes from the ad's title, or the ad calls the car new: check it on the ad"], [16384, "the site's list gives no year for this ad, so it cannot be compared with similar cars: open the ad to read the year"], [32768, "built before 1991: the engine does not compare cars this old"], [65536, "the engine did not compare this ad itself (it could not name the model, or the price or mileage is outside what it compares): any comparison shown is an estimate"], [131072, "the year this site gives looks like a placeholder (for example this year on a car with a high mileage): open the ad to read the real year"], [8, "auction: the price is a starting bid, or a broker's estimate before bidding abroad"], [16, "damaged"], [32, "price only with the dealer's financing"], [64, "price for traders only, or without VAT"], [4096, "commercial version of the car (2 seats, cargo van, company or truck registration): cheaper for that reason"], [128, "condition unknown: the seller says the car is still on its way or may have had an accident"], [256, "comparison uncertain: the engine's own confidence is low (few or mixed similar cars, e.g. a 318i compared with M3s)"], [512, "the same car is listed elsewhere for clearly more: in Spain this low price is often one that needs the dealer's financing"], [1024, "the same car is also listed elsewhere for more"], [2048, "Canary Islands, Ceuta or Melilla: priced under the local lower tax; bringing the car to the mainland adds customs papers, tax and shipping"], [262144, "the title names an older year than the year given for this ad: open the ad to check the car's real year"]];
 
 function render() {
+  if (typeof countAuctions === "function") countAuctions();
   var L = view(), host = $("#list");
   var co = $("#fBuyer").value === "co";
   host.textContent = "";
   var visited = 0;
   nextRow = null;
   for (var j = 0; j < L.length; j++) { if (seen[U(L[j])]) visited++; else if (!nextRow && safeUrl(U(L[j]))) { nextRow = L[j]; if (j >= shown) shown = j + 1; } }
-  $("#count").textContent = fmt(L.length) + " offers, " + visited + " visited" + ($("#fMake").value === "" ? " (best offers of all makes, " + D.topFromYear + " and newer; choose a make for its full list and older cars)" : "");
+  $("#count").textContent = fmt(L.length) + " offers, " + visited + " visited" + ($("#fMake").value === "" ? ($("#fSale").value === "auction" ? " (the live auctions of all makes)" : " (best offers of all makes, " + D.topFromYear + " and newer; choose a make for its full list and older cars)") : "");
   var nx = $("#next");
   nx.hidden = !nextRow;
   if (nextRow) nx.href = U(nextRow);
@@ -674,12 +707,46 @@ if (!D.vat) $("#vatField").hidden = true;
 try { if (localStorage.getItem("eufd_buyer") === "co") $("#fBuyer").value = "co"; } catch (e) {}
 $("#fBuyer").addEventListener("change", function () { try { localStorage.setItem("eufd_buyer", $("#fBuyer").value); } catch (e) {} });
 // choosing auctions orders them by their end, soonest first, when ends are known; leaving auctions puts the usual order back
-$("#fSale").addEventListener("change", function () {
+function saleChanged() {
   var s = $("#fSort");
   if ($("#fSale").value === "auction" && D.auctionsWithEnd && s.value === "score") s.value = "end";
   else if ($("#fSale").value !== "auction" && $("#fSale").value !== "all" && s.value === "end") s.value = "score";
+  paintTabs();
   shown = 60; render();
+}
+$("#fSale").addEventListener("change", saleChanged);
+// the two tabs: "Auctions" is "Sale type: auctions only" with the auction filters shown, "Cars for sale" goes back
+function paintTabs() {
+  var a = $("#fSale").value === "auction";
+  $("#mCars").className = "mode-tab" + (a ? "" : " active"); $("#mAuc").className = "mode-tab" + (a ? " active" : "");
+  $("#mCars").setAttribute("aria-selected", String(!a)); $("#mAuc").setAttribute("aria-selected", String(a));
+  $("#aucFilters").hidden = !a;
+}
+// As on the old site, the auctions tab starts from all live auctions: the car filters that would hide most of them
+// (year from 2016, at most 150,000 km, only ads with a comparison, without damage) are set aside, and put back on the
+// way to the cars tab.
+var carFilters = null;
+$("#mAuc").addEventListener("click", function () {
+  if ($("#fSale").value === "auction") return;
+  carFilters = { year: $("#fYear").value, km: $("#fKm").value, scored: $("#fScored").checked, cond: $("#fCond").value };
+  $("#fYear").value = ""; $("#fKm").value = ""; $("#fScored").checked = false; $("#fCond").value = "all";
+  $("#fSale").value = "auction"; saleChanged();
 });
+$("#mCars").addEventListener("click", function () {
+  if ($("#fSale").value !== "auction") return;
+  if (carFilters) { $("#fYear").value = carFilters.year; $("#fKm").value = carFilters.km; $("#fScored").checked = carFilters.scored; $("#fCond").value = carFilters.cond; carFilters = null; }
+  $("#fSale").value = ""; saleChanged();
+});
+["fEnds", "fAsset", "fBid", "fTerms"].forEach(function (id) { $("#" + id).addEventListener("change", function () { shown = 60; render(); }); });
+// how many auctions the list in hand holds (not over), on the tab
+var aucCountFor = null;
+function countAuctions() {
+  if (aucCountFor === R) return;
+  aucCountFor = R;
+  var n = 0;
+  for (var i = 0; i < R.length; i++) { var r = R[i]; if ((r[C.flags] & 8) && !(r[C.lot] || 0) && !(r[C.end] && endMin(r) < NOW_MIN)) n++; }
+  $("#aucCount").textContent = "(" + fmt(n) + ")";
+}
 ["fYear", "fYearTo", "fKm", "fPrice", "fQ"].forEach(function (id) { $("#" + id).addEventListener("input", function () { shown = 60; render(); }); });
 $("#more").addEventListener("click", function () { shown += 60; render(); });
 $("#reset").addEventListener("click", function () { seen = {}; save(); render(); });
@@ -700,7 +767,8 @@ function current() {
     year: $("#fYear").value, km: $("#fKm").value, price: $("#fPrice").value, q: $("#fQ").value.trim(), sort: $("#fSort").value, recent: $("#fNew").value,
     u3: $("#fU3").checked, scored: $("#fScored").checked, clean: $("#fClean").checked, noRes: $("#fNoRes").checked, cut: $("#fCut").checked, cond: $("#fCond").value,
     sale: $("#fSale").value, seller: $("#fSeller").value, buyer: $("#fBuyer").value, vat: $("#fVat").checked,
-    low: $("#fLow").value, unk: $("#fUnk").checked, noYear: $("#fNoYear").checked
+    low: $("#fLow").value, unk: $("#fUnk").checked, noYear: $("#fNoYear").checked,
+    ends: $("#fEnds").value, asset: $("#fAsset").value, bid: $("#fBid").value, terms: $("#fTerms").value
   };
 }
 function label(s) {
@@ -719,7 +787,7 @@ function label(s) {
   if (s.recent) bits.push(s.recent === "1" ? "yesterday or today" : "last " + s.recent + " days");
   if (s.cut) bits.push("price cut");
   if (s.cond === "damaged") bits.push("damaged"); else if (s.cond === "all") bits.push("any condition");
-  if (s.sale === "auction") bits.push("auctions"); else if (s.sale === "lot") bits.push("lots"); else if (s.sale === "all") bits.push("auctions and lots too");
+  if (s.sale === "auction") bits.push("auctions" + (s.ends === "unknown" ? " without an end date" : s.ends ? " ending within " + (s.ends === "0.5" ? "12 hours" : s.ends === "1" ? "24 hours" : s.ends === "2" ? "48 hours" : s.ends === "7" ? "a week" : s.ends === "30" ? "a month" : s.ends + " days") : "") + (s.asset === "" ? ", vans too" : "") + (s.bid ? ", " + (s.bid === "bids" ? "with bids" : s.bid === "buynow" ? "buy now" : "estimate given") : "") + (s.terms ? ", no reserve" : "")); else if (s.sale === "lot") bits.push("lots"); else if (s.sale === "all") bits.push("auctions and lots too");
   if (s.seller === "1") bits.push("private sellers"); else if (s.seller === "2") bits.push("dealers");
   if (s.buyer === "co") bits.push("as a company");
   if (s.vat) bits.push("VAT reclaimable");
@@ -735,6 +803,8 @@ function applySearch(s) {
   // a search saved before these choices existed has none of them: it gets the defaults
   $("#fSale").value = s.sale || ""; $("#fSeller").value = s.seller || ""; $("#fBuyer").value = s.buyer || ""; $("#fVat").checked = !!s.vat;
   $("#fLow").value = s.low || ""; $("#fUnk").checked = !!s.unk; $("#fNoYear").checked = !!s.noYear;
+  $("#fEnds").value = s.ends || ""; $("#fAsset").value = s.asset == null ? "car" : s.asset; $("#fBid").value = s.bid || ""; $("#fTerms").value = s.terms || "";
+  paintTabs();
   wanted = s;
   var id = s.make ? K.make.indexOf(s.make) : -1;
   $("#fMake").value = id >= 0 ? String(id) : "";
