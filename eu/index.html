@@ -89,6 +89,9 @@ select,input[type=search],input[type=number]{font:inherit;color:var(--ink);backg
 .links a:hover{text-decoration:underline}
 .empty{color:var(--muted);padding:18px 16px}
 details.panel summary{cursor:pointer;font-family:var(--font-display);font-weight:600}
+details.intro summary .intro-h{font-size:1.05rem}
+details.intro summary .intro-sub{font-family:inherit;font-weight:400;color:var(--muted);font-size:.9rem;margin-left:4px}
+details.intro[open] summary{margin-bottom:8px}
 details.more{margin-top:10px}
 details.more summary{cursor:pointer;color:var(--accent);font-weight:600}
 details.more ul{margin-top:8px}
@@ -106,8 +109,10 @@ th{color:var(--muted);font-weight:600}
     <p class="sub" id="sub"></p>
   </header>
 
-  <section class="panel">
-    <h2>Read this first</h2>
+  <!-- folded by default (16 Nov, the owner's visual check): open, this text filled the first screen and the filters
+       started below it; one tap opens it -->
+  <details class="panel intro">
+    <summary><span class="intro-h">Read this first</span> <span class="intro-sub">what the percentage means, how the ads are checked, buying as a company</span></summary>
     <ul>
       <li>Every ad here was read from its site on the date above by the new crawler, then read and scored by the SonarDeals engine. Nothing comes from the old August catalogue.</li>
       <li id="vsOld" hidden></li>
@@ -139,7 +144,7 @@ th{color:var(--muted);font-weight:600}
       <li>The same car on several sites at clearly different prices (same country, year, exact mileage, make and model, 10-60% apart) carries a note. In Spain it is a warning that hides the ad by default: the two best Spanish offers of pass 9 showed a price that holds only with the dealer's financing ("Precio al contado: 11.490 € ... financiando: 9.770 €"). A reseller's higher price (Carvago, Autohero) is its margin and is not counted. Otomoto ads are also checked for the site's own "damaged" field (Poland's best offer of pass 9 had it).</li>
       </ul>
     </details>
-  </section>
+  </details>
 
   <section class="panel">
     <div class="filters">
@@ -444,7 +449,7 @@ function visit(r) { seen[U(r)] = 1; save(); setTimeout(render, 0); }
 function pad(n) { return n < 10 ? "0" + n : String(n); }
 // for a company the trade or no-VAT price is the price it can buy at: a note there, a warning for a private buyer
 var TRADE_CO = "price for traders or without VAT: open to a company; the VAT comes on top where it applies";
-var FLAG = [[1, "price far below similar cars: it may be a deposit, a monthly rate, a damaged car or a real bargain. Verify the ad"], [2, "few similar cars to compare with"], [4, "mileage not given"], [8192, "the year comes from the ad's title, or the ad calls the car new: check it on the ad"], [16384, "the site's list gives no year for this ad, so it cannot be compared with similar cars: open the ad to read the year"], [32768, "built before 1991: the engine does not compare cars this old"], [65536, "the engine did not compare this ad itself (it could not name the model, or the price or mileage is outside what it compares): any comparison shown is an estimate"], [131072, "the year this site gives looks like a placeholder (for example this year on a car with a high mileage): open the ad to read the real year"], [8, "auction: the price is a starting bid, or a broker's estimate before bidding abroad"], [16, "damaged"], [32, "price only with the dealer's financing"], [64, "price for traders only, or without VAT"], [4096, "commercial version of the car (2 seats, cargo van, company or truck registration): cheaper for that reason"], [128, "condition unknown: the seller says the car is still on its way or may have had an accident"], [256, "comparison uncertain: the engine's own confidence is low (few or mixed similar cars, e.g. a 318i compared with M3s)"], [512, "the same car is listed elsewhere for clearly more: in Spain this low price is often one that needs the dealer's financing"], [1024, "the same car is also listed elsewhere for more"], [2048, "Canary Islands, Ceuta or Melilla: priced under the local lower tax; bringing the car to the mainland adds customs papers, tax and shipping"]];
+var FLAG = [[1, "price far below similar cars: it may be a deposit, a monthly rate, a damaged car or a real bargain. Verify the ad"], [2, "few similar cars to compare with"], [4, "mileage not given"], [8192, "the year comes from the ad's title, or the ad calls the car new: check it on the ad"], [16384, "the site's list gives no year for this ad, so it cannot be compared with similar cars: open the ad to read the year"], [32768, "built before 1991: the engine does not compare cars this old"], [65536, "the engine did not compare this ad itself (it could not name the model, or the price or mileage is outside what it compares): any comparison shown is an estimate"], [131072, "the year this site gives looks like a placeholder (for example this year on a car with a high mileage): open the ad to read the real year"], [8, "auction: the price is a starting bid, or a broker's estimate before bidding abroad"], [16, "damaged"], [32, "price only with the dealer's financing"], [64, "price for traders only, or without VAT"], [4096, "commercial version of the car (2 seats, cargo van, company or truck registration): cheaper for that reason"], [128, "condition unknown: the seller says the car is still on its way or may have had an accident"], [256, "comparison uncertain: the engine's own confidence is low (few or mixed similar cars, e.g. a 318i compared with M3s)"], [512, "the same car is listed elsewhere for clearly more: in Spain this low price is often one that needs the dealer's financing"], [1024, "the same car is also listed elsewhere for more"], [2048, "Canary Islands, Ceuta or Melilla: priced under the local lower tax; bringing the car to the mainland adds customs papers, tax and shipping"], [262144, "the title names an older year than the year given for this ad: open the ad to check the car's real year"]];
 
 function render() {
   var L = view(), host = $("#list");
